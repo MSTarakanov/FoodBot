@@ -1,0 +1,17 @@
+[Unit]
+Description=Office Food Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=foodbot
+Group=foodbot
+WorkingDirectory=/opt/foodbot/repo
+EnvironmentFile=/opt/foodbot/.env
+ExecStart=/opt/foodbot/repo/.venv/bin/office-food-bot
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
