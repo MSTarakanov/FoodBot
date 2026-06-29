@@ -34,6 +34,44 @@ mypy src
 pytest
 ```
 
+## Local Telegram Testing
+
+Use a separate development Telegram bot for local manual testing. Do not use the production
+`TELEGRAM_BOT_TOKEN` while the production service is running, because Telegram long polling should
+not be active from two places for the same bot token.
+
+Recommended developer flow:
+
+```bash
+git clone git@github.com:MSTarakanov/FoodBot.git
+cd FoodBot
+python3.14 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+cp .env.example .env
+```
+
+Create a personal development bot via `@BotFather`, then put its token into `.env`:
+
+```env
+TELEGRAM_BOT_TOKEN=your-development-bot-token
+```
+
+Run the bot locally:
+
+```bash
+office-food-bot
+```
+
+Then open your development bot in Telegram and test commands such as `/start`, `/hi`, and any new
+command you are adding. Before opening a pull request, also run:
+
+```bash
+ruff check .
+mypy src
+pytest
+```
+
 ## Testing Approach
 
 Tests feed synthetic Telegram updates into the aiogram dispatcher. This keeps tests offline while
