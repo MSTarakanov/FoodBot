@@ -9,7 +9,7 @@ on:
       - "chore/**"
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -43,10 +43,14 @@ jobs:
           )"
 
           if [ -z "$pr_url" ]; then
-            gh pr create \
-              --repo "$GITHUB_REPOSITORY" \
-              --base main \
-              --head "$BRANCH_NAME" \
-              --title "$BRANCH_NAME" \
-              --body "Created automatically from branch $BRANCH_NAME."
+            pr_url="$(
+              gh pr create \
+                --repo "$GITHUB_REPOSITORY" \
+                --base main \
+                --head "$BRANCH_NAME" \
+                --title "$BRANCH_NAME" \
+                --body "Created automatically from branch $BRANCH_NAME."
+            )"
           fi
+
+          gh pr merge "$pr_url" --repo "$GITHUB_REPOSITORY" --auto --squash --delete-branch
