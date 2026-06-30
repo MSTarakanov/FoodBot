@@ -22,8 +22,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 Then prepare the project environment:
 
 ```bash
-uv python install 3.14
-uv sync --extra dev
+scripts/setup
 cp .env.example .env
 uv run office-food-bot
 ```
@@ -55,8 +54,11 @@ uv run --extra dev pytest
 To run checks automatically before each commit in this clone:
 
 ```bash
-git config core.hooksPath .githooks
+scripts/setup
 ```
+
+Git hook settings are local to each clone, so every contributor should run `scripts/setup` once
+after cloning the repository.
 
 ## Local Telegram Testing
 
@@ -69,8 +71,7 @@ Recommended developer flow:
 ```bash
 git clone git@github.com:MSTarakanov/FoodBot.git
 cd FoodBot
-uv python install 3.14
-uv sync --extra dev
+scripts/setup
 cp .env.example .env
 ```
 
