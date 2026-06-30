@@ -1,33 +1,9 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
-from typing import Literal, cast
 
 from office_food_bot.database import Database
-
-UserStatus = Literal["pending", "active", "rejected", "disabled"]
-UserRole = Literal["member", "admin"]
-
-
-@dataclass(frozen=True)
-class TelegramProfile:
-    telegram_user_id: int
-    username: str | None
-    first_name: str
-    last_name: str | None
-
-
-@dataclass(frozen=True)
-class RegisteredUser:
-    id: int
-    telegram_user_id: int
-    display_name: str
-    status: UserStatus
-    role: UserRole
-    username: str | None
-    first_name: str | None
-    last_name: str | None
+from office_food_bot.models import RegisteredUser, TelegramProfile, UserRole, UserStatus
 
 
 class UserRepository:
@@ -69,9 +45,9 @@ class UserRepository:
             cursor = self._database.connection.execute(
                 """
                 INSERT INTO users (display_name, status, role)
-                VALUES (?, 'pending', 'member')
+                VALUES (?, ?, ?)
                 """,
-                (display_name,),
+                (display_name, UserStatus.PENDING.value, UserRole.MEMBER.value),
             )
             user_id = cursor.lastrowid
             if user_id is None:
@@ -130,7 +106,7 @@ class UserRepository:
             self._database.connection.execute(
                 """
                 UPDATE users
-                SET status = 'active',
+                SET status = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = (
                     SELECT user_id
@@ -138,13 +114,17 @@ class UserRepository:
                     WHERE telegram_user_id = ?
                 )
                 """,
-                (telegram_user_id,),
+                (UserStatus.ACTIVE.value, telegram_user_id),
             )
         return self.get_by_telegram_id(telegram_user_id)
 
     def is_active_admin(self, telegram_user_id: int) -> bool:
         user = self.get_by_telegram_id(telegram_user_id)
-        return user is not None and user.status == "active" and user.role == "admin"
+        return (
+            user is not None
+            and user.status == UserStatus.ACTIVE
+            and user.role == UserRole.ADMIN
+        )
 
     def count_splitwise_users(self) -> int:
         count = self._database.connection.execute(
@@ -164,8 +144,8 @@ def _registered_user_from_row(row: sqlite3.Row) -> RegisteredUser:
         id=int(row["id"]),
         telegram_user_id=int(row["telegram_user_id"]),
         display_name=str(row["display_name"]),
-        status=cast(UserStatus, str(row["status"])),
-        role=cast(UserRole, str(row["role"])),
+        status=UserStatus(str(row["status"])),
+        role=UserRole(str(row["role"])),
         username=_optional_str(row["username"]),
         first_name=_optional_str(row["first_name"]),
         last_name=_optional_str(row["last_name"]),

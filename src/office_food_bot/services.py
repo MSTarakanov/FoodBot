@@ -3,24 +3,20 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Literal
 from zoneinfo import ZoneInfo
 
 from office_food_bot.database import Database
-from office_food_bot.repositories import (
+from office_food_bot.models import (
+    ApprovalKind,
     RegisteredUser,
+    RegistrationKind,
     TelegramProfile,
+    UserStatus,
+)
+from office_food_bot.repositories import (
     UserRepository,
     normalize_display_name,
 )
-
-RegistrationKind = Literal[
-    "created",
-    "already_active",
-    "already_pending",
-    "blocked",
-]
-ApprovalKind = Literal["approved", "forbidden", "not_found"]
 
 
 @dataclass(frozen=True)
@@ -60,7 +56,7 @@ class RegistrationService:
             return RegistrationResult(_registration_kind_for(existing_user), existing_user)
 
         user = self._users.create_pending_user(profile, display_name)
-        return RegistrationResult("created", user)
+        return RegistrationResult(RegistrationKind.CREATED, user)
 
     def approve(
         self,
@@ -68,12 +64,12 @@ class RegistrationService:
         target_telegram_user_id: int,
     ) -> ApprovalResult:
         if not self.can_approve(approver_telegram_user_id):
-            return ApprovalResult("forbidden", None)
+            return ApprovalResult(ApprovalKind.FORBIDDEN, None)
 
         user = self._users.approve_by_telegram_id(target_telegram_user_id)
         if user is None:
-            return ApprovalResult("not_found", None)
-        return ApprovalResult("approved", user)
+            return ApprovalResult(ApprovalKind.NOT_FOUND, None)
+        return ApprovalResult(ApprovalKind.APPROVED, user)
 
     def can_approve(self, telegram_user_id: int) -> bool:
         return telegram_user_id in self.admin_ids or self._users.is_active_admin(telegram_user_id)
@@ -94,9 +90,9 @@ class PresenceService:
         user = self._users.get_by_telegram_id(telegram_user_id)
         if user is None:
             return "Сначала зарегистрируйся: /register Имя"
-        if user.status == "pending":
+        if user.status == UserStatus.PENDING:
             return "Регистрация еще ждет аппрува."
-        if user.status != "active":
+        if user.status != UserStatus.ACTIVE:
             return "Регистрация сейчас неактивна."
 
         minutes = _parse_minutes(raw_minutes)
@@ -118,9 +114,9 @@ class BalanceService:
         user = self._users.get_by_telegram_id(telegram_user_id)
         if user is None:
             return "Сначала зарегистрируйся: /register Имя"
-        if user.status == "pending":
+        if user.status == UserStatus.PENDING:
             return "Регистрация еще ждет аппрува."
-        if user.status != "active":
+        if user.status != UserStatus.ACTIVE:
             return "Регистрация сейчас неактивна."
         if self._users.count_splitwise_users() == 0:
             return "Splitwise пока не подключен."
@@ -142,11 +138,11 @@ def build_services(
 
 
 def _registration_kind_for(user: RegisteredUser) -> RegistrationKind:
-    if user.status == "active":
-        return "already_active"
-    if user.status == "pending":
-        return "already_pending"
-    return "blocked"
+    if user.status == UserStatus.ACTIVE:
+        return RegistrationKind.ALREADY_ACTIVE
+    if user.status == UserStatus.PENDING:
+        return RegistrationKind.ALREADY_PENDING
+    return RegistrationKind.BLOCKED
 
 
 def _parse_minutes(raw_minutes: str) -> int | None:

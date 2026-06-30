@@ -8,6 +8,7 @@ from aiogram.filters.command import CommandObject
 from aiogram.types import Message
 
 from office_food_bot.commands.common import telegram_profile_from_message
+from office_food_bot.models import ApprovalKind
 from office_food_bot.services import BotServices
 
 
@@ -33,11 +34,11 @@ async def approve_command(
         return
 
     result = services.registration.approve(approver.telegram_user_id, telegram_user_id)
-    if result.kind == "forbidden":
+    if result.kind == ApprovalKind.FORBIDDEN:
         await message.answer("Не могу: аппрувить могут только админы.")
         return
 
-    if result.kind == "not_found":
+    if result.kind == ApprovalKind.NOT_FOUND:
         await message.answer(f"Не нашел заявку для Telegram ID {telegram_user_id}.")
         return
 

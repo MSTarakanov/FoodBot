@@ -15,6 +15,7 @@ from aiogram.types import Chat, Message, Update, User
 from office_food_bot.app import create_dispatcher, create_services
 from office_food_bot.config import Settings
 from office_food_bot.database import Database
+from office_food_bot.models import UserStatus
 from office_food_bot.repositories import UserRepository
 
 DEFAULT_ADMIN_IDS = frozenset({7})
@@ -144,7 +145,7 @@ async def test_register_creates_pending_user_and_notifies_admin(tmp_path: Path) 
     user = UserRepository(database).get_by_telegram_id(42)
     assert user is not None
     assert user.display_name == "Максим"
-    assert user.status == "pending"
+    assert user.status == UserStatus.PENDING
 
 
 async def test_register_does_not_duplicate_existing_pending_user(tmp_path: Path) -> None:
@@ -192,7 +193,7 @@ async def test_admin_can_approve_pending_user(tmp_path: Path) -> None:
 
     user = UserRepository(database).get_by_telegram_id(42)
     assert user is not None
-    assert user.status == "active"
+    assert user.status == UserStatus.ACTIVE
 
 
 async def test_non_admin_cannot_approve(tmp_path: Path) -> None:

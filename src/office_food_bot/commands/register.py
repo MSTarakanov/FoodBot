@@ -8,7 +8,7 @@ from aiogram.filters.command import CommandObject
 from aiogram.types import Message
 
 from office_food_bot.commands.common import telegram_profile_from_message
-from office_food_bot.repositories import RegisteredUser
+from office_food_bot.models import RegisteredUser, RegistrationKind
 from office_food_bot.services import BotServices
 
 
@@ -29,16 +29,16 @@ async def register_command(
 
     result = services.registration.register(profile, command.args)
 
-    if result.kind == "created":
+    if result.kind == RegistrationKind.CREATED:
         await message.answer("Заявка на регистрацию отправлена. Жду аппрув.")
         await _notify_admins_about_registration(bot, services, result.user)
         return
 
-    if result.kind == "already_active":
+    if result.kind == RegistrationKind.ALREADY_ACTIVE:
         await message.answer(f"Уже зарегистрирован, {result.user.display_name}")
         return
 
-    if result.kind == "already_pending":
+    if result.kind == RegistrationKind.ALREADY_PENDING:
         await message.answer(f"Заявка уже ждет аппрува, {result.user.display_name}")
         return
 
