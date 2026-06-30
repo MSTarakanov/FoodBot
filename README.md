@@ -6,21 +6,36 @@ Pre-alpha Telegram bot for office food coordination.
 
 - `/start` - introduces the bot.
 - `/hi` - replies with a short greeting.
+- `/register <name>` - asks an admin to approve a Telegram user with a display name.
+- `/approve <telegram_user_id>` - approves a pending user, admin-only.
+- `/meta <minutes>` - says when a registered user will arrive.
+- `/balance` - placeholder for the upcoming Splitwise balance view.
 
 ## Local Run
 
+Prepare the project environment. If `uv` is not installed yet, setup will ask before installing it.
+
 ```bash
-python3.14 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-cp .env.example .env
-office-food-bot
+scripts/setup
+uv run office-food-bot
 ```
 
 Put the real bot token into `.env`. This file is local-only and is ignored by git.
 
-For this pre-alpha the bot runs with long polling. Webhook deployment can be added when the
-Render service exists.
+## Configuration
+
+Committed defaults live in `.env.defaults`. Use it for shared non-secret values such as
+`DATABASE_PATH` and `FOODBOT_TIMEZONE`. It also keeps `TELEGRAM_ADMIN_IDS` as an empty required
+key; real admin ids live in local `.env` files or GitHub Secrets.
+
+The bot requires those keys to exist; keep shared defaults in `.env.defaults` instead of relying
+on hidden Python fallback values.
+
+Local overrides live in `.env`. `scripts/setup` creates it from `.env.example` if it does not
+exist. Use `.env` for secrets such as `TELEGRAM_BOT_TOKEN`, and to override
+`TELEGRAM_ADMIN_IDS` while debugging locally.
+
+For this pre-alpha the bot runs with long polling.
 
 ## Runtime
 
@@ -29,10 +44,25 @@ The bot targets Python 3.14 in local development, CI, and VPS deployment.
 ## Checks
 
 ```bash
-ruff check .
-mypy src
-pytest
+scripts/check
 ```
+
+The script runs the same checks as CI:
+
+```bash
+uv run --extra dev ruff check .
+uv run --extra dev mypy src
+uv run --extra dev pytest
+```
+
+To run checks automatically before each commit in this clone:
+
+```bash
+scripts/setup
+```
+
+Git hook settings are local to each clone, so every contributor should run `scripts/setup` once
+after cloning the repository.
 
 ## Local Telegram Testing
 
@@ -45,10 +75,7 @@ Recommended developer flow:
 ```bash
 git clone git@github.com:MSTarakanov/FoodBot.git
 cd FoodBot
-python3.14 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-cp .env.example .env
+scripts/setup
 ```
 
 Create a personal development bot via `@BotFather`, then put its token into `.env`:
@@ -60,16 +87,14 @@ TELEGRAM_BOT_TOKEN=your-development-bot-token
 Run the bot locally:
 
 ```bash
-office-food-bot
+uv run office-food-bot
 ```
 
 Then open your development bot in Telegram and test commands such as `/start`, `/hi`, and any new
 command you are adding. Before opening a pull request, also run:
 
 ```bash
-ruff check .
-mypy src
-pytest
+scripts/check
 ```
 
 ## Contributor Flow
@@ -126,6 +151,8 @@ Repository secrets:
 - `FOODBOT_VPS_KNOWN_HOSTS` - pinned SSH host key for the VPS.
 - `FOODBOT_VPS_PORT` - optional SSH port, defaults to `22`.
 - `FOODBOT_VPS_USER` - optional SSH user, defaults to `root`.
+- `TELEGRAM_BOT_TOKEN` - production Telegram bot token.
+- `TELEGRAM_ADMIN_IDS` - comma-separated production Telegram admin user ids.
 
 Deployment secrets are maintainer-only. Contributors should only run the bot locally with their
 own development Telegram bot token.
@@ -133,3 +160,6 @@ own development Telegram bot token.
 The matching public key on the server should be restricted with a forced command that runs
 `/usr/local/sbin/deploy-foodbot`. The source version of that command is kept in
 `deploy/deploy-foodbot.sh`.
+
+During deploy, GitHub Actions writes the production `/opt/foodbot/.env` on the VPS from secrets.
+Local debugging still uses the uncommitted `.env` file in each developer clone.

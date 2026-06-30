@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ensure_uv() {
+  if command -v uv >/dev/null 2>&1; then
+    return
+  fi
+
+  echo "uv is not installed."
+
+  if [[ ! -t 0 ]]; then
+    echo "Run scripts/setup interactively, or install uv first:" >&2
+    echo "curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+    exit 1
+  fi
+
+  read -r -p "Install uv now? [y/N] " answer
+  case "$answer" in
+    [yY] | [yY][eE][sS])
+      curl -LsSf https://astral.sh/uv/install.sh | sh
+      export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+      ;;
+    *)
+      echo "Setup stopped. Install uv and run scripts/setup again."
+      exit 1
+      ;;
+  esac
+
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "uv was installed, but is not available in PATH yet. Restart the terminal and run scripts/setup again." >&2
+    exit 1
+  fi
+}
+
+ensure_uv
+
+uv python install 3.14
+uv sync --extra dev
+git config core.hooksPath .githooks
+
+if [[ ! -f .env ]]; then
+  cp .env.example .env
+  echo "Created .env from .env.example. Fill in TELEGRAM_BOT_TOKEN."
+else
+  echo ".env already exists, leaving it unchanged."
+fi
+
+echo "Local environment is ready. Git hooks are enabled for this clone."
