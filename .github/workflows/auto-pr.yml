@@ -47,5 +47,6 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --base main \
               --head "$BRANCH_NAME" \
-              --fill
+              --title "$BRANCH_NAME" \
+              --body "Created automatically from branch $BRANCH_NAME."
           fi
