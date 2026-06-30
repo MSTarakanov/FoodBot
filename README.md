@@ -123,6 +123,7 @@ Repository secrets:
 
 - `FOODBOT_VPS_HOST` - VPS hostname or IP address.
 - `FOODBOT_VPS_SSH_KEY` - private SSH key for deployment.
+- `FOODBOT_VPS_KNOWN_HOSTS` - pinned SSH host key for the VPS.
 - `FOODBOT_VPS_PORT` - optional SSH port, defaults to `22`.
 - `FOODBOT_VPS_USER` - optional SSH user, defaults to `root`.
 
