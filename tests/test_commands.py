@@ -17,7 +17,6 @@ from office_food_bot.config import Settings
 from office_food_bot.database import Database
 from office_food_bot.repositories import UserRepository
 
-
 DEFAULT_ADMIN_IDS = frozenset({7})
 
 

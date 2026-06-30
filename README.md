@@ -13,12 +13,19 @@ Pre-alpha Telegram bot for office food coordination.
 
 ## Local Run
 
+Install `uv` once:
+
 ```bash
-python3.14 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Then prepare the project environment:
+
+```bash
+uv python install 3.14
+uv sync --extra dev
 cp .env.example .env
-office-food-bot
+uv run office-food-bot
 ```
 
 Put the real bot token into `.env`. Add comma-separated Telegram admin ids to
@@ -34,9 +41,21 @@ The bot targets Python 3.14 in local development, CI, and VPS deployment.
 ## Checks
 
 ```bash
-ruff check .
-mypy src
-pytest
+scripts/check
+```
+
+The script runs the same checks as CI:
+
+```bash
+uv run --extra dev ruff check .
+uv run --extra dev mypy src
+uv run --extra dev pytest
+```
+
+To run checks automatically before each commit in this clone:
+
+```bash
+git config core.hooksPath .githooks
 ```
 
 ## Local Telegram Testing
@@ -50,9 +69,8 @@ Recommended developer flow:
 ```bash
 git clone git@github.com:MSTarakanov/FoodBot.git
 cd FoodBot
-python3.14 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+uv python install 3.14
+uv sync --extra dev
 cp .env.example .env
 ```
 
@@ -65,16 +83,14 @@ TELEGRAM_BOT_TOKEN=your-development-bot-token
 Run the bot locally:
 
 ```bash
-office-food-bot
+uv run office-food-bot
 ```
 
 Then open your development bot in Telegram and test commands such as `/start`, `/hi`, and any new
 command you are adding. Before opening a pull request, also run:
 
 ```bash
-ruff check .
-mypy src
-pytest
+scripts/check
 ```
 
 ## Contributor Flow
