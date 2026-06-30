@@ -1,0 +1,63 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - "main"
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check required secrets
+        env:
+          VPS_HOST: ${{ secrets.FOODBOT_VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.FOODBOT_VPS_SSH_KEY }}
+        run: |
+          missing=0
+
+          if [ -z "${VPS_HOST:-}" ]; then
+            echo "::error::FOODBOT_VPS_HOST is not set."
+            missing=1
+          fi
+
+          if [ -z "${VPS_SSH_KEY:-}" ]; then
+            echo "::error::FOODBOT_VPS_SSH_KEY is not set."
+            missing=1
+          fi
+
+          exit "$missing"
+
+      - name: Configure SSH
+        env:
+          VPS_HOST: ${{ secrets.FOODBOT_VPS_HOST }}
+          VPS_PORT: ${{ secrets.FOODBOT_VPS_PORT || '22' }}
+          VPS_SSH_KEY: ${{ secrets.FOODBOT_VPS_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/foodbot_deploy_key
+          chmod 600 ~/.ssh/foodbot_deploy_key
+          ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy to VPS
+        env:
+          VPS_HOST: ${{ secrets.FOODBOT_VPS_HOST }}
+          VPS_PORT: ${{ secrets.FOODBOT_VPS_PORT || '22' }}
+          VPS_USER: ${{ secrets.FOODBOT_VPS_USER || 'root' }}
+        run: |
+          ssh \
+            -i ~/.ssh/foodbot_deploy_key \
+            -p "$VPS_PORT" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            "$VPS_USER@$VPS_HOST" \
+            deploy-foodbot
