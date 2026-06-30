@@ -76,3 +76,15 @@ pytest
 
 Tests feed synthetic Telegram updates into the aiogram dispatcher. This keeps tests offline while
 checking command routing and response text close to how a real user message is handled.
+
+## GitHub Automation
+
+Feature branches named `feature/**`, `fix/**`, `docs/**`, or `chore/**` can be turned into pull
+requests automatically. Open pull requests are also updated from `main` when they are behind, so
+strict branch protection can require fresh checks before merge.
+
+For the full automation loop, add a repository secret named `FOODBOT_AUTOMATION_TOKEN`. Use a
+fine-grained GitHub token for this repository with:
+
+- Contents: read and write.
+- Pull requests: read and write.

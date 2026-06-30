@@ -1,9 +1,15 @@
 name: CI
 
 on:
+  merge_group:
   pull_request:
   push:
-    branches: ["main"]
+    branches:
+      - "main"
+      - "feature/**"
+      - "fix/**"
+      - "docs/**"
+      - "chore/**"
 
 jobs:
   checks:

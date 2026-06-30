@@ -1,0 +1,87 @@
+name: Update Pull Request Branches
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  push:
+    branches:
+      - "main"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  update-current-pr:
+    name: Update current pull request branch
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.base.ref == 'main'
+    concurrency:
+      group: update-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Update branch when it is behind main
+        env:
+          GH_TOKEN: ${{ secrets.FOODBOT_AUTOMATION_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::notice::FOODBOT_AUTOMATION_TOKEN is not set; skipping automatic branch update."
+            echo "Create a repository secret with Contents and Pull requests write access to enable this workflow."
+            exit 0
+          fi
+
+          merge_state="$(
+            gh pr view "$PR_URL" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json mergeStateStatus \
+              --jq '.mergeStateStatus'
+          )"
+
+          echo "mergeStateStatus=$merge_state"
+
+          if [ "$merge_state" = "BEHIND" ]; then
+            gh pr update-branch "$PR_URL" --repo "$GITHUB_REPOSITORY"
+          else
+            echo "Branch is not behind main."
+          fi
+
+  update-open-prs:
+    name: Update open pull request branches
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    concurrency:
+      group: update-open-prs
+      cancel-in-progress: false
+
+    steps:
+      - name: Update open branches that are behind main
+        env:
+          GH_TOKEN: ${{ secrets.FOODBOT_AUTOMATION_TOKEN }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::notice::FOODBOT_AUTOMATION_TOKEN is not set; skipping automatic branch updates."
+            echo "Create a repository secret with Contents and Pull requests write access to enable this workflow."
+            exit 0
+          fi
+
+          pr_numbers="$(
+            gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --base main \
+              --state open \
+              --json number,isDraft,mergeStateStatus \
+              --jq '.[] | select(.isDraft == false and .mergeStateStatus == "BEHIND") | .number'
+          )"
+
+          if [ -z "$pr_numbers" ]; then
+            echo "No open pull requests are behind main."
+            exit 0
+          fi
+
+          for pr_number in $pr_numbers; do
+            echo "Updating pull request #$pr_number"
+            gh pr update-branch "$pr_number" --repo "$GITHUB_REPOSITORY"
+          done
