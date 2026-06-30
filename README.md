@@ -33,6 +33,9 @@ Put the real bot token into `.env`. This file is local-only and is ignored by gi
 Committed defaults live in `.env.defaults`. Use it for shared non-secret values such as
 `DATABASE_PATH`, `TELEGRAM_ADMIN_IDS`, and `FOODBOT_TIMEZONE`.
 
+The bot requires those keys to exist; keep shared defaults in `.env.defaults` instead of relying
+on hidden Python fallback values.
+
 Local overrides live in `.env`. `scripts/setup` creates it from `.env.example` if it does not
 exist. Use `.env` for secrets such as `TELEGRAM_BOT_TOKEN`, and to override
 `TELEGRAM_ADMIN_IDS` while debugging locally.

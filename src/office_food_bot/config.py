@@ -20,16 +20,13 @@ class Settings:
 def load_settings() -> Settings:
     env = _load_environment()
 
-    token = env.get("TELEGRAM_BOT_TOKEN")
-    if not token:
-        msg = "TELEGRAM_BOT_TOKEN environment variable is required"
-        raise RuntimeError(msg)
-
     return Settings(
-        telegram_bot_token=token,
-        database_path=env.get("DATABASE_PATH", "foodbot.sqlite3"),
-        telegram_admin_ids=_parse_admin_ids(env.get("TELEGRAM_ADMIN_IDS", "")),
-        timezone=env.get("FOODBOT_TIMEZONE", "Europe/Belgrade"),
+        telegram_bot_token=_required_env_value(env, "TELEGRAM_BOT_TOKEN"),
+        database_path=_required_env_value(env, "DATABASE_PATH"),
+        telegram_admin_ids=_parse_admin_ids(
+            _required_env_value(env, "TELEGRAM_ADMIN_IDS", allow_empty=True)
+        ),
+        timezone=_required_env_value(env, "FOODBOT_TIMEZONE"),
     )
 
 
@@ -50,6 +47,19 @@ def _read_dotenv(filename: str) -> dict[str, str]:
         for key, value in dotenv_values(path).items()
         if value is not None
     }
+
+
+def _required_env_value(
+    env: dict[str, str],
+    name: str,
+    *,
+    allow_empty: bool = False,
+) -> str:
+    value = env.get(name)
+    if value is None or (not allow_empty and not value):
+        msg = f"{name} environment variable is required"
+        raise RuntimeError(msg)
+    return value
 
 
 def _parse_admin_ids(raw_admin_ids: str) -> frozenset[int]:

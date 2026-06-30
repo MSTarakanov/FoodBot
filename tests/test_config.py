@@ -56,7 +56,17 @@ def test_environment_variables_have_highest_priority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / ".env.defaults").write_text("TELEGRAM_BOT_TOKEN=from-defaults\n")
+    (tmp_path / ".env.defaults").write_text(
+        "\n".join(
+            [
+                "TELEGRAM_BOT_TOKEN=from-defaults",
+                "DATABASE_PATH=default.sqlite3",
+                "TELEGRAM_ADMIN_IDS=1",
+                "FOODBOT_TIMEZONE=UTC",
+            ]
+        ),
+        encoding="utf-8",
+    )
     (tmp_path / ".env").write_text("TELEGRAM_BOT_TOKEN=from-local\n")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "from-process")
     monkeypatch.setenv("DATABASE_PATH", "process.sqlite3")
@@ -65,3 +75,25 @@ def test_environment_variables_have_highest_priority(
 
     assert settings.telegram_bot_token == "from-process"
     assert settings.database_path == "process.sqlite3"
+    assert settings.telegram_admin_ids == frozenset({1})
+    assert settings.timezone == "UTC"
+
+
+def test_load_settings_fails_when_required_config_is_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "\n".join(
+            [
+                "TELEGRAM_BOT_TOKEN=123456:test-token",
+                "TELEGRAM_ADMIN_IDS=",
+                "FOODBOT_TIMEZONE=UTC",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="DATABASE_PATH environment variable is required"):
+        load_settings()
