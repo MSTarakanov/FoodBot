@@ -84,7 +84,26 @@ requests automatically. Open pull requests are also updated from `main` when the
 strict branch protection can require fresh checks before merge.
 
 For the full automation loop, add a repository secret named `FOODBOT_AUTOMATION_TOKEN`. Use a
-fine-grained GitHub token for this repository with:
+fine-grained GitHub token for this repository with these permissions:
 
 - Contents: read and write.
 - Pull requests: read and write.
+
+This token is especially important for deployment: it lets auto-merge create a normal `main` push
+event that can trigger the deploy workflow.
+
+## Deployment
+
+Deployment runs on every push to `main` and can also be started manually from GitHub Actions.
+The deploy workflow connects to the VPS over SSH and runs the fixed server-side deploy command.
+
+Repository secrets:
+
+- `FOODBOT_VPS_HOST` - VPS hostname or IP address.
+- `FOODBOT_VPS_SSH_KEY` - private SSH key for deployment.
+- `FOODBOT_VPS_PORT` - optional SSH port, defaults to `22`.
+- `FOODBOT_VPS_USER` - optional SSH user, defaults to `root`.
+
+The matching public key on the server should be restricted with a forced command that runs
+`/usr/local/sbin/deploy-foodbot`. The source version of that command is kept in
+`deploy/deploy-foodbot.sh`.
