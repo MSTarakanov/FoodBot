@@ -72,6 +72,19 @@ mypy src
 pytest
 ```
 
+## Contributor Flow
+
+For everyday feature work, contributors do not need production tokens, VPS access, or deployment
+secrets.
+
+1. Create a branch named `feature/...`, `fix/...`, `docs/...`, or `chore/...`.
+2. Run the bot locally with a personal development Telegram bot token.
+3. Run local checks.
+4. Push the branch.
+
+GitHub creates a pull request, runs checks, merges it when checks pass, and deploys the updated
+`main` branch to the VPS.
+
 ## Testing Approach
 
 Tests feed synthetic Telegram updates into the aiogram dispatcher. This keeps tests offline while
@@ -83,14 +96,19 @@ Feature branches named `feature/**`, `fix/**`, `docs/**`, or `chore/**` can be t
 requests automatically. Open pull requests are also updated from `main` when they are behind, so
 strict branch protection can require fresh checks before merge.
 
-For the full automation loop, add a repository secret named `FOODBOT_AUTOMATION_TOKEN`. Use a
+`FOODBOT_AUTOMATION_TOKEN` is a repository secret used by GitHub Actions. It is a separate
 fine-grained GitHub token for this repository with these permissions:
 
 - Contents: read and write.
 - Pull requests: read and write.
 
-This token is especially important for deployment: it lets auto-merge create a normal `main` push
-event that can trigger the deploy workflow.
+GitHub Actions also has a built-in `GITHUB_TOKEN`, but actions performed with it do not always
+trigger the next workflow. This is intentional GitHub behavior that prevents accidental workflow
+loops. The separate automation token makes the repository workflow explicit:
+
+`push branch -> create PR -> run checks -> auto-merge -> push main -> deploy`
+
+Only maintainers need to manage this token. Contributors do not need it locally.
 
 ## Deployment
 
@@ -103,6 +121,9 @@ Repository secrets:
 - `FOODBOT_VPS_SSH_KEY` - private SSH key for deployment.
 - `FOODBOT_VPS_PORT` - optional SSH port, defaults to `22`.
 - `FOODBOT_VPS_USER` - optional SSH user, defaults to `root`.
+
+Deployment secrets are maintainer-only. Contributors should only run the bot locally with their
+own development Telegram bot token.
 
 The matching public key on the server should be restricted with a forced command that runs
 `/usr/local/sbin/deploy-foodbot`. The source version of that command is kept in
