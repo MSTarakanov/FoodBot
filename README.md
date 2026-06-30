@@ -13,13 +13,7 @@ Pre-alpha Telegram bot for office food coordination.
 
 ## Local Run
 
-Install `uv` once:
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-Then prepare the project environment:
+Prepare the project environment. If `uv` is not installed yet, setup will ask before installing it.
 
 ```bash
 scripts/setup
