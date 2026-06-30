@@ -3,9 +3,9 @@ from datetime import datetime
 
 from aiogram import Dispatcher
 
+from office_food_bot.commands import create_command_router
 from office_food_bot.config import Settings
 from office_food_bot.database import Database
-from office_food_bot.handlers import create_command_router
 from office_food_bot.services import BotServices, build_services
 
 
