@@ -5,12 +5,12 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
 from aiogram.methods import TelegramMethod
 from aiogram.methods.send_message import SendMessage
 from aiogram.types import Chat, Message, Update, User
+import pytest
 
 from office_food_bot.app import create_dispatcher, create_services
 from office_food_bot.config import Settings
@@ -19,6 +19,7 @@ from office_food_bot.repositories import UserRepository
 
 
 DEFAULT_ADMIN_IDS = frozenset({7})
+
 
 class RecordingSession(BaseSession):
     def __init__(self) -> None:
@@ -79,7 +80,10 @@ def make_database(tmp_path: Path) -> Database:
     return database
 
 
-def make_dispatcher(database: Database, admin_ids: frozenset[int] = DEFAULT_ADMIN_IDS) -> Dispatcher:
+def make_dispatcher(
+    database: Database,
+    admin_ids: frozenset[int] = DEFAULT_ADMIN_IDS,
+) -> Dispatcher:
     settings = Settings(
         telegram_bot_token="123456:test-token",
         database_path=database.path,

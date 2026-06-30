@@ -62,7 +62,11 @@ class RegistrationService:
         user = self._users.create_pending_user(profile, display_name)
         return RegistrationResult("created", user)
 
-    def approve(self, approver_telegram_user_id: int, target_telegram_user_id: int) -> ApprovalResult:
+    def approve(
+        self,
+        approver_telegram_user_id: int,
+        target_telegram_user_id: int,
+    ) -> ApprovalResult:
         if not self.can_approve(approver_telegram_user_id):
             return ApprovalResult("forbidden", None)
 
