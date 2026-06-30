@@ -5,12 +5,12 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
 from aiogram.methods import TelegramMethod
 from aiogram.methods.send_message import SendMessage
 from aiogram.types import Chat, Message, Update, User
-import pytest
 
 from office_food_bot.app import create_dispatcher, create_services
 from office_food_bot.config import Settings
