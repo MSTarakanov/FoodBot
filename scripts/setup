@@ -10,4 +10,11 @@ uv python install 3.14
 uv sync --extra dev
 git config core.hooksPath .githooks
 
+if [[ ! -f .env ]]; then
+  cp .env.example .env
+  echo "Created .env from .env.example. Fill in TELEGRAM_BOT_TOKEN."
+else
+  echo ".env already exists, leaving it unchanged."
+fi
+
 echo "Local environment is ready. Git hooks are enabled for this clone."

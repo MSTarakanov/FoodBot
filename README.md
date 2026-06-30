@@ -23,15 +23,21 @@ Then prepare the project environment:
 
 ```bash
 scripts/setup
-cp .env.example .env
 uv run office-food-bot
 ```
 
-Put the real bot token into `.env`. Add comma-separated Telegram admin ids to
-`TELEGRAM_ADMIN_IDS`. This file is local-only and is ignored by git.
+Put the real bot token into `.env`. This file is local-only and is ignored by git.
 
-For this pre-alpha the bot runs with long polling. Webhook deployment can be added when the
-Render service exists.
+## Configuration
+
+Committed defaults live in `.env.defaults`. Use it for shared non-secret values such as
+`DATABASE_PATH`, `TELEGRAM_ADMIN_IDS`, and `FOODBOT_TIMEZONE`.
+
+Local overrides live in `.env`. `scripts/setup` creates it from `.env.example` if it does not
+exist. Use `.env` for secrets such as `TELEGRAM_BOT_TOKEN`, and to override
+`TELEGRAM_ADMIN_IDS` while debugging locally.
+
+For this pre-alpha the bot runs with long polling.
 
 ## Runtime
 
@@ -72,7 +78,6 @@ Recommended developer flow:
 git clone git@github.com:MSTarakanov/FoodBot.git
 cd FoodBot
 scripts/setup
-cp .env.example .env
 ```
 
 Create a personal development bot via `@BotFather`, then put its token into `.env`:
