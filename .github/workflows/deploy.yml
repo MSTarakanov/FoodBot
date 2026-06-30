@@ -23,6 +23,8 @@ jobs:
           VPS_HOST: ${{ secrets.FOODBOT_VPS_HOST }}
           VPS_SSH_KEY: ${{ secrets.FOODBOT_VPS_SSH_KEY }}
           VPS_KNOWN_HOSTS: ${{ secrets.FOODBOT_VPS_KNOWN_HOSTS }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ADMIN_IDS: ${{ secrets.TELEGRAM_ADMIN_IDS }}
         run: |
           missing=0
 
@@ -41,6 +43,16 @@ jobs:
             missing=1
           fi
 
+          if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
+            echo "::error::TELEGRAM_BOT_TOKEN is not set."
+            missing=1
+          fi
+
+          if [ -z "${TELEGRAM_ADMIN_IDS:-}" ]; then
+            echo "::error::TELEGRAM_ADMIN_IDS is not set."
+            missing=1
+          fi
+
           exit "$missing"
 
       - name: Configure SSH
@@ -54,6 +66,19 @@ jobs:
           chmod 600 ~/.ssh/foodbot_deploy_key
           chmod 600 ~/.ssh/known_hosts
 
+      - name: Prepare production environment
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ADMIN_IDS: ${{ secrets.TELEGRAM_ADMIN_IDS }}
+        run: |
+          umask 077
+          {
+            printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
+            printf 'DATABASE_PATH=%s\n' "/opt/foodbot/foodbot.sqlite3"
+            printf 'TELEGRAM_ADMIN_IDS=%s\n' "$TELEGRAM_ADMIN_IDS"
+            printf 'FOODBOT_TIMEZONE=%s\n' "Europe/Belgrade"
+          } > production.env
+
       - name: Deploy to VPS
         env:
           VPS_HOST: ${{ secrets.FOODBOT_VPS_HOST }}
@@ -66,4 +91,4 @@ jobs:
             -o BatchMode=yes \
             -o IdentitiesOnly=yes \
             "$VPS_USER@$VPS_HOST" \
-            deploy-foodbot
+            deploy-foodbot < production.env

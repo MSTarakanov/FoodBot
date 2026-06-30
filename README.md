@@ -25,7 +25,8 @@ Put the real bot token into `.env`. This file is local-only and is ignored by gi
 ## Configuration
 
 Committed defaults live in `.env.defaults`. Use it for shared non-secret values such as
-`DATABASE_PATH`, `TELEGRAM_ADMIN_IDS`, and `FOODBOT_TIMEZONE`.
+`DATABASE_PATH` and `FOODBOT_TIMEZONE`. It also keeps `TELEGRAM_ADMIN_IDS` as an empty required
+key; real admin ids live in local `.env` files or GitHub Secrets.
 
 The bot requires those keys to exist; keep shared defaults in `.env.defaults` instead of relying
 on hidden Python fallback values.
@@ -150,6 +151,8 @@ Repository secrets:
 - `FOODBOT_VPS_KNOWN_HOSTS` - pinned SSH host key for the VPS.
 - `FOODBOT_VPS_PORT` - optional SSH port, defaults to `22`.
 - `FOODBOT_VPS_USER` - optional SSH user, defaults to `root`.
+- `TELEGRAM_BOT_TOKEN` - production Telegram bot token.
+- `TELEGRAM_ADMIN_IDS` - comma-separated production Telegram admin user ids.
 
 Deployment secrets are maintainer-only. Contributors should only run the bot locally with their
 own development Telegram bot token.
@@ -157,3 +160,6 @@ own development Telegram bot token.
 The matching public key on the server should be restricted with a forced command that runs
 `/usr/local/sbin/deploy-foodbot`. The source version of that command is kept in
 `deploy/deploy-foodbot.sh`.
+
+During deploy, GitHub Actions writes the production `/opt/foodbot/.env` on the VPS from secrets.
+Local debugging still uses the uncommitted `.env` file in each developer clone.
