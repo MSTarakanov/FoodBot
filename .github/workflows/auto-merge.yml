@@ -15,7 +15,14 @@ jobs:
 
     steps:
       - name: Enable auto-merge
-        run: gh pr merge "$PR_URL" --auto --squash --delete-branch
+        run: |
+          if [ "$AUTOMATION_TOKEN_SET" != "true" ]; then
+            echo "::notice::FOODBOT_AUTOMATION_TOKEN is not set; using GITHUB_TOKEN for auto-merge."
+            echo "Add the secret before enabling deploy-on-main, so merge commits can trigger deployment workflows."
+          fi
+
+          gh pr merge "$PR_URL" --auto --squash --delete-branch
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.FOODBOT_AUTOMATION_TOKEN || github.token }}
+          AUTOMATION_TOKEN_SET: ${{ secrets.FOODBOT_AUTOMATION_TOKEN != '' }}
           PR_URL: ${{ github.event.pull_request.html_url }}
