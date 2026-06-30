@@ -82,8 +82,8 @@ secrets.
 3. Run local checks.
 4. Push the branch.
 
-GitHub creates a pull request, runs checks, merges it when checks pass, and deploys the updated
-`main` branch to the VPS.
+GitHub creates a pull request and runs checks. A maintainer reviews and merges the pull request;
+after `main` is updated, GitHub deploys the bot to the VPS.
 
 ## Testing Approach
 
@@ -106,9 +106,13 @@ GitHub Actions also has a built-in `GITHUB_TOKEN`, but actions performed with it
 trigger the next workflow. This is intentional GitHub behavior that prevents accidental workflow
 loops. The separate automation token makes the repository workflow explicit:
 
-`push branch -> create PR -> run checks -> auto-merge -> push main -> deploy`
+`push branch -> create PR -> run checks -> maintainer merge -> push main -> deploy`
 
 Only maintainers need to manage this token. Contributors do not need it locally.
+
+Auto-merge is currently disabled so maintainers can review pull requests before merge. The
+mechanism is still kept for later: set the repository variable `FOODBOT_ENABLE_AUTO_MERGE` to
+`true` and re-enable the `Enable Auto-Merge` workflow if automatic merging should come back.
 
 ## Deployment
 
