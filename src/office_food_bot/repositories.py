@@ -73,7 +73,10 @@ class UserRepository:
                 """,
                 (display_name,),
             )
-            user_id = int(cursor.lastrowid)
+            user_id = cursor.lastrowid
+            if user_id is None:
+                msg = "Created user id was not returned"
+                raise RuntimeError(msg)
             self._database.connection.execute(
                 """
                 INSERT INTO telegram_accounts (
