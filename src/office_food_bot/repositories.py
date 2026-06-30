@@ -3,6 +3,14 @@ from __future__ import annotations
 import sqlite3
 
 from office_food_bot.database import Database
+from office_food_bot.database.user_queries import (
+    APPROVE_USER_BY_TELEGRAM_ID_SQL,
+    COUNT_SPLITWISE_USERS_SQL,
+    GET_USER_BY_TELEGRAM_ID_SQL,
+    INSERT_TELEGRAM_ACCOUNT_SQL,
+    INSERT_USER_SQL,
+    UPDATE_TELEGRAM_PROFILE_SQL,
+)
 from office_food_bot.models import RegisteredUser, TelegramProfile, UserRole, UserStatus
 
 
@@ -12,20 +20,7 @@ class UserRepository:
 
     def get_by_telegram_id(self, telegram_user_id: int) -> RegisteredUser | None:
         row = self._database.connection.execute(
-            """
-            SELECT
-                users.id,
-                users.display_name,
-                users.status,
-                users.role,
-                telegram_accounts.telegram_user_id,
-                telegram_accounts.username,
-                telegram_accounts.first_name,
-                telegram_accounts.last_name
-            FROM telegram_accounts
-            JOIN users ON users.id = telegram_accounts.user_id
-            WHERE telegram_accounts.telegram_user_id = ?
-            """,
+            GET_USER_BY_TELEGRAM_ID_SQL,
             (telegram_user_id,),
         ).fetchone()
         if row is None:
@@ -43,10 +38,7 @@ class UserRepository:
 
         with self._database.connection:
             cursor = self._database.connection.execute(
-                """
-                INSERT INTO users (display_name, status, role)
-                VALUES (?, ?, ?)
-                """,
+                INSERT_USER_SQL,
                 (display_name, UserStatus.PENDING.value, UserRole.MEMBER.value),
             )
             user_id = cursor.lastrowid
@@ -54,16 +46,7 @@ class UserRepository:
                 msg = "Created user id was not returned"
                 raise RuntimeError(msg)
             self._database.connection.execute(
-                """
-                INSERT INTO telegram_accounts (
-                    telegram_user_id,
-                    user_id,
-                    username,
-                    first_name,
-                    last_name
-                )
-                VALUES (?, ?, ?, ?, ?)
-                """,
+                INSERT_TELEGRAM_ACCOUNT_SQL,
                 (
                     profile.telegram_user_id,
                     user_id,
@@ -82,14 +65,7 @@ class UserRepository:
     def refresh_telegram_profile(self, profile: TelegramProfile) -> None:
         with self._database.connection:
             self._database.connection.execute(
-                """
-                UPDATE telegram_accounts
-                SET username = ?,
-                    first_name = ?,
-                    last_name = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE telegram_user_id = ?
-                """,
+                UPDATE_TELEGRAM_PROFILE_SQL,
                 (
                     profile.username,
                     profile.first_name,
@@ -104,16 +80,7 @@ class UserRepository:
 
         with self._database.connection:
             self._database.connection.execute(
-                """
-                UPDATE users
-                SET status = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = (
-                    SELECT user_id
-                    FROM telegram_accounts
-                    WHERE telegram_user_id = ?
-                )
-                """,
+                APPROVE_USER_BY_TELEGRAM_ID_SQL,
                 (UserStatus.ACTIVE.value, telegram_user_id),
             )
         return self.get_by_telegram_id(telegram_user_id)
@@ -127,9 +94,7 @@ class UserRepository:
         )
 
     def count_splitwise_users(self) -> int:
-        count = self._database.connection.execute(
-            "SELECT COUNT(*) FROM splitwise_users"
-        ).fetchone()
+        count = self._database.connection.execute(COUNT_SPLITWISE_USERS_SQL).fetchone()
         if count is None:
             return 0
         return int(count[0])
