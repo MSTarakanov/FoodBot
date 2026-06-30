@@ -224,6 +224,28 @@ async def test_meta_uses_registered_display_name(tmp_path: Path) -> None:
     assert sent_texts(session) == ["Максим будет в 12:40"]
 
 
+async def test_registration_happy_path_allows_meta_after_approval(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register Максим"))
+    assert sent_texts(session)[0] == "Заявка на регистрацию отправлена. Жду аппрув."
+    assert "Аппрув: /approve 42" in sent_texts(session)[1]
+
+    session.requests.clear()
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    assert sent_texts(session) == [
+        "Аппрувнул: Максим",
+        "Регистрация подтверждена. Теперь я буду звать тебя Максим.",
+    ]
+
+    session.requests.clear()
+    await dispatcher.feed_update(bot, make_update("/meta 25"))
+    assert sent_texts(session) == ["Максим будет в 12:40"]
+
+
 async def test_meta_requires_approved_registration(tmp_path: Path) -> None:
     database = make_database(tmp_path)
     session = RecordingSession()
