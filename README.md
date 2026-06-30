@@ -6,6 +6,10 @@ Pre-alpha Telegram bot for office food coordination.
 
 - `/start` - introduces the bot.
 - `/hi` - replies with a short greeting.
+- `/register <name>` - asks an admin to approve a Telegram user with a display name.
+- `/approve <telegram_user_id>` - approves a pending user, admin-only.
+- `/meta <minutes>` - says when a registered user will arrive.
+- `/balance` - placeholder for the upcoming Splitwise balance view.
 
 ## Local Run
 
@@ -17,7 +21,8 @@ cp .env.example .env
 office-food-bot
 ```
 
-Put the real bot token into `.env`. This file is local-only and is ignored by git.
+Put the real bot token into `.env`. Add comma-separated Telegram admin ids to
+`TELEGRAM_ADMIN_IDS`. This file is local-only and is ignored by git.
 
 For this pre-alpha the bot runs with long polling. Webhook deployment can be added when the
 Render service exists.
