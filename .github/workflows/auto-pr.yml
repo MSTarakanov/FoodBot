@@ -26,6 +26,7 @@ jobs:
           GH_TOKEN: ${{ secrets.FOODBOT_AUTOMATION_TOKEN || github.token }}
           AUTOMATION_TOKEN_SET: ${{ secrets.FOODBOT_AUTOMATION_TOKEN != '' }}
           BRANCH_NAME: ${{ github.ref_name }}
+          AUTO_MERGE_ENABLED: ${{ vars.FOODBOT_ENABLE_AUTO_MERGE == 'true' }}
         run: |
           if [ "$AUTOMATION_TOKEN_SET" != "true" ]; then
             echo "::notice::FOODBOT_AUTOMATION_TOKEN is not set; using GITHUB_TOKEN for PR creation."
@@ -53,4 +54,8 @@ jobs:
             )"
           fi
 
-          gh pr merge "$pr_url" --repo "$GITHUB_REPOSITORY" --auto --squash --delete-branch
+          if [ "$AUTO_MERGE_ENABLED" = "true" ]; then
+            gh pr merge "$pr_url" --repo "$GITHUB_REPOSITORY" --auto --squash --delete-branch
+          else
+            echo "::notice::Auto-merge is disabled. Set FOODBOT_ENABLE_AUTO_MERGE=true to enable it."
+          fi

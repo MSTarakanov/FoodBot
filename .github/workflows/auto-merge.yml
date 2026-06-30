@@ -16,6 +16,11 @@ jobs:
     steps:
       - name: Enable auto-merge
         run: |
+          if [ "$AUTO_MERGE_ENABLED" != "true" ]; then
+            echo "::notice::Auto-merge is disabled. Set FOODBOT_ENABLE_AUTO_MERGE=true to enable it."
+            exit 0
+          fi
+
           if [ "$AUTOMATION_TOKEN_SET" != "true" ]; then
             echo "::notice::FOODBOT_AUTOMATION_TOKEN is not set; using GITHUB_TOKEN for auto-merge."
             echo "Add the secret before enabling deploy-on-main, so merge commits can trigger deployment workflows."
@@ -25,4 +30,5 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.FOODBOT_AUTOMATION_TOKEN || github.token }}
           AUTOMATION_TOKEN_SET: ${{ secrets.FOODBOT_AUTOMATION_TOKEN != '' }}
+          AUTO_MERGE_ENABLED: ${{ vars.FOODBOT_ENABLE_AUTO_MERGE == 'true' }}
           PR_URL: ${{ github.event.pull_request.html_url }}
