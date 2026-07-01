@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from aiogram.types import Message
 
+from office_food_bot.commands.definitions import START_TEXT
+
 
 async def start_command(message: Message) -> None:
-    await message.answer(
-        "Привет! Я офисный бот про еду. Умею /register, /meta, /balance и /hi."
-    )
+    await message.answer(START_TEXT)

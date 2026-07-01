@@ -10,9 +10,12 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
 from aiogram.methods import TelegramMethod
 from aiogram.methods.send_message import SendMessage
+from aiogram.methods.set_my_commands import SetMyCommands
 from aiogram.types import Chat, Message, Update, User
 
 from office_food_bot.app import create_dispatcher, create_services
+from office_food_bot.commands import setup_bot_commands
+from office_food_bot.commands.definitions import COMMANDS, HELP_TEXT, START_TEXT
 from office_food_bot.config import Settings
 from office_food_bot.database import Database
 from office_food_bot.models import UserStatus
@@ -34,7 +37,7 @@ class RecordingSession(BaseSession):
         bot: Bot,
         method: TelegramMethod[Any],
         timeout: int | None = None,
-    ) -> Message:
+    ) -> Any:
         self.requests.append(method)
         if isinstance(method, SendMessage):
             return Message(
@@ -43,6 +46,8 @@ class RecordingSession(BaseSession):
                 chat=Chat(id=method.chat_id, type="private"),
                 text=method.text,
             )
+        if isinstance(method, SetMyCommands):
+            return True
         raise AssertionError(f"Unexpected Telegram method: {type(method).__name__}")
 
     async def stream_content(
@@ -105,7 +110,8 @@ def sent_texts(session: RecordingSession) -> list[str]:
 @pytest.mark.parametrize(
     ("incoming_text", "expected_text"),
     [
-        ("/start", "Привет! Я офисный бот про еду. Умею /register, /meta, /balance и /hi."),
+        ("/start", START_TEXT),
+        ("/help", HELP_TEXT),
         ("/hi", "Привет! Я на месте."),
     ],
 )
@@ -126,6 +132,23 @@ async def test_commands_reply_with_expected_text(
     assert isinstance(request, SendMessage)
     assert request.chat_id == 42
     assert request.text == expected_text
+
+
+async def test_setup_bot_commands_registers_telegram_menu() -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+
+    await setup_bot_commands(bot)
+
+    assert len(session.requests) == 1
+    request = session.requests[0]
+    assert isinstance(request, SetMyCommands)
+    assert [command.command for command in request.commands] == [
+        definition.name for definition in COMMANDS
+    ]
+    assert [command.description for command in request.commands] == [
+        definition.description for definition in COMMANDS
+    ]
 
 
 async def test_register_creates_pending_user_and_notifies_admin(tmp_path: Path) -> None:
