@@ -4,12 +4,24 @@ Pre-alpha Telegram bot for office food coordination.
 
 ## Commands
 
+The bot registers a Telegram slash menu on startup, so available commands are shown when a user
+types `/` in Telegram. `/help` returns the same command set in chat.
+
+Regular users see:
+
 - `/start` - introduces the bot.
+- `/help` - shows available commands.
 - `/hi` - replies with a short greeting.
 - `/register <name>` - asks an admin to approve a Telegram user with a display name.
-- `/approve <telegram_user_id>` - approves a pending user, admin-only.
 - `/meta <minutes>` - says when a registered user will arrive.
 - `/balance` - placeholder for the upcoming Splitwise balance view.
+
+Admins also see:
+
+- `/approve <telegram_user_id>` - approves a pending user.
+
+Admin command visibility is based on `TELEGRAM_ADMIN_IDS`. The `/approve` handler is protected too,
+so non-admin users cannot approve registrations even if they type the command manually.
 
 ## Local Run
 
@@ -90,8 +102,11 @@ Run the bot locally:
 uv run office-food-bot
 ```
 
-Then open your development bot in Telegram and test commands such as `/start`, `/hi`, and any new
-command you are adding. Before opening a pull request, also run:
+Then open your development bot in Telegram and test commands such as `/start`, `/help`, `/hi`, and
+any new command you are adding. If your local `.env` contains your Telegram user id in
+`TELEGRAM_ADMIN_IDS`, the slash menu and `/help` should also include admin commands.
+
+Before opening a pull request, also run:
 
 ```bash
 scripts/check
