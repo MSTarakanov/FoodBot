@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TypeVar, cast
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -28,12 +29,13 @@ from office_food_bot.models import UserStatus
 from office_food_bot.repositories import UserRepository
 
 DEFAULT_ADMIN_IDS = frozenset({7})
+TelegramResponse = TypeVar("TelegramResponse")
 
 
 class RecordingSession(BaseSession):
     def __init__(self) -> None:
         super().__init__()
-        self.requests: list[TelegramMethod[Any]] = []
+        self.requests: list[object] = []
 
     async def close(self) -> None:
         return None
@@ -41,19 +43,22 @@ class RecordingSession(BaseSession):
     async def make_request(
         self,
         bot: Bot,
-        method: TelegramMethod[Any],
+        method: TelegramMethod[TelegramResponse],
         timeout: int | None = None,
-    ) -> Any:
+    ) -> TelegramResponse:
         self.requests.append(method)
         if isinstance(method, SendMessage):
-            return Message(
-                message_id=len(self.requests),
-                date=datetime.now(tz=UTC),
-                chat=Chat(id=method.chat_id, type="private"),
-                text=method.text,
+            return cast(
+                TelegramResponse,
+                Message(
+                    message_id=len(self.requests),
+                    date=datetime.now(tz=UTC),
+                    chat=Chat(id=method.chat_id, type="private"),
+                    text=method.text,
+                ),
             )
         if isinstance(method, SetMyCommands):
-            return True
+            return cast(TelegramResponse, True)
         raise AssertionError(f"Unexpected Telegram method: {type(method).__name__}")
 
     async def stream_content(
@@ -63,8 +68,9 @@ class RecordingSession(BaseSession):
         timeout: int = 30,
         chunk_size: int = 65536,
         raise_for_status: bool = True,
-    ) -> Any:
+    ) -> AsyncGenerator[bytes]:
         raise AssertionError("No streaming calls are expected in command tests")
+        yield b""
 
 
 def make_update(
