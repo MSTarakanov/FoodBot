@@ -22,6 +22,12 @@ COMMANDS: tuple[CommandDefinition, ...] = (
         "/approve 123456789",
         admin_only=True,
     ),
+    CommandDefinition(
+        "register_requests_list",
+        "показать заявки на регистрацию",
+        "/register_requests_list",
+        admin_only=True,
+    ),
     CommandDefinition("meta", "сообщить, через сколько минут придешь", "/meta 25"),
     CommandDefinition("balance", "показать баланс Splitwise", "/balance"),
 )

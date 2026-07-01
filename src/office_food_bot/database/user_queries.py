@@ -13,6 +13,22 @@ JOIN users ON users.id = telegram_accounts.user_id
 WHERE telegram_accounts.telegram_user_id = ?
 """
 
+LIST_PENDING_USERS_SQL = """
+SELECT
+    users.id,
+    users.display_name,
+    users.status,
+    users.role,
+    telegram_accounts.telegram_user_id,
+    telegram_accounts.username,
+    telegram_accounts.first_name,
+    telegram_accounts.last_name
+FROM telegram_accounts
+JOIN users ON users.id = telegram_accounts.user_id
+WHERE users.status = ?
+ORDER BY users.created_at, users.id
+"""
+
 INSERT_USER_SQL = """
 INSERT INTO users (display_name, status, role)
 VALUES (?, ?, ?)

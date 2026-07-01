@@ -239,6 +239,23 @@ async def test_register_creates_pending_user_and_notifies_admin(tmp_path: Path) 
     assert user.status == UserStatus.PENDING
 
 
+async def test_register_notifies_admin_even_when_admin_registers(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/register Максим", user_id=7, first_name="Admin", username="admin"),
+    )
+
+    assert sent_texts(session)[0] == "Заявка на регистрацию отправлена. Жду аппрув."
+    assert "Новая регистрация" in sent_texts(session)[1]
+    assert "Имя: Максим" in sent_texts(session)[1]
+    assert "Аппрув: /approve 7" in sent_texts(session)[1]
+
+
 async def test_register_does_not_duplicate_existing_pending_user(tmp_path: Path) -> None:
     database = make_database(tmp_path)
     session = RecordingSession()
@@ -298,6 +315,50 @@ async def test_non_admin_cannot_approve(tmp_path: Path) -> None:
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=99, first_name="NotAdmin"))
 
     assert sent_texts(session) == ["Не могу: аппрувить могут только админы."]
+
+
+async def test_admin_can_list_pending_registration_requests(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register Максим"))
+    await dispatcher.feed_update(
+        bot,
+        make_update("/register Оля", user_id=43, first_name="Olya", username="olya"),
+    )
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/register_requests_list", user_id=7))
+
+    assert sent_texts(session) == [
+        "Заявки на регистрацию:\n"
+        "1. Максим (@misha) - Telegram ID 42 - /approve 42\n"
+        "2. Оля (@olya) - Telegram ID 43 - /approve 43"
+    ]
+
+
+async def test_non_admin_cannot_list_pending_registration_requests(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register_requests_list", user_id=99))
+
+    assert sent_texts(session) == ["Не могу: список заявок доступен только админам."]
+
+
+async def test_admin_sees_empty_registration_request_list(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register_requests_list", user_id=7))
+
+    assert sent_texts(session) == ["Заявок на регистрацию нет."]
 
 
 async def test_meta_uses_registered_display_name(tmp_path: Path) -> None:

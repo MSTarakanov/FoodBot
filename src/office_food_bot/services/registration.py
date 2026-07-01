@@ -60,6 +60,11 @@ class RegistrationService:
     def can_approve(self, telegram_user_id: int) -> bool:
         return telegram_user_id in self.admin_ids or self._users.is_active_admin(telegram_user_id)
 
+    def list_pending_requests(self, requester_telegram_user_id: int) -> tuple[RegisteredUser, ...]:
+        if not self.can_approve(requester_telegram_user_id):
+            return ()
+        return self._users.list_pending_users()
+
 
 def _registration_kind_for(user: RegisteredUser) -> RegistrationKind:
     if user.status == UserStatus.ACTIVE:

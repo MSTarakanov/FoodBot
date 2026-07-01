@@ -77,6 +77,17 @@ def test_approve_by_telegram_id_returns_none_for_unknown_user(
     assert users.approve_by_telegram_id(404) is None
 
 
+def test_list_pending_users_returns_only_pending_users(users: UserRepository) -> None:
+    users.create_pending_user(make_profile(telegram_user_id=42, username="misha"), "Максим")
+    users.create_pending_user(make_profile(telegram_user_id=43, username="olya"), "Оля")
+    users.approve_by_telegram_id(42)
+
+    pending_users = users.list_pending_users()
+
+    assert [user.telegram_user_id for user in pending_users] == [43]
+    assert pending_users[0].display_name == "Оля"
+
+
 def test_count_splitwise_users_counts_linked_splitwise_users(
     database: Database,
     users: UserRepository,

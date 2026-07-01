@@ -9,6 +9,7 @@ from office_food_bot.commands.help import help_command
 from office_food_bot.commands.hi import hi_command
 from office_food_bot.commands.meta import meta_command
 from office_food_bot.commands.register import register_command
+from office_food_bot.commands.register_requests_list import register_requests_list_command
 from office_food_bot.commands.start import start_command
 
 
@@ -19,6 +20,7 @@ def create_command_router() -> Router:
     router.message.register(hi_command, Command("hi"))
     router.message.register(register_command, Command("register"))
     router.message.register(approve_command, Command("approve"))
+    router.message.register(register_requests_list_command, Command("register_requests_list"))
     router.message.register(meta_command, Command("meta"))
     router.message.register(balance_command, Command("balance"))
     return router
