@@ -51,8 +51,6 @@ async def _notify_admins_about_registration(
     registered_user: RegisteredUser,
 ) -> None:
     for admin_id in services.registration.admin_ids:
-        if admin_id == registered_user.telegram_user_id:
-            continue
         with suppress(TelegramAPIError):
             await bot.send_message(
                 admin_id,

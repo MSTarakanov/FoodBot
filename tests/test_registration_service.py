@@ -128,3 +128,11 @@ def test_approve_activates_pending_user(users: UserRepository) -> None:
     assert result.kind == ApprovalKind.APPROVED
     assert result.user is not None
     assert result.user.status == UserStatus.ACTIVE
+
+
+def test_list_pending_requests_is_admin_only(users: UserRepository) -> None:
+    service = make_service(users)
+    service.register(make_profile(), "Максим")
+
+    assert service.list_pending_requests(99) == ()
+    assert [user.telegram_user_id for user in service.list_pending_requests(7)] == [42]

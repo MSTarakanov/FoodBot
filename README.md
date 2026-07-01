@@ -19,6 +19,7 @@ Regular users see:
 Admins also see:
 
 - `/approve <telegram_user_id>` - approves a pending user.
+- `/register_requests_list` - shows pending registration requests.
 
 Admin command visibility is based on `TELEGRAM_ADMIN_IDS`. The `/approve` handler is protected too,
 so non-admin users cannot approve registrations even if they type the command manually.
