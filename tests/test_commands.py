@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -10,9 +11,17 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
 from aiogram.methods import TelegramMethod
 from aiogram.methods.send_message import SendMessage
-from aiogram.types import Chat, Message, Update, User
+from aiogram.types import BotCommand, BotCommandScopeChat, Chat, Message, Update, User
 
 from office_food_bot.app import create_dispatcher, create_services
+from office_food_bot.commands import setup_bot_commands
+from office_food_bot.commands.definitions import (
+    ADMIN_COMMANDS,
+    ADMIN_HELP_TEXT,
+    PUBLIC_COMMANDS,
+    PUBLIC_HELP_TEXT,
+    START_TEXT,
+)
 from office_food_bot.config import Settings
 from office_food_bot.database import Database
 from office_food_bot.models import UserStatus
@@ -21,10 +30,16 @@ from office_food_bot.repositories import UserRepository
 DEFAULT_ADMIN_IDS = frozenset({7})
 
 
+@dataclass(frozen=True)
+class ChatCommandMenu:
+    chat_id: int
+    commands: tuple[BotCommand, ...]
+
+
 class RecordingSession(BaseSession):
     def __init__(self) -> None:
         super().__init__()
-        self.requests: list[TelegramMethod[Any]] = []
+        self.sent_messages: list[SendMessage] = []
 
     async def close(self) -> None:
         return None
@@ -32,18 +47,14 @@ class RecordingSession(BaseSession):
     async def make_request(
         self,
         bot: Bot,
-        method: TelegramMethod[Any],
+        method: TelegramMethod[Message],
         timeout: int | None = None,
     ) -> Message:
-        self.requests.append(method)
-        if isinstance(method, SendMessage):
-            return Message(
-                message_id=len(self.requests),
-                date=datetime.now(tz=UTC),
-                chat=Chat(id=method.chat_id, type="private"),
-                text=method.text,
-            )
-        raise AssertionError(f"Unexpected Telegram method: {type(method).__name__}")
+        if not isinstance(method, SendMessage):
+            raise AssertionError(f"Unexpected Telegram method: {type(method).__name__}")
+
+        self.sent_messages.append(method)
+        return _send_message_response(method, len(self.sent_messages))
 
     async def stream_content(
         self,
@@ -52,8 +63,48 @@ class RecordingSession(BaseSession):
         timeout: int = 30,
         chunk_size: int = 65536,
         raise_for_status: bool = True,
-    ) -> Any:
+    ) -> AsyncGenerator[bytes]:
         raise AssertionError("No streaming calls are expected in command tests")
+        yield b""
+
+    def clear_messages(self) -> None:
+        self.sent_messages.clear()
+
+
+class RecordingCommandMenuClient:
+    def __init__(self) -> None:
+        self.public_command_menus: list[tuple[BotCommand, ...]] = []
+        self.chat_command_menus: list[ChatCommandMenu] = []
+
+    async def set_my_commands(
+        self,
+        commands: list[BotCommand],
+        scope: BotCommandScopeChat | None = None,
+    ) -> bool:
+        command_menu = tuple(commands)
+        if scope is None:
+            self.public_command_menus.append(command_menu)
+            return True
+
+        chat_id = scope.chat_id
+        if not isinstance(chat_id, int):
+            raise AssertionError(f"Expected numeric admin chat id, got {chat_id!r}")
+
+        self.chat_command_menus.append(ChatCommandMenu(chat_id=chat_id, commands=command_menu))
+        return True
+
+
+def _send_message_response(method: SendMessage, message_id: int) -> Message:
+    chat_id = method.chat_id
+    if not isinstance(chat_id, int):
+        raise AssertionError(f"Expected numeric chat id, got {chat_id!r}")
+
+    return Message(
+        message_id=message_id,
+        date=datetime.now(tz=UTC),
+        chat=Chat(id=chat_id, type="private"),
+        text=method.text,
+    )
 
 
 def make_update(
@@ -99,13 +150,14 @@ def make_dispatcher(
 
 
 def sent_texts(session: RecordingSession) -> list[str]:
-    return [str(request.text) for request in session.requests if isinstance(request, SendMessage)]
+    return [message.text for message in session.sent_messages]
 
 
 @pytest.mark.parametrize(
     ("incoming_text", "expected_text"),
     [
-        ("/start", "Привет! Я офисный бот про еду. Умею /register, /meta, /balance и /hi."),
+        ("/start", START_TEXT),
+        ("/help", PUBLIC_HELP_TEXT),
         ("/hi", "Привет! Я на месте."),
     ],
 )
@@ -121,11 +173,50 @@ async def test_commands_reply_with_expected_text(
 
     await dispatcher.feed_update(bot, make_update(incoming_text))
 
-    assert len(session.requests) == 1
-    request = session.requests[0]
-    assert isinstance(request, SendMessage)
+    assert len(session.sent_messages) == 1
+    request = session.sent_messages[0]
     assert request.chat_id == 42
     assert request.text == expected_text
+
+
+async def test_help_shows_admin_commands_to_admins(tmp_path: Path) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/help", user_id=7, first_name="Admin"))
+
+    assert sent_texts(session) == [ADMIN_HELP_TEXT]
+
+
+async def test_setup_bot_commands_registers_telegram_menu() -> None:
+    bot = RecordingCommandMenuClient()
+
+    await setup_bot_commands(bot, DEFAULT_ADMIN_IDS)
+
+    assert len(bot.public_command_menus) == 1
+    assert len(bot.chat_command_menus) == 1
+
+    public_commands = bot.public_command_menus[0]
+    assert [command.command for command in public_commands] == [
+        definition.name for definition in PUBLIC_COMMANDS
+    ]
+    assert [command.command for command in public_commands] == [
+        "start",
+        "help",
+        "hi",
+        "register",
+        "meta",
+        "balance",
+    ]
+
+    admin_menu = bot.chat_command_menus[0]
+    assert admin_menu.chat_id == 7
+    assert [command.command for command in admin_menu.commands] == [
+        definition.name for definition in ADMIN_COMMANDS
+    ]
+    assert "approve" in [command.command for command in admin_menu.commands]
 
 
 async def test_register_creates_pending_user_and_notifies_admin(tmp_path: Path) -> None:
@@ -155,7 +246,7 @@ async def test_register_does_not_duplicate_existing_pending_user(tmp_path: Path)
     dispatcher = make_dispatcher(database)
 
     await dispatcher.feed_update(bot, make_update("/register Максим"))
-    session.requests.clear()
+    session.clear_messages()
     await dispatcher.feed_update(bot, make_update("/register Другое"))
 
     assert sent_texts(session) == ["Заявка уже ждет аппрува, Максим"]
@@ -169,7 +260,7 @@ async def test_register_existing_active_user_replies_with_name(tmp_path: Path) -
 
     await dispatcher.feed_update(bot, make_update("/register Максим"))
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
-    session.requests.clear()
+    session.clear_messages()
 
     await dispatcher.feed_update(bot, make_update("/register Другое"))
 
@@ -183,7 +274,7 @@ async def test_admin_can_approve_pending_user(tmp_path: Path) -> None:
     dispatcher = make_dispatcher(database)
 
     await dispatcher.feed_update(bot, make_update("/register Максим"))
-    session.requests.clear()
+    session.clear_messages()
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
 
     assert sent_texts(session) == [
@@ -203,7 +294,7 @@ async def test_non_admin_cannot_approve(tmp_path: Path) -> None:
     dispatcher = make_dispatcher(database)
 
     await dispatcher.feed_update(bot, make_update("/register Максим"))
-    session.requests.clear()
+    session.clear_messages()
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=99, first_name="NotAdmin"))
 
     assert sent_texts(session) == ["Не могу: аппрувить могут только админы."]
@@ -217,7 +308,7 @@ async def test_meta_uses_registered_display_name(tmp_path: Path) -> None:
 
     await dispatcher.feed_update(bot, make_update("/register Максим"))
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
-    session.requests.clear()
+    session.clear_messages()
 
     await dispatcher.feed_update(bot, make_update("/meta 25"))
 
@@ -234,14 +325,14 @@ async def test_registration_happy_path_allows_meta_after_approval(tmp_path: Path
     assert sent_texts(session)[0] == "Заявка на регистрацию отправлена. Жду аппрув."
     assert "Аппрув: /approve 42" in sent_texts(session)[1]
 
-    session.requests.clear()
+    session.clear_messages()
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
     assert sent_texts(session) == [
         "Аппрувнул: Максим",
         "Регистрация подтверждена. Теперь я буду звать тебя Максим.",
     ]
 
-    session.requests.clear()
+    session.clear_messages()
     await dispatcher.feed_update(bot, make_update("/meta 25"))
     assert sent_texts(session) == ["Максим будет в 12:40"]
 
@@ -253,7 +344,7 @@ async def test_meta_requires_approved_registration(tmp_path: Path) -> None:
     dispatcher = make_dispatcher(database)
 
     await dispatcher.feed_update(bot, make_update("/register Максим"))
-    session.requests.clear()
+    session.clear_messages()
 
     await dispatcher.feed_update(bot, make_update("/meta 25"))
 
@@ -268,7 +359,7 @@ async def test_balance_requires_active_user_and_has_placeholder(tmp_path: Path) 
 
     await dispatcher.feed_update(bot, make_update("/register Максим"))
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
-    session.requests.clear()
+    session.clear_messages()
 
     await dispatcher.feed_update(bot, make_update("/balance"))
 
