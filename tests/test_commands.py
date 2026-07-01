@@ -11,11 +11,17 @@ from aiogram.client.session.base import BaseSession
 from aiogram.methods import TelegramMethod
 from aiogram.methods.send_message import SendMessage
 from aiogram.methods.set_my_commands import SetMyCommands
-from aiogram.types import Chat, Message, Update, User
+from aiogram.types import BotCommandScopeChat, Chat, Message, Update, User
 
 from office_food_bot.app import create_dispatcher, create_services
 from office_food_bot.commands import setup_bot_commands
-from office_food_bot.commands.definitions import COMMANDS, HELP_TEXT, START_TEXT
+from office_food_bot.commands.definitions import (
+    ADMIN_COMMANDS,
+    ADMIN_HELP_TEXT,
+    PUBLIC_COMMANDS,
+    PUBLIC_HELP_TEXT,
+    START_TEXT,
+)
 from office_food_bot.config import Settings
 from office_food_bot.database import Database
 from office_food_bot.models import UserStatus
@@ -111,7 +117,7 @@ def sent_texts(session: RecordingSession) -> list[str]:
     ("incoming_text", "expected_text"),
     [
         ("/start", START_TEXT),
-        ("/help", HELP_TEXT),
+        ("/help", PUBLIC_HELP_TEXT),
         ("/hi", "Привет! Я на месте."),
     ],
 )
@@ -134,21 +140,48 @@ async def test_commands_reply_with_expected_text(
     assert request.text == expected_text
 
 
+async def test_help_shows_admin_commands_to_admins(tmp_path: Path) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/help", user_id=7, first_name="Admin"))
+
+    assert sent_texts(session) == [ADMIN_HELP_TEXT]
+
+
 async def test_setup_bot_commands_registers_telegram_menu() -> None:
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
 
-    await setup_bot_commands(bot)
+    await setup_bot_commands(bot, DEFAULT_ADMIN_IDS)
 
-    assert len(session.requests) == 1
-    request = session.requests[0]
-    assert isinstance(request, SetMyCommands)
-    assert [command.command for command in request.commands] == [
-        definition.name for definition in COMMANDS
+    assert len(session.requests) == 2
+
+    public_request = session.requests[0]
+    assert isinstance(public_request, SetMyCommands)
+    assert public_request.scope is None
+    assert [command.command for command in public_request.commands] == [
+        definition.name for definition in PUBLIC_COMMANDS
     ]
-    assert [command.description for command in request.commands] == [
-        definition.description for definition in COMMANDS
+    assert [command.command for command in public_request.commands] == [
+        "start",
+        "help",
+        "hi",
+        "register",
+        "meta",
+        "balance",
     ]
+
+    admin_request = session.requests[1]
+    assert isinstance(admin_request, SetMyCommands)
+    assert isinstance(admin_request.scope, BotCommandScopeChat)
+    assert admin_request.scope.chat_id == 7
+    assert [command.command for command in admin_request.commands] == [
+        definition.name for definition in ADMIN_COMMANDS
+    ]
+    assert "approve" in [command.command for command in admin_request.commands]
 
 
 async def test_register_creates_pending_user_and_notifies_admin(tmp_path: Path) -> None:

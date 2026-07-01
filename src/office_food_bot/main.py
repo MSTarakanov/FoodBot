@@ -16,7 +16,7 @@ async def main() -> None:
     bot = Bot(token=settings.telegram_bot_token)
     dispatcher = create_dispatcher(services)
     try:
-        await setup_bot_commands(bot)
+        await setup_bot_commands(bot, services.registration.admin_ids)
         await dispatcher.start_polling(bot)
     finally:
         database.close()
