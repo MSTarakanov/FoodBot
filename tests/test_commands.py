@@ -9,7 +9,8 @@ from zoneinfo import ZoneInfo
 import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
-from aiogram.methods import TelegramMethod
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.methods import SetMyCommands, TelegramMethod
 from aiogram.methods.send_message import SendMessage
 from aiogram.types import BotCommand, BotCommandScopeChat, Chat, Message, Update, User
 
@@ -92,6 +93,21 @@ class RecordingCommandMenuClient:
 
         self.chat_command_menus.append(ChatCommandMenu(chat_id=chat_id, commands=command_menu))
         return True
+
+
+class AdminChatNotFoundCommandMenuClient(RecordingCommandMenuClient):
+    async def set_my_commands(
+        self,
+        commands: list[BotCommand],
+        scope: BotCommandScopeChat | None = None,
+    ) -> bool:
+        if scope is not None:
+            raise TelegramBadRequest(
+                method=SetMyCommands(commands=commands, scope=scope),
+                message="Bad Request: chat not found",
+            )
+
+        return await super().set_my_commands(commands, scope)
 
 
 def _send_message_response(method: SendMessage, message_id: int) -> Message:
@@ -217,6 +233,15 @@ async def test_setup_bot_commands_registers_telegram_menu() -> None:
         definition.name for definition in ADMIN_COMMANDS
     ]
     assert "approve" in [command.command for command in admin_menu.commands]
+
+
+async def test_setup_bot_commands_ignores_missing_admin_chat() -> None:
+    bot = AdminChatNotFoundCommandMenuClient()
+
+    await setup_bot_commands(bot, DEFAULT_ADMIN_IDS)
+
+    assert len(bot.public_command_menus) == 1
+    assert len(bot.chat_command_menus) == 0
 
 
 async def test_register_creates_pending_user_and_notifies_admin(tmp_path: Path) -> None:
