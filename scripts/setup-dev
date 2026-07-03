@@ -1,0 +1,726 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OFFICIAL_REPO_SSH="git@github.com:MSTarakanov/FoodBot.git"
+OFFICIAL_REPO_HTTPS="https://github.com/MSTarakanov/FoodBot.git"
+DEFAULT_DATABASE_PATH="foodbot.local.sqlite3"
+DEFAULT_TIMEZONE="Europe/Belgrade"
+
+ENV_ONLY=0
+SKIP_TOOLS=0
+RESET_ENV=0
+SKIP_TOKEN_CHECK=0
+SHOW_AGENT_GUIDE=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+TOOLS_DIR="$REPO_ROOT/.tools"
+LOCAL_UV_BIN="$TOOLS_DIR/bin/uv"
+UV_BIN=""
+GITHUB_SSH_USER=""
+ENV_TMP_FILE=""
+
+cleanup_setup_dev() {
+  if [[ -n "${ENV_TMP_FILE:-}" && -f "$ENV_TMP_FILE" ]]; then
+    rm -f "$ENV_TMP_FILE"
+  fi
+}
+
+trap cleanup_setup_dev EXIT
+trap 'cleanup_setup_dev; exit 130' INT TERM HUP
+
+print_step() {
+  local title="$1"
+
+  if [[ -t 1 ]]; then
+    printf "\n\033[1m==> %s\033[0m\n" "$title"
+  else
+    printf "\n==> %s\n" "$title"
+  fi
+}
+
+print_agent_guide() {
+  printf "%s\n" \
+    "Agent-assisted setup guide" \
+    "" \
+    "Do not ask the user to paste secrets into chat." \
+    "TELEGRAM_BOT_TOKEN, SSH key passphrases, and GitHub credentials should be typed by" \
+    "the user into a local terminal prompt." \
+    "" \
+    "Recommended flow:" \
+    "1. Make sure the repository is cloned and the working tree is on the setup branch." \
+    "2. Tell the user to run ./setup-dev in their terminal, or run it only in a terminal" \
+    "   where the user can type prompt answers directly." \
+    "3. If GitHub SSH is not ready, let the user choose whether to re-check SSH," \
+    "   generate a key and add it to GitHub, continue without SSH, or stop setup." \
+    "4. Let setup stop if the Telegram token is invalid; the user should get a real" \
+    "   development bot token from @BotFather." \
+    "5. After setup completes, run scripts/check." \
+    "" \
+    "For automated tests only, use --env-only --skip-token-check with dummy tokens."
+}
+
+usage() {
+  printf "%s\n" \
+    "Usage: ./setup-dev [--agent-guide] [--env-only] [--reset-env] [--skip-token-check] [--skip-tools]" \
+    "" \
+    "Options:" \
+    "  --agent-guide  Print safe instructions for AI-agent-assisted setup." \
+    "  --env-only    Configure only the local .env file. Used by tests." \
+    "  --reset-env   Re-ask local git identity and ignore existing .env values." \
+    "  --skip-token-check  Skip Telegram token validation. Used by tests or offline setup." \
+    "  --skip-tools  Skip uv, git, SSH, and remote checks."
+}
+
+for arg in "$@"; do
+  case "$arg" in
+    --agent-guide)
+      SHOW_AGENT_GUIDE=1
+      ;;
+    --env-only)
+      ENV_ONLY=1
+      SKIP_TOOLS=1
+      ;;
+    --reset-env)
+      RESET_ENV=1
+      ;;
+    --skip-token-check)
+      SKIP_TOKEN_CHECK=1
+      ;;
+    --skip-tools)
+      SKIP_TOOLS=1
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $arg" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ "$SHOW_AGENT_GUIDE" -eq 1 ]]; then
+  print_agent_guide
+  exit 0
+fi
+
+if [[ "$ENV_ONLY" -eq 0 ]]; then
+  cd "$REPO_ROOT"
+
+  if [[ ! -t 0 ]]; then
+    print_agent_guide >&2
+    exit 1
+  fi
+fi
+
+prompt_value() {
+  local result_variable="$1"
+  local label="$2"
+  local current_value="$3"
+  local required="$4"
+  local secret="$5"
+  local answer=""
+
+  if [[ -n "$current_value" ]]; then
+    if [[ "$secret" -eq 1 ]]; then
+      echo "$label is already configured. Press Enter to keep it."
+    else
+      echo "$label is currently: $current_value"
+    fi
+  fi
+
+  if [[ "$secret" -eq 1 && -t 0 ]]; then
+    read -r -s -p "$label: " answer
+    echo
+  else
+    read -r -p "$label: " answer
+  fi
+
+  if [[ -z "$answer" && -n "$current_value" ]]; then
+    answer="$current_value"
+  fi
+
+  if [[ "$required" -eq 1 && -z "$answer" ]]; then
+    echo "$label is required." >&2
+    exit 1
+  fi
+
+  printf -v "$result_variable" "%s" "$answer"
+}
+
+prompt_yes_no() {
+  local result_variable="$1"
+  local label="$2"
+  local default_answer="$3"
+  local suffix="[y/N]"
+  local answer=""
+
+  if [[ "$default_answer" == "y" ]]; then
+    suffix="[Y/n]"
+  fi
+
+  read -r -p "$label $suffix " answer
+  answer="${answer:-$default_answer}"
+
+  case "$answer" in
+    [yY] | [yY][eE][sS])
+      printf -v "$result_variable" "y"
+      ;;
+    [nN] | [nN][oO])
+      printf -v "$result_variable" "n"
+      ;;
+    *)
+      echo "Please answer yes or no." >&2
+      prompt_yes_no "$result_variable" "$label" "$default_answer"
+      ;;
+  esac
+}
+
+prompt_choice() {
+  local result_variable="$1"
+  local label="$2"
+  local answer=""
+
+  read -r -p "$label " answer
+  printf -v "$result_variable" "%s" "$answer"
+}
+
+ensure_uv() {
+  if [[ -x "$LOCAL_UV_BIN" ]]; then
+    UV_BIN="$LOCAL_UV_BIN"
+    return
+  fi
+
+  echo "Local uv is not installed in .tools/bin."
+
+  if [[ ! -t 0 ]]; then
+    echo "Run ./setup-dev interactively to install uv locally into .tools/bin." >&2
+    exit 1
+  fi
+
+  local install_uv="y"
+  prompt_yes_no install_uv "Install uv locally into .tools/bin?" "y"
+  if [[ "$install_uv" != "y" ]]; then
+    if command -v uv >/dev/null 2>&1; then
+      UV_BIN="$(command -v uv)"
+      echo "Using uv from PATH for this run: $UV_BIN"
+      return
+    fi
+
+    echo "Setup stopped. Install uv locally or make uv available in PATH."
+    exit 1
+  fi
+
+  mkdir -p "$TOOLS_DIR/bin"
+  curl -LsSf https://astral.sh/uv/install.sh \
+    | env UV_INSTALL_DIR="$TOOLS_DIR/bin" UV_NO_MODIFY_PATH=1 sh
+
+  if [[ ! -x "$LOCAL_UV_BIN" ]]; then
+    echo "uv installation finished, but $LOCAL_UV_BIN was not found." >&2
+    exit 1
+  fi
+
+  UV_BIN="$LOCAL_UV_BIN"
+}
+
+configure_python_environment() {
+  print_step "Python toolchain"
+
+  export UV_CACHE_DIR="$TOOLS_DIR/uv-cache"
+  export UV_PROJECT_ENVIRONMENT="$REPO_ROOT/.venv"
+  export UV_PYTHON_INSTALL_DIR="$TOOLS_DIR/python"
+  export UV_NO_MODIFY_PATH=1
+
+  ensure_uv
+  "$UV_BIN" python install 3.14
+  "$UV_BIN" sync --extra dev
+}
+
+configure_git_identity() {
+  print_step "Git identity"
+
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Not inside a git repository; skipping git config."
+    return
+  fi
+
+  git config --local core.hooksPath .githooks
+
+  local git_name=""
+  local git_email=""
+  git_name="$(git config --local --get user.name || true)"
+  git_email="$(git config --local --get user.email || true)"
+
+  echo
+  echo "Git identity is written only to this clone with git config --local."
+  if [[ "$RESET_ENV" -eq 0 && -n "$git_name" && -n "$git_email" ]]; then
+    echo "Git identity is already configured for this clone."
+    return
+  fi
+
+  prompt_value git_name "Git user.name" "$git_name" 1 0
+  prompt_value git_email "Git user.email" "$git_email" 1 0
+
+  git config --local user.name "$git_name"
+  git config --local user.email "$git_email"
+  echo "Local git identity and hooks are configured."
+}
+
+print_github_ssh_help() {
+  printf "%s\n" \
+    "To push over SSH:" \
+    "1. Check whether you already have a public key:" \
+    "   ls ~/.ssh/*.pub" \
+    "2. If you do not have one, create it:" \
+    "   ssh-keygen -t ed25519 -C \"your-email@example.com\"" \
+    "3. Copy the public key:" \
+    "   cat ~/.ssh/id_ed25519.pub" \
+    "4. Add it in GitHub: Settings -> SSH and GPG keys -> New SSH key." \
+    "5. Re-run:" \
+    "   ./setup-dev" \
+    "" \
+    "The SSH key authenticates your GitHub account. It does not grant write access to" \
+    "MSTarakanov/FoodBot by itself. Without collaborator access, push to your fork."
+}
+
+generate_github_ssh_key() {
+  local git_email=""
+  local key_path="$HOME/.ssh/id_ed25519"
+
+  git_email="$(git config --local --get user.email || true)"
+  if [[ -n "$git_email" ]]; then
+    echo "GitHub email for SSH key label is currently: $git_email"
+    local use_current_email="y"
+    prompt_yes_no use_current_email "Use this email for SSH key label?" "y"
+    if [[ "$use_current_email" != "y" ]]; then
+      prompt_value git_email "New GitHub email for SSH key label" "" 1 0
+    fi
+  else
+    prompt_value git_email "GitHub email for SSH key label" "" 1 0
+  fi
+
+  if [[ -e "$key_path" || -e "$key_path.pub" ]]; then
+    echo "$key_path already exists; leaving existing SSH key unchanged."
+  else
+    mkdir -p "$HOME/.ssh"
+    chmod 700 "$HOME/.ssh"
+    ssh-keygen -t ed25519 -C "$git_email" -f "$key_path"
+  fi
+
+  if [[ ! -f "$key_path.pub" ]]; then
+    echo "Public key was not found at $key_path.pub" >&2
+    return 1
+  fi
+
+  printf "%s\n" \
+    "" \
+    "Add this public key to GitHub:" \
+    "GitHub -> Settings -> SSH and GPG keys -> New SSH key" \
+    ""
+  cat "$key_path.pub"
+  printf "%s\n" ""
+}
+
+check_github_ssh() {
+  print_step "GitHub SSH"
+  echo "Checking GitHub SSH authentication..."
+
+  while true; do
+    local ssh_output=""
+    ssh_output="$(
+      ssh -T \
+        -o ConnectTimeout=5 \
+        -o NumberOfPasswordPrompts=1 \
+        -o PreferredAuthentications=publickey \
+        git@github.com 2>&1 || true
+    )"
+
+    if [[ "$ssh_output" == *"successfully authenticated"* ]]; then
+      printf "%s\n" "$ssh_output"
+      GITHUB_SSH_USER="$(printf "%s\n" "$ssh_output" | sed -n 's/^Hi \([^!]*\)!.*/\1/p' | head -n 1)"
+      echo "GitHub SSH authentication works."
+      return
+    fi
+
+    printf "%s\n" \
+      "GitHub SSH authentication is not ready." \
+      ""
+    if [[ -n "$ssh_output" ]]; then
+      printf "%s\n" "SSH check output:" "$ssh_output" ""
+    fi
+    print_github_ssh_help
+
+    printf "%s\n" \
+      "" \
+      "Choose next step:" \
+      "  1) Re-check SSH after you add the key in GitHub" \
+      "  2) Generate an ed25519 SSH key and print its public key" \
+      "  3) Continue without working SSH" \
+      "  4) Stop setup"
+
+    local ssh_choice=""
+    prompt_choice ssh_choice "Select 1-4 [4]:"
+    ssh_choice="${ssh_choice:-4}"
+
+    case "$ssh_choice" in
+      1)
+        echo "Re-checking GitHub SSH..."
+        continue
+        ;;
+      2)
+        generate_github_ssh_key
+        continue
+        ;;
+      3)
+        echo "Continuing without GitHub SSH. Push over SSH will not work yet."
+        return
+        ;;
+      4)
+        echo "Setup stopped. Re-run ./setup-dev after GitHub SSH is ready."
+        exit 1
+        ;;
+      *)
+        echo "Please choose 1, 2, 3, or 4." >&2
+        ;;
+    esac
+  done
+}
+
+is_official_repo_url() {
+  local url="$1"
+  case "$url" in
+    "$OFFICIAL_REPO_SSH" | "$OFFICIAL_REPO_HTTPS" | "git@github.com:MSTarakanov/FoodBot" | "https://github.com/MSTarakanov/FoodBot")
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+configure_git_remotes() {
+  print_step "Git remotes"
+
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Not inside a git repository; skipping remote checks."
+    return
+  fi
+
+  local origin_url=""
+  local upstream_url=""
+  origin_url="$(git remote get-url origin 2>/dev/null || true)"
+  upstream_url="$(git remote get-url upstream 2>/dev/null || true)"
+
+  echo "Git remotes:"
+  echo "  origin: ${origin_url:-not configured}"
+  echo "  upstream: ${upstream_url:-not configured}"
+
+  if [[ -n "$origin_url" ]] && is_official_repo_url "$origin_url"; then
+    if [[ "$GITHUB_SSH_USER" == "MSTarakanov" ]]; then
+      if [[ "$origin_url" != "$OFFICIAL_REPO_SSH" ]]; then
+        git remote set-url origin "$OFFICIAL_REPO_SSH"
+        echo "origin now uses SSH for MSTarakanov/FoodBot."
+      fi
+      echo "GitHub SSH authenticated as repository owner MSTarakanov; keeping direct-push origin."
+      return
+    fi
+
+    printf "%s\n" \
+      "" \
+      "origin points to MSTarakanov/FoodBot." \
+      "GitHub SSH user: ${GITHUB_SSH_USER:-unknown}" \
+      "If this account has collaborator access, you can keep direct-push origin." \
+      "Otherwise, use fork-first: origin points to your fork and upstream points to MSTarakanov/FoodBot."
+
+    local keep_direct_origin="n"
+    prompt_yes_no keep_direct_origin "Keep direct-push origin on MSTarakanov/FoodBot?" "n"
+    if [[ "$keep_direct_origin" == "y" ]]; then
+      if [[ "$origin_url" == "$OFFICIAL_REPO_HTTPS" || "$origin_url" == "https://github.com/MSTarakanov/FoodBot" ]]; then
+        git remote set-url origin "$OFFICIAL_REPO_SSH"
+        echo "origin now uses SSH for MSTarakanov/FoodBot."
+      fi
+
+      echo "Keeping origin on MSTarakanov/FoodBot. Direct pushes require collaborator access."
+      return
+    fi
+
+    local configure_fork="y"
+    prompt_yes_no configure_fork "Configure fork-first remotes now?" "y"
+    if [[ "$configure_fork" == "y" ]]; then
+      local fork_url=""
+      prompt_value fork_url "Fork SSH URL, for example git@github.com:your-user/FoodBot.git" "" 1 0
+
+      if [[ -z "$upstream_url" ]]; then
+        git remote add upstream "$OFFICIAL_REPO_SSH"
+      elif ! is_official_repo_url "$upstream_url"; then
+        git remote set-url upstream "$OFFICIAL_REPO_SSH"
+      fi
+      git remote set-url origin "$fork_url"
+      echo "origin now points to your fork; upstream points to MSTarakanov/FoodBot."
+      return
+    fi
+
+    echo "Setup stopped. Configure a fork or confirm direct-push access."
+    exit 1
+  fi
+
+  if [[ -n "$origin_url" && -z "$upstream_url" ]]; then
+    git remote add upstream "$OFFICIAL_REPO_SSH"
+    echo "Added upstream -> $OFFICIAL_REPO_SSH"
+  elif [[ -n "$upstream_url" ]] && ! is_official_repo_url "$upstream_url"; then
+    echo "upstream does not point to MSTarakanov/FoodBot; leaving it unchanged."
+  fi
+}
+
+read_env_value() {
+  local key="$1"
+  local env_file="${2:-.env}"
+
+  if [[ ! -f "$env_file" ]]; then
+    return
+  fi
+
+  local line=""
+  local value=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    if [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+      value="${BASH_REMATCH[2]}"
+      value="${value%%#*}"
+      value="${value#"${value%%[![:space:]]*}"}"
+      value="${value%"${value##*[![:space:]]}"}"
+
+      if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+        value="${value:1:${#value}-2}"
+      elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
+        value="${value:1:${#value}-2}"
+      fi
+
+      printf "%s" "$value"
+      return
+    fi
+  done <"$env_file"
+}
+
+print_botfather_instructions() {
+  echo "Get the token from Telegram @BotFather:"
+  echo "1. Open @BotFather."
+  echo "2. Create a new bot with /newbot or choose an existing development bot."
+  echo "3. Copy the token and paste it here."
+}
+
+normalize_admin_ids() {
+  local raw_ids="$1"
+  raw_ids="${raw_ids//[[:space:]]/}"
+
+  if [[ -z "$raw_ids" ]]; then
+    printf "%s" ""
+    return
+  fi
+
+  if [[ ! "$raw_ids" =~ ^[0-9]+(,[0-9]+)*$ ]]; then
+    echo "TELEGRAM_ADMIN_IDS must contain numeric Telegram user ids separated by commas." >&2
+    exit 1
+  fi
+
+  printf "%s" "$raw_ids"
+}
+
+telegram_token_has_valid_shape() {
+  local token="$1"
+  [[ "$token" =~ ^[0-9]+:[A-Za-z0-9_-]{30,}$ ]]
+}
+
+verify_telegram_token_with_api() {
+  local token="$1"
+
+  local response=""
+  response="$(telegram_get_me_response "$token")"
+
+  [[ "$response" == *'"ok":true'* ]]
+}
+
+telegram_get_me_response() {
+  local token="$1"
+
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "curl is required to verify the Telegram bot token." >&2
+    return 1
+  fi
+
+  printf 'url = "https://api.telegram.org/bot%s/getMe"\n' "$token" \
+    | curl --silent --show-error --fail --config - 2>/dev/null || true
+}
+
+telegram_bot_username_from_token() {
+  local token="$1"
+  local response=""
+  local username=""
+
+  response="$(telegram_get_me_response "$token")"
+  if [[ "$response" != *'"ok":true'* ]]; then
+    return 1
+  fi
+
+  username="$(printf "%s" "$response" | sed -n 's/.*"username":"\([^"]*\)".*/\1/p')"
+  if [[ -z "$username" ]]; then
+    return 1
+  fi
+
+  printf "%s" "$username"
+}
+
+prompt_telegram_bot_token() {
+  local result_variable="$1"
+  local current_value="$2"
+  local token=""
+  local printed_instructions=0
+
+  if [[ -n "$current_value" && "$SKIP_TOKEN_CHECK" -eq 0 ]]; then
+    if telegram_token_has_valid_shape "$current_value"; then
+      local current_bot_username=""
+      current_bot_username="$(telegram_bot_username_from_token "$current_value" || true)"
+      if [[ -n "$current_bot_username" ]]; then
+        echo "Current TELEGRAM_BOT_TOKEN belongs to @$current_bot_username."
+        echo "Bot link: https://t.me/$current_bot_username"
+
+        local use_current_bot="y"
+        prompt_yes_no use_current_bot "Use this Telegram bot for local development?" "y"
+        if [[ "$use_current_bot" == "y" ]]; then
+          printf -v "$result_variable" "%s" "$current_value"
+          return
+        fi
+
+        current_value=""
+      else
+        echo "Current TELEGRAM_BOT_TOKEN is configured, but setup could not verify which bot it belongs to."
+        local use_unverified_current_bot="n"
+        prompt_yes_no use_unverified_current_bot "Use this unverified Telegram bot token?" "n"
+        if [[ "$use_unverified_current_bot" == "y" ]]; then
+          printf -v "$result_variable" "%s" "$current_value"
+          return
+        fi
+
+        current_value=""
+      fi
+    else
+      echo "Current TELEGRAM_BOT_TOKEN does not look like a real BotFather token."
+      current_value=""
+    fi
+  fi
+
+  while true; do
+    if [[ -z "$current_value" && "$printed_instructions" -eq 0 ]]; then
+      print_botfather_instructions
+      printed_instructions=1
+    fi
+
+    prompt_value token "TELEGRAM_BOT_TOKEN" "$current_value" 1 1
+
+    if [[ "$SKIP_TOKEN_CHECK" -eq 1 ]]; then
+      printf -v "$result_variable" "%s" "$token"
+      return
+    fi
+
+    if ! telegram_token_has_valid_shape "$token"; then
+      echo "TELEGRAM_BOT_TOKEN does not look like a real BotFather token." >&2
+      echo "Expected format: digits:long-secret-from-BotFather" >&2
+      if [[ -t 0 ]]; then
+        current_value=""
+        continue
+      fi
+      exit 1
+    fi
+
+    echo "Checking Telegram bot token..."
+    if verify_telegram_token_with_api "$token"; then
+      echo "Telegram bot token verified."
+      printf -v "$result_variable" "%s" "$token"
+      return
+    fi
+
+    echo "Telegram did not accept this bot token, or the network request failed." >&2
+    if [[ -t 0 ]]; then
+      current_value=""
+      continue
+    fi
+    exit 1
+  done
+}
+
+configure_env() {
+  print_step "Telegram bot configuration"
+
+  local env_file=".env"
+  local current_token=""
+  local current_admin_ids=""
+  local telegram_bot_token=""
+  local telegram_admin_ids=""
+  local make_admin_default="n"
+  local make_admin="n"
+
+  if [[ "$RESET_ENV" -eq 1 ]]; then
+    echo
+    echo "Resetting local .env values."
+  else
+    current_token="$(read_env_value TELEGRAM_BOT_TOKEN "$env_file" || true)"
+    current_admin_ids="$(read_env_value TELEGRAM_ADMIN_IDS "$env_file" || true)"
+  fi
+
+  echo "Local Telegram bot configuration"
+  echo "Use a personal development bot. Do not use the production token while"
+  echo "production long polling is running."
+  echo
+  prompt_telegram_bot_token telegram_bot_token "$current_token"
+
+  if [[ -n "$current_admin_ids" ]]; then
+    make_admin_default="y"
+  fi
+
+  echo
+  prompt_yes_no make_admin "Make yourself an admin of the development bot?" "$make_admin_default"
+  if [[ "$make_admin" == "y" ]]; then
+    echo "Get your Telegram user id:"
+    echo "1. Open @userinfobot or @RawDataBot in Telegram."
+    echo "2. Send /start."
+    echo "3. Copy the numeric Id value."
+    prompt_value telegram_admin_ids "TELEGRAM_ADMIN_IDS" "$current_admin_ids" 1 0
+    telegram_admin_ids="$(normalize_admin_ids "$telegram_admin_ids")"
+  else
+    telegram_admin_ids=""
+  fi
+
+  umask 077
+  ENV_TMP_FILE="$(mktemp "${env_file}.tmp.XXXXXX")"
+  {
+    echo "TELEGRAM_BOT_TOKEN=$telegram_bot_token"
+    echo "DATABASE_PATH=$DEFAULT_DATABASE_PATH"
+    echo "TELEGRAM_ADMIN_IDS=$telegram_admin_ids"
+    echo "FOODBOT_TIMEZONE=$DEFAULT_TIMEZONE"
+  } >"$ENV_TMP_FILE"
+
+  mv "$ENV_TMP_FILE" "$env_file"
+  ENV_TMP_FILE=""
+
+  echo ".env is configured for local development."
+}
+
+if [[ "$SKIP_TOOLS" -eq 0 ]]; then
+  configure_python_environment
+  configure_git_identity
+  check_github_ssh
+  configure_git_remotes
+fi
+
+configure_env
+
+if [[ "$ENV_ONLY" -eq 0 ]]; then
+  print_step "Done"
+  echo "Local environment is ready."
+  echo "Run the bot with:"
+  echo "  ./run office-food-bot"
+  echo "Run checks with:"
+  echo "  scripts/check"
+fi

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Protocol
 
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import BotCommand, BotCommandScopeChat
 
 from office_food_bot.commands.definitions import ADMIN_COMMANDS, PUBLIC_COMMANDS, CommandDefinition
@@ -20,10 +21,14 @@ async def setup_bot_commands(bot: BotCommandClient, admin_ids: Iterable[int]) ->
     await bot.set_my_commands(_bot_commands(PUBLIC_COMMANDS))
 
     for admin_id in sorted(admin_ids):
-        await bot.set_my_commands(
-            _bot_commands(ADMIN_COMMANDS),
-            scope=BotCommandScopeChat(chat_id=admin_id),
-        )
+        try:
+            await bot.set_my_commands(
+                _bot_commands(ADMIN_COMMANDS),
+                scope=BotCommandScopeChat(chat_id=admin_id),
+            )
+        except TelegramBadRequest as error:
+            if "chat not found" not in str(error):
+                raise
 
 
 def _bot_commands(definitions: Iterable[CommandDefinition]) -> list[BotCommand]:
