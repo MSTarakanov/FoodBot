@@ -31,6 +31,9 @@ jobs:
       - name: Ruff
         run: ruff check .
 
+      - name: Type style
+        run: python scripts/check_type_style.py src
+
       - name: Mypy
         run: mypy src
 

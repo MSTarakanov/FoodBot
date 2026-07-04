@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 from aiogram import Bot
 
@@ -18,7 +19,7 @@ async def main() -> None:
     database: Database | None = None
     try:
         await ensure_safe_telegram_token_for_environment(settings, bot)
-        database = Database(settings.database_path)
+        database = Database(Path(settings.database_path))
         database.init_schema()
         services = create_services(database, settings)
         dispatcher = create_dispatcher(services)
