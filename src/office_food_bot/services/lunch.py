@@ -13,6 +13,14 @@ LUNCH_POLL_OPTIONS = (
     "не решил еще",
     "ахахахахаххаахаха",
 )
+LUNCH_PLACE_POLL_QUESTION = "Где едим / заказываем?"
+LUNCH_PLACE_POLL_OPTIONS = (
+    "30 этаж",
+    "макдонелдс",
+    "домашняя еда",
+    "что-то другое",
+    "посмотреть результаты",
+)
 
 
 class LunchService:
