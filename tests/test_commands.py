@@ -11,7 +11,7 @@ import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.methods import SetMyCommands, TelegramMethod
+from aiogram.methods import SendPoll, SetMyCommands, TelegramMethod
 from aiogram.methods.send_message import SendMessage
 from aiogram.types import (
     BotCommand,
@@ -36,6 +36,7 @@ from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
 from office_food_bot.models import SplitwiseBalance, SplitwiseMember, UserStatus
 from office_food_bot.repositories import UserRepository
+from office_food_bot.services.lunch import LUNCH_POLL_OPTIONS, LUNCH_POLL_QUESTION
 from office_food_bot.services.splitwise import SplitwiseUnavailableError
 
 DEFAULT_ADMIN_IDS = frozenset({7})
@@ -52,6 +53,7 @@ class RecordingSession(BaseSession):
     def __init__(self) -> None:
         super().__init__()
         self.sent_messages: list[SendMessage] = []
+        self.sent_polls: list[SendPoll] = []
 
     async def close(self) -> None:
         return None
@@ -62,11 +64,14 @@ class RecordingSession(BaseSession):
         method: TelegramMethod[Message],
         timeout: int | None = None,
     ) -> Message:
-        if not isinstance(method, SendMessage):
-            raise AssertionError(f"Unexpected Telegram method: {type(method).__name__}")
+        if isinstance(method, SendMessage):
+            self.sent_messages.append(method)
+            return _send_message_response(method, len(self.sent_messages) + len(self.sent_polls))
+        if isinstance(method, SendPoll):
+            self.sent_polls.append(method)
+            return _send_poll_response(method, len(self.sent_messages) + len(self.sent_polls))
 
-        self.sent_messages.append(method)
-        return _send_message_response(method, len(self.sent_messages))
+        raise AssertionError(f"Unexpected Telegram method: {type(method).__name__}")
 
     async def stream_content(
         self,
@@ -81,6 +86,7 @@ class RecordingSession(BaseSession):
 
     def clear_messages(self) -> None:
         self.sent_messages.clear()
+        self.sent_polls.clear()
 
 
 class RecordingCommandMenuClient:
@@ -152,6 +158,18 @@ def _send_message_response(method: SendMessage, message_id: int) -> Message:
     )
 
 
+def _send_poll_response(method: SendPoll, message_id: int) -> Message:
+    chat_id = method.chat_id
+    if not isinstance(chat_id, int):
+        raise AssertionError(f"Expected numeric chat id, got {chat_id!r}")
+
+    return Message(
+        message_id=message_id,
+        date=datetime.now(tz=UTC),
+        chat=Chat(id=chat_id, type="private"),
+    )
+
+
 def make_update(
     text: str,
     user_id: int = 42,
@@ -219,6 +237,16 @@ def keyboard_texts(message: SendMessage) -> list[list[str]]:
     reply_markup = message.reply_markup
     assert isinstance(reply_markup, ReplyKeyboardMarkup)
     return [[button.text for button in row] for row in reply_markup.keyboard]
+
+
+def poll_option_texts(poll: SendPoll) -> list[str]:
+    texts: list[str] = []
+    for option in poll.options:
+        if isinstance(option, str):
+            texts.append(option)
+        else:
+            texts.append(option.text)
+    return texts
 
 
 def make_splitwise_member(
@@ -327,6 +355,7 @@ async def test_setup_bot_commands_registers_telegram_menu() -> None:
         "cancel",
         "meta",
         "balance",
+        "lunch",
     ]
 
     admin_menu = bot.chat_command_menus[0]
@@ -1028,3 +1057,52 @@ async def test_balance_returns_splitwise_balances_for_active_linked_users(
         "⚪ Максим: +277.97 RSD\n"
         "🟢 Тимофей: +18976.74 RSD"
     ]
+
+
+async def test_lunch_requires_registered_user(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/lunch"))
+
+    assert sent_texts(session) == ["Сначала зарегистрируйся: /register"]
+    assert session.sent_polls == []
+
+
+async def test_lunch_requires_active_user(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/lunch"))
+
+    assert sent_texts(session) == ["Регистрация еще ждет аппрува."]
+    assert session.sent_polls == []
+
+
+async def test_lunch_creates_non_anonymous_poll_for_active_user(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/lunch"))
+
+    assert sent_texts(session) == []
+    assert len(session.sent_polls) == 1
+    poll = session.sent_polls[0]
+    assert poll.question == LUNCH_POLL_QUESTION
+    assert poll_option_texts(poll) == list(LUNCH_POLL_OPTIONS)
+    assert poll.is_anonymous is False
+    assert poll.allows_multiple_answers is False
+    assert poll.allow_adding_options is True
