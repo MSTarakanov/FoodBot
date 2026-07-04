@@ -54,6 +54,18 @@ SET username = ?,
 WHERE telegram_user_id = ?
 """
 
+UPDATE_USER_REGISTRATION_BY_TELEGRAM_ID_SQL = """
+UPDATE users
+SET display_name = ?,
+    status = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = (
+    SELECT user_id
+    FROM telegram_accounts
+    WHERE telegram_user_id = ?
+)
+"""
+
 APPROVE_USER_BY_TELEGRAM_ID_SQL = """
 UPDATE users
 SET status = ?,

@@ -18,6 +18,7 @@ class UserRole(StrEnum):
 
 class RegistrationKind(StrEnum):
     CREATED = "created"
+    UPDATED_PENDING = "updated_pending"
     ALREADY_ACTIVE = "already_active"
     ALREADY_PENDING = "already_pending"
     BLOCKED = "blocked"

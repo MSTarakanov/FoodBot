@@ -13,6 +13,10 @@ Regular users see:
 - `/help` - shows available commands.
 - `/hi` - replies with a short greeting.
 - `/register <name>` - asks an admin to approve a Telegram user with a display name.
+  Running `/register` without a name starts a guided registration flow. A new
+  registration overwrites an existing pending request for the same Telegram user.
+  Already approved users see their current data and choose whether to send a
+  re-registration request back to the pending approval list.
 - `/meta <minutes>` - says when a registered user will arrive.
 - `/balance` - placeholder for the upcoming Splitwise balance view.
 
@@ -37,7 +41,7 @@ or `.env`.
 
 Use a personal development Telegram bot token in `.env`. This file is local-only and is ignored by
 git. Setup prints where to get the token in `@BotFather`, rejects placeholder-looking values, and
-can verify the token with Telegram before saving it. If `.env` already has a token, setup shows the
+verifies the token with Telegram before saving it. If `.env` already has a token, setup shows the
 bot username and `https://t.me/...` link before asking whether to keep it.
 
 ## Configuration
@@ -152,10 +156,18 @@ ed25519 key and print its public key for GitHub, continue without SSH, or stop s
 ## Adding a Command
 
 1. Add the handler in `src/office_food_bot/commands/`.
-2. Register the handler in `src/office_food_bot/commands/router.py`.
-3. Add the slash-command metadata in `src/office_food_bot/commands/definitions.py`.
-4. Add or update command tests in `tests/test_commands.py`.
-5. Run `scripts/check`.
+2. Send text, choice buttons, inline buttons, and polls through `BotMessenger`,
+   not directly through `message.answer`, `bot.send_message`, or `bot.send_poll`.
+3. Keep database access inside repositories and business rules inside services.
+4. Register the handler in `src/office_food_bot/commands/router.py`.
+5. Add the slash-command metadata in `src/office_food_bot/commands/definitions.py`.
+6. Use aiogram FSM states for multi-step flows. Ordinary text remains inside the
+   active state until it validates; slash commands clear the active flow and run
+   their own handler.
+7. For inline button callbacks, add `callback_query` handlers in the router.
+8. Add or update command tests in `tests/test_commands.py`; add messenger tests
+   in `tests/test_messaging.py` when introducing a new response primitive.
+9. Run `scripts/check`.
 
 ## Testing Approach
 

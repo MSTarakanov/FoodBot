@@ -30,19 +30,35 @@ class RegistrationService:
         self.admin_ids = admin_ids
 
     def register(self, profile: TelegramProfile, raw_display_name: str) -> RegistrationResult:
-        display_name = normalize_display_name(raw_display_name)
-        if not display_name:
-            display_name = profile.first_name
-        if len(display_name) > 64:
-            display_name = display_name[:64].rstrip()
-
+        display_name = _clean_display_name(profile, raw_display_name)
         existing_user = self._users.get_by_telegram_id(profile.telegram_user_id)
         if existing_user is not None:
+            if existing_user.status == UserStatus.PENDING:
+                user = self._users.update_registration(profile, display_name)
+                return RegistrationResult(RegistrationKind.UPDATED_PENDING, user)
+
             self._users.refresh_telegram_profile(profile)
-            return RegistrationResult(_registration_kind_for(existing_user), existing_user)
+            refreshed_user = self._users.get_by_telegram_id(profile.telegram_user_id)
+            if refreshed_user is None:
+                msg = "Refreshed user was not found"
+                raise RuntimeError(msg)
+            return RegistrationResult(_registration_kind_for(refreshed_user), refreshed_user)
 
         user = self._users.create_pending_user(profile, display_name)
         return RegistrationResult(RegistrationKind.CREATED, user)
+
+    def re_register(
+        self,
+        profile: TelegramProfile,
+        raw_display_name: str,
+    ) -> RegisteredUser:
+        return self._users.update_registration(
+            profile,
+            self.display_name_from_input(profile, raw_display_name),
+        )
+
+    def display_name_from_input(self, profile: TelegramProfile, raw_display_name: str) -> str:
+        return _clean_display_name(profile, raw_display_name)
 
     def approve(
         self,
@@ -72,3 +88,12 @@ def _registration_kind_for(user: RegisteredUser) -> RegistrationKind:
     if user.status == UserStatus.PENDING:
         return RegistrationKind.ALREADY_PENDING
     return RegistrationKind.BLOCKED
+
+
+def _clean_display_name(profile: TelegramProfile, raw_display_name: str) -> str:
+    display_name = normalize_display_name(raw_display_name)
+    if not display_name:
+        display_name = profile.first_name
+    if len(display_name) > 64:
+        display_name = display_name[:64].rstrip()
+    return display_name

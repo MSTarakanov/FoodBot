@@ -11,6 +11,7 @@ from office_food_bot.database.user_queries import (
     INSERT_USER_SQL,
     LIST_PENDING_USERS_SQL,
     UPDATE_TELEGRAM_PROFILE_SQL,
+    UPDATE_USER_REGISTRATION_BY_TELEGRAM_ID_SQL,
 )
 from office_food_bot.models import RegisteredUser, TelegramProfile, UserRole, UserStatus
 
@@ -81,6 +82,32 @@ class UserRepository:
                     profile.telegram_user_id,
                 ),
             )
+
+    def update_registration(
+        self,
+        profile: TelegramProfile,
+        display_name: str,
+    ) -> RegisteredUser:
+        with self._database.connection:
+            self._database.connection.execute(
+                UPDATE_USER_REGISTRATION_BY_TELEGRAM_ID_SQL,
+                (display_name, UserStatus.PENDING.value, profile.telegram_user_id),
+            )
+            self._database.connection.execute(
+                UPDATE_TELEGRAM_PROFILE_SQL,
+                (
+                    profile.username,
+                    profile.first_name,
+                    profile.last_name,
+                    profile.telegram_user_id,
+                ),
+            )
+
+        user = self.get_by_telegram_id(profile.telegram_user_id)
+        if user is None:
+            msg = "Updated user was not found"
+            raise RuntimeError(msg)
+        return user
 
     def approve_by_telegram_id(self, telegram_user_id: int) -> RegisteredUser | None:
         if self.get_by_telegram_id(telegram_user_id) is None:
