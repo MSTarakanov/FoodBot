@@ -180,6 +180,41 @@ def test_save_pending_registration_with_skip_removes_existing_splitwise_member(
     assert pending_registrations[0].splitwise is None
 
 
+def test_list_active_splitwise_users_returns_only_active_linked_users(
+    users: UserRepository,
+) -> None:
+    users.save_pending_registration(
+        make_profile(telegram_user_id=42, username="misha"),
+        "Максим",
+        SplitwiseMember(
+            splitwise_user_id=1001,
+            first_name="Max",
+            last_name=None,
+            email="max@example.com",
+        ),
+    )
+    users.approve_by_telegram_id(42)
+    users.save_pending_registration(
+        make_profile(telegram_user_id=43, username="pending"),
+        "Пендинг",
+        SplitwiseMember(
+            splitwise_user_id=1002,
+            first_name="Pending",
+            last_name=None,
+            email="pending@example.com",
+        ),
+    )
+    users.create_pending_user(make_profile(telegram_user_id=44, username="unlinked"), "Без Связи")
+    users.approve_by_telegram_id(44)
+
+    active_splitwise_users = users.list_active_splitwise_users()
+
+    assert len(active_splitwise_users) == 1
+    assert active_splitwise_users[0].display_name == "Максим"
+    assert active_splitwise_users[0].splitwise_user_id == 1001
+    assert active_splitwise_users[0].email == "max@example.com"
+
+
 def test_database_init_creates_clean_splitwise_users_schema(tmp_path) -> None:
     database = Database(tmp_path / "test.sqlite3")
     database.init_schema()

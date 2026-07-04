@@ -30,9 +30,10 @@ def build_services(
     if client is None and splitwise_api_key is not None:
         client = HttpSplitwiseClient(splitwise_api_key)
 
+    splitwise = SplitwiseService(client, splitwise_group_id)
     return BotServices(
         registration=RegistrationService(users, admin_ids),
         presence=PresenceService(users, timezone_name, clock),
-        balances=BalanceService(users),
-        splitwise=SplitwiseService(client, splitwise_group_id),
+        balances=BalanceService(users, splitwise),
+        splitwise=splitwise,
     )

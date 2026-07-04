@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Protocol
 
 import httpx
 
-from office_food_bot.models import SplitwiseMember
+from office_food_bot.models import SplitwiseBalance, SplitwiseMember
 
 SPLITWISE_API_BASE_URL = "https://secure.splitwise.com/api/v3.0"
 SPLITWISE_USER_AGENT = "OfficeFoodBot/0.1"
@@ -18,10 +19,21 @@ class SplitwiseLookupKind(StrEnum):
     UNAVAILABLE = "unavailable"
 
 
+class SplitwiseGroupKind(StrEnum):
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+
+
 @dataclass(frozen=True)
 class SplitwiseLookupResult:
     kind: SplitwiseLookupKind
     member: SplitwiseMember | None = None
+
+
+@dataclass(frozen=True)
+class SplitwiseGroupResult:
+    kind: SplitwiseGroupKind
+    members: tuple[SplitwiseMember, ...] = ()
 
 
 class SplitwiseUnavailableError(RuntimeError):
@@ -79,19 +91,29 @@ class SplitwiseService:
 
     async def find_member_by_email(self, raw_email: str) -> SplitwiseLookupResult:
         email = normalize_email(raw_email)
-        if not email or self._client is None or self._group_id is None:
+        if not email:
             return SplitwiseLookupResult(SplitwiseLookupKind.UNAVAILABLE)
 
-        try:
-            members = await self._client.group_members(self._group_id)
-        except SplitwiseUnavailableError:
+        result = await self.group_members()
+        if result.kind == SplitwiseGroupKind.UNAVAILABLE:
             return SplitwiseLookupResult(SplitwiseLookupKind.UNAVAILABLE)
 
-        for member in members:
+        for member in result.members:
             if normalize_email(member.email) == email:
                 return SplitwiseLookupResult(SplitwiseLookupKind.FOUND, member)
 
         return SplitwiseLookupResult(SplitwiseLookupKind.NOT_FOUND)
+
+    async def group_members(self) -> SplitwiseGroupResult:
+        if self._client is None or self._group_id is None:
+            return SplitwiseGroupResult(SplitwiseGroupKind.UNAVAILABLE)
+
+        try:
+            members = await self._client.group_members(self._group_id)
+        except SplitwiseUnavailableError:
+            return SplitwiseGroupResult(SplitwiseGroupKind.UNAVAILABLE)
+
+        return SplitwiseGroupResult(SplitwiseGroupKind.AVAILABLE, members)
 
 
 def normalize_email(raw_email: str) -> str:
@@ -126,6 +148,33 @@ def _member_from_payload(payload: object) -> SplitwiseMember:
         first_name=str(payload.get("first_name") or ""),
         last_name=_optional_str(payload.get("last_name")),
         email=str(payload["email"]),
+        balance=_balances_from_payload(payload.get("balance", [])),
+    )
+
+
+def _balances_from_payload(payload: object) -> tuple[SplitwiseBalance, ...]:
+    if payload is None:
+        return ()
+    if not isinstance(payload, list):
+        msg = "Splitwise member balance must be a list"
+        raise ValueError(msg)
+    return tuple(_balance_from_payload(balance) for balance in payload)
+
+
+def _balance_from_payload(payload: object) -> SplitwiseBalance:
+    if not isinstance(payload, dict):
+        msg = "Splitwise balance must be an object"
+        raise ValueError(msg)
+
+    try:
+        amount = Decimal(str(payload["amount"]))
+    except InvalidOperation as error:
+        msg = "Splitwise balance amount must be decimal"
+        raise ValueError(msg) from error
+
+    return SplitwiseBalance(
+        currency_code=str(payload["currency_code"]),
+        amount=amount,
     )
 
 

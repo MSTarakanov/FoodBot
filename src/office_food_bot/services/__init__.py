@@ -9,6 +9,8 @@ from office_food_bot.services.registration import (
 )
 from office_food_bot.services.splitwise import (
     SplitwiseGroupClient,
+    SplitwiseGroupKind,
+    SplitwiseGroupResult,
     SplitwiseLookupKind,
     SplitwiseLookupResult,
     SplitwiseService,
@@ -23,6 +25,8 @@ __all__ = [
     "RegistrationResult",
     "RegistrationService",
     "SplitwiseGroupClient",
+    "SplitwiseGroupKind",
+    "SplitwiseGroupResult",
     "SplitwiseLookupKind",
     "SplitwiseLookupResult",
     "SplitwiseService",
