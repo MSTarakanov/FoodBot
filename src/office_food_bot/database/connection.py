@@ -14,7 +14,7 @@ EXPECTED_SPLITWISE_USERS_COLUMNS = {
 
 
 class Database:
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: Path) -> None:
         self.path = str(path)
         if self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)

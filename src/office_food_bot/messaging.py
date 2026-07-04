@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
@@ -10,10 +9,12 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InputPollOption,
+    InputPollOptionUnion,
     KeyboardButton,
     Message,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
+    ReplyMarkupUnion,
 )
 
 
@@ -24,11 +25,24 @@ class InlineChoice:
 
 
 class BotMessenger:
-    async def reply(self, message: Message, text: str, **kwargs: Any) -> Message:
-        return await message.answer(text, **kwargs)
+    async def reply(
+        self,
+        message: Message,
+        text: str,
+        *,
+        reply_markup: ReplyMarkupUnion | None = None,
+    ) -> Message:
+        return await message.answer(text, reply_markup=reply_markup)
 
-    async def send(self, bot: Bot, chat_id: int, text: str, **kwargs: Any) -> Message:
-        return await bot.send_message(chat_id, text, **kwargs)
+    async def send(
+        self,
+        bot: Bot,
+        chat_id: int,
+        text: str,
+        *,
+        reply_markup: ReplyMarkupUnion | None = None,
+    ) -> Message:
+        return await bot.send_message(chat_id, text, reply_markup=reply_markup)
 
     async def reply_with_choices(
         self,
@@ -38,7 +52,6 @@ class BotMessenger:
         *,
         columns: int = 2,
         one_time_keyboard: bool = True,
-        **kwargs: Any,
     ) -> Message:
         return await self.reply(
             message,
@@ -48,7 +61,6 @@ class BotMessenger:
                 columns=columns,
                 one_time_keyboard=one_time_keyboard,
             ),
-            **kwargs,
         )
 
     async def send_with_choices(
@@ -60,7 +72,6 @@ class BotMessenger:
         *,
         columns: int = 2,
         one_time_keyboard: bool = True,
-        **kwargs: Any,
     ) -> Message:
         return await self.send(
             bot,
@@ -71,7 +82,6 @@ class BotMessenger:
                 columns=columns,
                 one_time_keyboard=one_time_keyboard,
             ),
-            **kwargs,
         )
 
     async def reply_with_inline_choices(
@@ -81,13 +91,11 @@ class BotMessenger:
         choices: Sequence[InlineChoice],
         *,
         columns: int = 2,
-        **kwargs: Any,
     ) -> Message:
         return await self.reply(
             message,
             text,
             reply_markup=self.inline_keyboard(choices, columns=columns),
-            **kwargs,
         )
 
     async def send_with_inline_choices(
@@ -98,14 +106,12 @@ class BotMessenger:
         choices: Sequence[InlineChoice],
         *,
         columns: int = 2,
-        **kwargs: Any,
     ) -> Message:
         return await self.send(
             bot,
             chat_id,
             text,
             reply_markup=self.inline_keyboard(choices, columns=columns),
-            **kwargs,
         )
 
     async def reply_poll(
@@ -113,9 +119,18 @@ class BotMessenger:
         message: Message,
         question: str,
         options: Sequence[str],
-        **kwargs: Any,
+        *,
+        is_anonymous: bool = True,
+        allows_multiple_answers: bool = False,
+        allow_adding_options: bool = False,
     ) -> Message:
-        return await message.answer_poll(question, _poll_options(options), **kwargs)
+        return await message.answer_poll(
+            question,
+            _poll_options(options),
+            is_anonymous=is_anonymous,
+            allows_multiple_answers=allows_multiple_answers,
+            allow_adding_options=allow_adding_options,
+        )
 
     async def send_poll(
         self,
@@ -123,13 +138,30 @@ class BotMessenger:
         chat_id: int,
         question: str,
         options: Sequence[str],
-        **kwargs: Any,
+        *,
+        is_anonymous: bool = True,
+        allows_multiple_answers: bool = False,
+        allow_adding_options: bool = False,
     ) -> Message:
-        return await bot.send_poll(chat_id, question, _poll_options(options), **kwargs)
+        return await bot.send_poll(
+            chat_id,
+            question,
+            _poll_options(options),
+            is_anonymous=is_anonymous,
+            allows_multiple_answers=allows_multiple_answers,
+            allow_adding_options=allow_adding_options,
+        )
 
-    async def try_send(self, bot: Bot, chat_id: int, text: str, **kwargs: Any) -> bool:
+    async def try_send(
+        self,
+        bot: Bot,
+        chat_id: int,
+        text: str,
+        *,
+        reply_markup: ReplyMarkupUnion | None = None,
+    ) -> bool:
         try:
-            await self.send(bot, chat_id, text, **kwargs)
+            await self.send(bot, chat_id, text, reply_markup=reply_markup)
         except TelegramAPIError:
             return False
         return True
@@ -140,10 +172,21 @@ class BotMessenger:
         chat_id: int,
         question: str,
         options: Sequence[str],
-        **kwargs: Any,
+        *,
+        is_anonymous: bool = True,
+        allows_multiple_answers: bool = False,
+        allow_adding_options: bool = False,
     ) -> bool:
         try:
-            await self.send_poll(bot, chat_id, question, options, **kwargs)
+            await self.send_poll(
+                bot,
+                chat_id,
+                question,
+                options,
+                is_anonymous=is_anonymous,
+                allows_multiple_answers=allows_multiple_answers,
+                allow_adding_options=allow_adding_options,
+            )
         except TelegramAPIError:
             return False
         return True
@@ -192,7 +235,7 @@ class BotMessenger:
         return ReplyKeyboardRemove(remove_keyboard=True)
 
 
-def _poll_options(options: Sequence[str]) -> list[InputPollOption | str]:
+def _poll_options(options: Sequence[str]) -> list[InputPollOptionUnion]:
     return [
         InputPollOption(text=option)
         for option in _text_options(options, minimum=2, maximum=10)

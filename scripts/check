@@ -4,5 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 "$SCRIPT_DIR/uv" run --extra dev ruff check .
+"$SCRIPT_DIR/uv" run --extra dev python "$SCRIPT_DIR/check_type_style.py" src
 "$SCRIPT_DIR/uv" run --extra dev mypy src
 "$SCRIPT_DIR/uv" run --extra dev pytest
