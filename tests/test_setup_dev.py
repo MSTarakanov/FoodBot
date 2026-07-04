@@ -31,18 +31,20 @@ def read_env(tmp_path: Path) -> dict[str, str]:
 
 
 def test_setup_dev_creates_env_with_admin_id(tmp_path: Path) -> None:
-    result = run_env_setup(tmp_path, "123456:test-token\ny\n42\n")
+    result = run_env_setup(tmp_path, "123456:test-token\ny\n42\ndev-splitwise-key\n")
 
     assert read_env(tmp_path) == {
         "TELEGRAM_BOT_TOKEN": "123456:test-token",
         "DATABASE_PATH": "foodbot.local.sqlite3",
         "TELEGRAM_ADMIN_IDS": "42",
         "FOODBOT_TIMEZONE": "Europe/Belgrade",
-        "SPLITWISE_API_KEY": "",
+        "SPLITWISE_API_KEY": "dev-splitwise-key",
         "SPLITWISE_GROUP_ID": "",
     }
     assert "123456:test-token" not in result.stdout
     assert "123456:test-token" not in result.stderr
+    assert "dev-splitwise-key" not in result.stdout
+    assert "dev-splitwise-key" not in result.stderr
 
 
 def test_setup_dev_keeps_existing_values_on_empty_answers(tmp_path: Path) -> None:
@@ -60,7 +62,7 @@ def test_setup_dev_keeps_existing_values_on_empty_answers(tmp_path: Path) -> Non
         encoding="utf-8",
     )
 
-    result = run_env_setup(tmp_path, "\n\n\n")
+    result = run_env_setup(tmp_path, "\n\n\n\n")
 
     assert read_env(tmp_path) == {
         "TELEGRAM_BOT_TOKEN": "existing-token",
@@ -90,7 +92,7 @@ def test_setup_dev_reads_existing_env_with_export_spaces_and_quotes(tmp_path: Pa
         encoding="utf-8",
     )
 
-    result = run_env_setup(tmp_path, "\n\n\n")
+    result = run_env_setup(tmp_path, "\n\n\n\n")
 
     assert read_env(tmp_path) == {
         "TELEGRAM_BOT_TOKEN": "existing-token",
@@ -120,20 +122,22 @@ def test_setup_dev_replaces_token_and_clears_admin_ids(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    result = run_env_setup(tmp_path, "new-token\nn\n")
+    result = run_env_setup(tmp_path, "new-token\nn\nnew-splitwise-key\n")
 
     assert read_env(tmp_path) == {
         "TELEGRAM_BOT_TOKEN": "new-token",
         "DATABASE_PATH": "foodbot.local.sqlite3",
         "TELEGRAM_ADMIN_IDS": "",
         "FOODBOT_TIMEZONE": "Europe/Belgrade",
-        "SPLITWISE_API_KEY": "old-splitwise-key",
+        "SPLITWISE_API_KEY": "new-splitwise-key",
         "SPLITWISE_GROUP_ID": "1001",
     }
     assert "old-token" not in result.stdout
     assert "old-token" not in result.stderr
     assert "new-token" not in result.stdout
     assert "new-token" not in result.stderr
+    assert "new-splitwise-key" not in result.stdout
+    assert "new-splitwise-key" not in result.stderr
 
 
 def test_setup_dev_keeps_existing_env_when_interrupted_before_replace(tmp_path: Path) -> None:
@@ -164,7 +168,7 @@ def test_setup_dev_keeps_existing_env_when_interrupted_before_replace(tmp_path: 
     result = subprocess.run(
         ["bash", str(SETUP_DEV), "--env-only", "--skip-token-check"],
         cwd=tmp_path,
-        input="new-token\nn\n",
+        input="new-token\nn\nnew-splitwise-key\n",
         text=True,
         capture_output=True,
         check=False,
@@ -176,6 +180,8 @@ def test_setup_dev_keeps_existing_env_when_interrupted_before_replace(tmp_path: 
     assert not list(tmp_path.glob(".env.tmp.*"))
     assert "new-token" not in result.stdout
     assert "new-token" not in result.stderr
+    assert "new-splitwise-key" not in result.stdout
+    assert "new-splitwise-key" not in result.stderr
 
 
 def test_setup_dev_reset_env_ignores_existing_values(tmp_path: Path) -> None:
@@ -193,20 +199,37 @@ def test_setup_dev_reset_env_ignores_existing_values(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    result = run_env_setup(tmp_path, "fresh-token\nn\n", "--reset-env")
+    result = run_env_setup(tmp_path, "fresh-token\nn\nfresh-splitwise-key\n", "--reset-env")
 
     assert read_env(tmp_path) == {
         "TELEGRAM_BOT_TOKEN": "fresh-token",
         "DATABASE_PATH": "foodbot.local.sqlite3",
         "TELEGRAM_ADMIN_IDS": "",
         "FOODBOT_TIMEZONE": "Europe/Belgrade",
-        "SPLITWISE_API_KEY": "",
+        "SPLITWISE_API_KEY": "fresh-splitwise-key",
         "SPLITWISE_GROUP_ID": "",
     }
     assert "old-token" not in result.stdout
     assert "old-token" not in result.stderr
     assert "fresh-token" not in result.stdout
     assert "fresh-token" not in result.stderr
+    assert "fresh-splitwise-key" not in result.stdout
+    assert "fresh-splitwise-key" not in result.stderr
+
+
+def test_setup_dev_requires_splitwise_api_key(tmp_path: Path) -> None:
+    result = subprocess.run(
+        ["bash", str(SETUP_DEV), "--env-only", "--skip-token-check"],
+        cwd=tmp_path,
+        input="123456:test-token\nn\n\n",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "SPLITWISE_API_KEY is required." in result.stderr
+    assert not (tmp_path / ".env").exists()
 
 
 def test_setup_dev_rejects_invalid_token_without_skip(tmp_path: Path) -> None:

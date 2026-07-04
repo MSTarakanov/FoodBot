@@ -115,8 +115,9 @@ git remote add upstream git@github.com:MSTarakanov/FoodBot.git
 Create a personal development bot via `@BotFather`; setup asks for its token and writes it to
 `.env`. If you want admin commands in your dev bot, setup also prints how to get your Telegram user
 id from `@userinfobot` or `@RawDataBot` and writes it to `TELEGRAM_ADMIN_IDS`.
-`SPLITWISE_API_KEY` is optional for local development. Without it, registration still works through
-the `Пропустить` path, but Splitwise email checks are unavailable.
+`SPLITWISE_API_KEY` is required for local development. Each developer should create their own
+Splitwise API key for their local clone. Do not share another developer's key: the key acts on
+behalf of the Splitwise account that created it.
 
 Run the bot locally:
 

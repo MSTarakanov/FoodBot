@@ -43,7 +43,7 @@ print_agent_guide() {
     "Agent-assisted setup guide" \
     "" \
     "Do not ask the user to paste secrets into chat." \
-    "TELEGRAM_BOT_TOKEN, SSH key passphrases, and GitHub credentials should be typed by" \
+    "TELEGRAM_BOT_TOKEN, SPLITWISE_API_KEY, SSH key passphrases, and GitHub credentials should be typed by" \
     "the user into a local terminal prompt." \
     "" \
     "Recommended flow:" \
@@ -511,6 +511,13 @@ print_botfather_instructions() {
   echo "3. Copy the token and paste it here."
 }
 
+print_splitwise_api_key_instructions() {
+  echo "Get a Splitwise API key for local development:"
+  echo "1. Open https://secure.splitwise.com/apps."
+  echo "2. Create an app for this local clone."
+  echo "3. Copy the API key. Do not share another developer's key."
+}
+
 normalize_admin_ids() {
   local raw_ids="$1"
   raw_ids="${raw_ids//[[:space:]]/}"
@@ -651,7 +658,7 @@ prompt_telegram_bot_token() {
 }
 
 configure_env() {
-  print_step "Telegram bot configuration"
+  print_step "Telegram and Splitwise configuration"
 
   local env_file=".env"
   local current_token=""
@@ -701,7 +708,11 @@ configure_env() {
     telegram_admin_ids=""
   fi
 
-  splitwise_api_key="$current_splitwise_api_key"
+  echo
+  if [[ -z "$current_splitwise_api_key" ]]; then
+    print_splitwise_api_key_instructions
+  fi
+  prompt_value splitwise_api_key "SPLITWISE_API_KEY" "$current_splitwise_api_key" 1 1
   splitwise_group_id="$current_splitwise_group_id"
 
   umask 077
