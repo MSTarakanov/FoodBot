@@ -1117,5 +1117,5 @@ async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path)
     assert place_poll.question == LUNCH_PLACE_POLL_QUESTION
     assert poll_option_texts(place_poll) == list(LUNCH_PLACE_POLL_OPTIONS)
     assert place_poll.is_anonymous is False
-    assert place_poll.allows_multiple_answers is False
+    assert place_poll.allows_multiple_answers is True
     assert place_poll.allow_adding_options is True

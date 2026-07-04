@@ -44,6 +44,6 @@ async def lunch_command(
         LUNCH_PLACE_POLL_QUESTION,
         LUNCH_PLACE_POLL_OPTIONS,
         is_anonymous=False,
-        allows_multiple_answers=False,
+        allows_multiple_answers=True,
         allow_adding_options=True,
     )
