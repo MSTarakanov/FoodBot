@@ -7,11 +7,13 @@ from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
 from office_food_bot.services.lunch import (
+    LUNCH_PLACE_OTHER_OPTION_INDEX,
     LUNCH_PLACE_POLL_OPTIONS,
     LUNCH_PLACE_POLL_QUESTION,
     LUNCH_POLL_OPTIONS,
     LUNCH_POLL_QUESTION,
 )
+from office_food_bot.services.poll_tracking import PollAction
 
 
 async def lunch_command(
@@ -39,7 +41,7 @@ async def lunch_command(
         allows_multiple_answers=False,
         allow_adding_options=True,
     )
-    await messenger.reply_poll(
+    place_poll_message = await messenger.reply_poll(
         message,
         LUNCH_PLACE_POLL_QUESTION,
         LUNCH_PLACE_POLL_OPTIONS,
@@ -47,3 +49,9 @@ async def lunch_command(
         allows_multiple_answers=True,
         allow_adding_options=True,
     )
+    if place_poll_message.poll is not None:
+        services.poll_tracking.track_poll(
+            place_poll_message.poll.id,
+            message.chat.id,
+            {LUNCH_PLACE_OTHER_OPTION_INDEX: PollAction.LUNCH_OTHER_FOOD_POLL},
+        )
