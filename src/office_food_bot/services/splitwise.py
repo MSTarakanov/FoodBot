@@ -9,6 +9,7 @@ import httpx
 from office_food_bot.models import SplitwiseMember
 
 SPLITWISE_API_BASE_URL = "https://secure.splitwise.com/api/v3.0"
+SPLITWISE_USER_AGENT = "OfficeFoodBot/0.1"
 
 
 class SplitwiseLookupKind(StrEnum):
@@ -53,7 +54,10 @@ class HttpSplitwiseClient:
             ) as client:
                 response = await client.get(
                     f"{self._base_url}/get_group/{group_id}",
-                    headers={"Authorization": f"Bearer {self._api_key}"},
+                    headers={
+                        "Authorization": f"Bearer {self._api_key}",
+                        "User-Agent": SPLITWISE_USER_AGENT,
+                    },
                 )
             if response.status_code in {401, 403, 404}:
                 raise SplitwiseUnavailableError("Splitwise group is unavailable")

@@ -80,6 +80,50 @@ async def test_splitwise_service_returns_unavailable_without_config() -> None:
     assert result.member is None
 
 
+async def test_http_splitwise_client_sends_auth_and_user_agent_headers() -> None:
+    captured_requests: list[httpx.Request] = []
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        captured_requests.append(request)
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "group": {
+                    "members": [
+                        {
+                            "id": 1001,
+                            "first_name": "Max",
+                            "last_name": None,
+                            "email": "max@example.com",
+                        }
+                    ]
+                }
+            },
+        )
+
+    client = HttpSplitwiseClient(
+        "test-key",
+        base_url="https://splitwise.test",
+        transport=httpx.MockTransport(handle_request),
+    )
+
+    members = await client.group_members(55)
+
+    assert len(captured_requests) == 1
+    assert captured_requests[0].headers["authorization"] == "Bearer test-key"
+    assert captured_requests[0].headers["user-agent"] == "OfficeFoodBot/0.1"
+    assert captured_requests[0].url == "https://splitwise.test/get_group/55"
+    assert members == (
+        SplitwiseMember(
+            splitwise_user_id=1001,
+            first_name="Max",
+            last_name=None,
+            email="max@example.com",
+        ),
+    )
+
+
 @pytest.mark.parametrize("status_code", [401, 403, 404])
 async def test_splitwise_service_returns_unavailable_for_http_auth_or_group_errors(
     status_code: int,
