@@ -8,6 +8,7 @@ from office_food_bot.repositories import UserRepository
 from office_food_bot.services.balances import BalanceService
 from office_food_bot.services.container import BotServices
 from office_food_bot.services.lunch import LunchService
+from office_food_bot.services.poll_tracking import PollTrackingService
 from office_food_bot.services.presence import PresenceService
 from office_food_bot.services.registration import RegistrationService
 from office_food_bot.services.splitwise import (
@@ -37,5 +38,6 @@ def build_services(
         presence=PresenceService(users, timezone_name, clock),
         balances=BalanceService(users, splitwise),
         lunch=LunchService(users),
+        poll_tracking=PollTrackingService(),
         splitwise=splitwise,
     )

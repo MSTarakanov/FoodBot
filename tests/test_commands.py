@@ -18,6 +18,9 @@ from aiogram.types import (
     BotCommandScopeChat,
     Chat,
     Message,
+    Poll,
+    PollAnswer,
+    PollOption,
     ReplyKeyboardMarkup,
     Update,
     User,
@@ -37,6 +40,9 @@ from office_food_bot.database import Database
 from office_food_bot.models import SplitwiseBalance, SplitwiseMember, UserStatus
 from office_food_bot.repositories import UserRepository
 from office_food_bot.services.lunch import (
+    LUNCH_OTHER_FOOD_POLL_OPTIONS,
+    LUNCH_OTHER_FOOD_POLL_QUESTION,
+    LUNCH_PLACE_OTHER_OPTION_INDEX,
     LUNCH_PLACE_POLL_OPTIONS,
     LUNCH_PLACE_POLL_QUESTION,
     LUNCH_POLL_OPTIONS,
@@ -59,6 +65,7 @@ class RecordingSession(BaseSession):
         super().__init__()
         self.sent_messages: list[SendMessage] = []
         self.sent_polls: list[SendPoll] = []
+        self.sent_poll_ids: list[str] = []
 
     async def close(self) -> None:
         return None
@@ -74,7 +81,11 @@ class RecordingSession(BaseSession):
             return _send_message_response(method, len(self.sent_messages) + len(self.sent_polls))
         if isinstance(method, SendPoll):
             self.sent_polls.append(method)
-            return _send_poll_response(method, len(self.sent_messages) + len(self.sent_polls))
+            message = _send_poll_response(method, len(self.sent_messages) + len(self.sent_polls))
+            if message.poll is None:
+                raise AssertionError("Expected fake sendPoll response to include poll")
+            self.sent_poll_ids.append(message.poll.id)
+            return message
 
         raise AssertionError(f"Unexpected Telegram method: {type(method).__name__}")
 
@@ -92,6 +103,7 @@ class RecordingSession(BaseSession):
     def clear_messages(self) -> None:
         self.sent_messages.clear()
         self.sent_polls.clear()
+        self.sent_poll_ids.clear()
 
 
 class RecordingCommandMenuClient:
@@ -172,6 +184,25 @@ def _send_poll_response(method: SendPoll, message_id: int) -> Message:
         message_id=message_id,
         date=datetime.now(tz=UTC),
         chat=Chat(id=chat_id, type="private"),
+        poll=Poll(
+            id=f"poll-{message_id}",
+            question=method.question,
+            options=[
+                PollOption(
+                    persistent_id=f"option-{message_id}-{option_index}",
+                    text=option_text,
+                    voter_count=0,
+                )
+                for option_index, option_text in enumerate(poll_option_texts(method))
+            ],
+            total_voter_count=0,
+            is_closed=False,
+            is_anonymous=bool(method.is_anonymous),
+            type="regular",
+            allows_multiple_answers=bool(method.allows_multiple_answers),
+            allows_revoting=False,
+            members_only=False,
+        ),
     )
 
 
@@ -198,6 +229,33 @@ def make_update(
         text=text,
     )
     return Update(update_id=1, message=message)
+
+
+def make_poll_answer_update(
+    poll_id: str,
+    option_ids: tuple[int, ...],
+    user_id: int = 42,
+    first_name: str = "Misha",
+    username: str | None = "misha",
+) -> Update:
+    user = User(
+        id=user_id,
+        is_bot=False,
+        first_name=first_name,
+        username=username,
+    )
+    return Update(
+        update_id=2,
+        poll_answer=PollAnswer(
+            poll_id=poll_id,
+            option_ids=list(option_ids),
+            option_persistent_ids=[
+                f"{poll_id}-option-{option_id}"
+                for option_id in option_ids
+            ],
+            user=user,
+        ),
+    )
 
 
 def make_database(tmp_path: Path) -> Database:
@@ -1119,3 +1177,69 @@ async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path)
     assert place_poll.is_anonymous is False
     assert place_poll.allows_multiple_answers is True
     assert place_poll.allow_adding_options is True
+
+
+async def test_lunch_other_place_answer_creates_other_food_poll_once(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/lunch"))
+    place_poll_id = session.sent_poll_ids[1]
+    session.clear_messages()
+
+    await dispatcher.feed_update(
+        bot,
+        make_poll_answer_update(
+            place_poll_id,
+            (0, LUNCH_PLACE_OTHER_OPTION_INDEX),
+        ),
+    )
+    await dispatcher.feed_update(
+        bot,
+        make_poll_answer_update(
+            place_poll_id,
+            (LUNCH_PLACE_OTHER_OPTION_INDEX,),
+            user_id=43,
+            first_name="Anton",
+            username="anton",
+        ),
+    )
+
+    assert sent_texts(session) == []
+    assert len(session.sent_polls) == 1
+    other_food_poll = session.sent_polls[0]
+    assert other_food_poll.question == LUNCH_OTHER_FOOD_POLL_QUESTION
+    assert poll_option_texts(other_food_poll) == list(LUNCH_OTHER_FOOD_POLL_OPTIONS)
+    assert other_food_poll.is_anonymous is False
+    assert other_food_poll.allows_multiple_answers is True
+    assert other_food_poll.allow_adding_options is True
+
+
+async def test_lunch_place_answer_without_other_choice_does_not_create_poll(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/lunch"))
+    place_poll_id = session.sent_poll_ids[1]
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_poll_answer_update(place_poll_id, (0, 1)))
+
+    assert sent_texts(session) == []
+    assert session.sent_polls == []

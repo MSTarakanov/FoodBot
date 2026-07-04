@@ -9,6 +9,7 @@ from office_food_bot.commands.help import help_command
 from office_food_bot.commands.hi import hi_command
 from office_food_bot.commands.lunch import lunch_command
 from office_food_bot.commands.meta import meta_command
+from office_food_bot.commands.poll_tracking import poll_answer_handler
 from office_food_bot.commands.register import (
     RegistrationFlow,
     cancel_registration_command,
@@ -36,6 +37,7 @@ def create_command_router() -> Router:
     router.message.register(meta_command, Command("meta"))
     router.message.register(balance_command, Command("balance"))
     router.message.register(lunch_command, Command("lunch"))
+    router.poll_answer.register(poll_answer_handler)
     router.message.register(register_name_message, RegistrationFlow.waiting_for_name, F.text)
     router.message.register(
         register_splitwise_email_message,
