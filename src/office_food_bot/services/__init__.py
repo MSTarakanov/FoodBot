@@ -7,6 +7,13 @@ from office_food_bot.services.registration import (
     RegistrationResult,
     RegistrationService,
 )
+from office_food_bot.services.splitwise import (
+    SplitwiseGroupClient,
+    SplitwiseLookupKind,
+    SplitwiseLookupResult,
+    SplitwiseService,
+    SplitwiseUnavailableError,
+)
 
 __all__ = [
     "ApprovalResult",
@@ -15,5 +22,10 @@ __all__ = [
     "PresenceService",
     "RegistrationResult",
     "RegistrationService",
+    "SplitwiseGroupClient",
+    "SplitwiseLookupKind",
+    "SplitwiseLookupResult",
+    "SplitwiseService",
+    "SplitwiseUnavailableError",
     "build_services",
 ]

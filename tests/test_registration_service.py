@@ -3,6 +3,7 @@ from __future__ import annotations
 from office_food_bot.models import (
     ApprovalKind,
     RegistrationKind,
+    SplitwiseMember,
     TelegramProfile,
     UserStatus,
 )
@@ -33,10 +34,22 @@ def make_service(
     return RegistrationService(users, admin_ids)
 
 
+def make_splitwise_member(
+    splitwise_user_id: int = 1001,
+    email: str = "max@example.com",
+) -> SplitwiseMember:
+    return SplitwiseMember(
+        splitwise_user_id=splitwise_user_id,
+        first_name="Max",
+        last_name=None,
+        email=email,
+    )
+
+
 def test_register_new_user_returns_created_pending_user(users: UserRepository) -> None:
     service = make_service(users)
 
-    result = service.register(make_profile(), "  Максим   Т.  ")
+    result = service.register(make_profile(), "  Максим   Т.  ", None)
 
     assert result.kind == RegistrationKind.CREATED
     assert result.user.display_name == "Максим Т."
@@ -48,16 +61,31 @@ def test_register_blank_name_falls_back_to_telegram_first_name(
 ) -> None:
     service = make_service(users)
 
-    result = service.register(make_profile(first_name="Mikhail"), "   ")
+    result = service.register(make_profile(first_name="Mikhail"), "   ", None)
 
     assert result.kind == RegistrationKind.CREATED
     assert result.user.display_name == "Mikhail"
 
 
+def test_register_blank_name_falls_back_to_telegram_full_name(
+    users: UserRepository,
+) -> None:
+    service = make_service(users)
+
+    result = service.register(
+        make_profile(first_name="Mikhail", last_name="Tarakanov"),
+        "   ",
+        None,
+    )
+
+    assert result.kind == RegistrationKind.CREATED
+    assert result.user.display_name == "Mikhail Tarakanov"
+
+
 def test_register_truncates_long_display_name(users: UserRepository) -> None:
     service = make_service(users)
 
-    result = service.register(make_profile(), "М" * 80)
+    result = service.register(make_profile(), "М" * 80, None)
 
     assert result.kind == RegistrationKind.CREATED
     assert result.user.display_name == "М" * 64
@@ -67,15 +95,18 @@ def test_register_existing_pending_user_updates_request_and_refreshes_telegram_p
     users: UserRepository,
 ) -> None:
     service = make_service(users)
-    service.register(make_profile(username="old", first_name="Old"), "Максим")
+    service.register(make_profile(username="old", first_name="Old"), "Максим", None)
 
     result = service.register(
         make_profile(username="new", first_name="New", last_name="Name"),
         "Другое",
+        None,
     )
 
     assert result.kind == RegistrationKind.UPDATED_PENDING
     assert result.user.display_name == "Другое"
+    assert result.previous_details is not None
+    assert result.previous_details.display_name == "Максим"
 
     user = users.get_by_telegram_id(42)
     assert user is not None
@@ -85,29 +116,57 @@ def test_register_existing_pending_user_updates_request_and_refreshes_telegram_p
     assert user.last_name == "Name"
 
 
+def test_register_existing_pending_user_with_same_data_is_noop_but_refreshes_profile(
+    users: UserRepository,
+) -> None:
+    service = make_service(users)
+    splitwise_member = make_splitwise_member()
+    service.register(make_profile(username="old", first_name="Old"), "Максим", splitwise_member)
+
+    result = service.register(
+        make_profile(username="new", first_name="New", last_name="Name"),
+        "  Максим  ",
+        splitwise_member,
+    )
+
+    assert result.kind == RegistrationKind.ALREADY_PENDING
+    assert result.user.display_name == "Максим"
+    assert result.user.username == "new"
+    assert result.user.first_name == "New"
+    assert result.user.last_name == "Name"
+
+    pending_registrations = users.list_pending_registrations()
+    assert len(pending_registrations) == 1
+    assert pending_registrations[0].splitwise is not None
+    assert pending_registrations[0].splitwise.email == "max@example.com"
+
+
 def test_register_existing_active_user_returns_already_active(
     users: UserRepository,
 ) -> None:
     service = make_service(users)
-    service.register(make_profile(), "Максим")
+    service.register(make_profile(), "Максим", None)
     service.approve(7, 42)
 
-    result = service.register(make_profile(), "Другое")
+    result = service.register(make_profile(), "Другое", None)
 
     assert result.kind == RegistrationKind.ALREADY_ACTIVE
     assert result.user.display_name == "Максим"
+    assert result.previous_details is not None
+    assert result.previous_details.display_name == "Максим"
 
 
 def test_re_register_existing_active_user_updates_display_name_and_profile(
     users: UserRepository,
 ) -> None:
     service = make_service(users)
-    service.register(make_profile(username="old", first_name="Old"), "Максим")
+    service.register(make_profile(username="old", first_name="Old"), "Максим", None)
     service.approve(7, 42)
 
     user = service.re_register(
         make_profile(username="new", first_name="New", last_name="Name"),
         "  Макс  ",
+        None,
     )
 
     assert user.display_name == "Макс"
@@ -119,7 +178,7 @@ def test_re_register_existing_active_user_updates_display_name_and_profile(
 
 def test_approve_forbids_non_admin(users: UserRepository) -> None:
     service = make_service(users)
-    service.register(make_profile(), "Максим")
+    service.register(make_profile(), "Максим", None)
 
     result = service.approve(99, 42)
 
@@ -141,7 +200,7 @@ def test_approve_returns_not_found_for_unknown_target(users: UserRepository) -> 
 
 def test_approve_activates_pending_user(users: UserRepository) -> None:
     service = make_service(users)
-    service.register(make_profile(), "Максим")
+    service.register(make_profile(), "Максим", None)
 
     result = service.approve(7, 42)
 
@@ -152,7 +211,10 @@ def test_approve_activates_pending_user(users: UserRepository) -> None:
 
 def test_list_pending_requests_is_admin_only(users: UserRepository) -> None:
     service = make_service(users)
-    service.register(make_profile(), "Максим")
+    service.register(make_profile(), "Максим", None)
 
     assert service.list_pending_requests(99) == ()
-    assert [user.telegram_user_id for user in service.list_pending_requests(7)] == [42]
+    assert [
+        registration.user.telegram_user_id
+        for registration in service.list_pending_requests(7)
+    ] == [42]

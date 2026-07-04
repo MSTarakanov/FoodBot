@@ -16,7 +16,7 @@ def make_profile() -> TelegramProfile:
 
 
 def test_balance_requires_registration(users: UserRepository) -> None:
-    assert BalanceService(users).balance(42) == "Сначала зарегистрируйся: /register Имя"
+    assert BalanceService(users).balance(42) == "Сначала зарегистрируйся: /register"
 
 
 def test_balance_requires_approved_registration(users: UserRepository) -> None:
@@ -43,10 +43,10 @@ def test_balance_detects_existing_splitwise_users(
     with database.connection:
         database.connection.execute(
             """
-            INSERT INTO splitwise_users (splitwise_user_id, user_id, display_name)
+            INSERT INTO splitwise_users (splitwise_user_id, user_id, email)
             VALUES (?, ?, ?)
             """,
-            (1001, user.id, "Max Splitwise"),
+            (1001, user.id, "max@example.com"),
         )
 
     assert BalanceService(users).balance(42) == "Splitwise подключим следующим шагом."

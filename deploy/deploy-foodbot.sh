@@ -21,10 +21,13 @@ install_env_from_stdin() {
     return
   fi
 
+  require_env_value "$incoming_env" FOODBOT_ENV
   require_env_value "$incoming_env" TELEGRAM_BOT_TOKEN
   require_env_value "$incoming_env" DATABASE_PATH
   require_env_value "$incoming_env" TELEGRAM_ADMIN_IDS
   require_env_value "$incoming_env" FOODBOT_TIMEZONE
+  require_env_value "$incoming_env" SPLITWISE_API_KEY
+  require_env_value "$incoming_env" SPLITWISE_GROUP_ID
 
   install -o foodbot -g foodbot -m 600 "$incoming_env" "$env_file"
 }

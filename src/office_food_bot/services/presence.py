@@ -22,7 +22,7 @@ class PresenceService:
     def meta(self, telegram_user_id: int, raw_minutes: str) -> str:
         user = self._users.get_by_telegram_id(telegram_user_id)
         if user is None:
-            return "Сначала зарегистрируйся: /register Имя"
+            return "Сначала зарегистрируйся: /register"
         if user.status == UserStatus.PENDING:
             return "Регистрация еще ждет аппрува."
         if user.status != UserStatus.ACTIVE:

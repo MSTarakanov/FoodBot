@@ -43,7 +43,7 @@ print_agent_guide() {
     "Agent-assisted setup guide" \
     "" \
     "Do not ask the user to paste secrets into chat." \
-    "TELEGRAM_BOT_TOKEN, SSH key passphrases, and GitHub credentials should be typed by" \
+    "TELEGRAM_BOT_TOKEN, SPLITWISE_API_KEY, SSH key passphrases, and GitHub credentials should be typed by" \
     "the user into a local terminal prompt." \
     "" \
     "Recommended flow:" \
@@ -511,6 +511,13 @@ print_botfather_instructions() {
   echo "3. Copy the token and paste it here."
 }
 
+print_splitwise_api_key_instructions() {
+  echo "Get a Splitwise API key for local development:"
+  echo "1. Open https://secure.splitwise.com/apps."
+  echo "2. Create an app for this local clone."
+  echo "3. Copy the API key. Do not share another developer's key."
+}
+
 normalize_admin_ids() {
   local raw_ids="$1"
   raw_ids="${raw_ids//[[:space:]]/}"
@@ -572,6 +579,44 @@ telegram_bot_username_from_token() {
   printf "%s" "$username"
 }
 
+telegram_bot_id_from_response() {
+  local response="$1"
+
+  printf "%s" "$response" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p'
+}
+
+telegram_bot_username_from_response() {
+  local response="$1"
+
+  printf "%s" "$response" | sed -n 's/.*"username":"\([^"]*\)".*/\1/p'
+}
+
+production_telegram_bot_id() {
+  read_env_value PRODUCTION_TELEGRAM_BOT_ID "$REPO_ROOT/.env.defaults" || true
+}
+
+is_production_telegram_bot_id() {
+  local bot_id="$1"
+  local production_bot_id=""
+  production_bot_id="$(production_telegram_bot_id)"
+
+  [[ -n "$production_bot_id" && "$bot_id" == "$production_bot_id" ]]
+}
+
+print_production_bot_token_error() {
+  local bot_id="$1"
+  local username="$2"
+  local username_text="@${username}"
+
+  if [[ -z "$username" ]]; then
+    username_text="unknown username"
+  fi
+
+  printf "%s\n" \
+    "TELEGRAM_BOT_TOKEN belongs to the production bot (${username_text}, id ${bot_id})." \
+    "Use a separate development bot token from @BotFather for local runs." >&2
+}
+
 prompt_telegram_bot_token() {
   local result_variable="$1"
   local current_value="$2"
@@ -580,9 +625,17 @@ prompt_telegram_bot_token() {
 
   if [[ -n "$current_value" && "$SKIP_TOKEN_CHECK" -eq 0 ]]; then
     if telegram_token_has_valid_shape "$current_value"; then
+      local current_bot_response=""
+      local current_bot_id=""
       local current_bot_username=""
-      current_bot_username="$(telegram_bot_username_from_token "$current_value" || true)"
+      current_bot_response="$(telegram_get_me_response "$current_value")"
+      current_bot_id="$(telegram_bot_id_from_response "$current_bot_response")"
+      current_bot_username="$(telegram_bot_username_from_response "$current_bot_response")"
       if [[ -n "$current_bot_username" ]]; then
+        if is_production_telegram_bot_id "$current_bot_id"; then
+          print_production_bot_token_error "$current_bot_id" "$current_bot_username"
+          current_value=""
+        else
         echo "Current TELEGRAM_BOT_TOKEN belongs to @$current_bot_username."
         echo "Bot link: https://t.me/$current_bot_username"
 
@@ -594,6 +647,7 @@ prompt_telegram_bot_token() {
         fi
 
         current_value=""
+        fi
       else
         echo "Current TELEGRAM_BOT_TOKEN is configured, but setup could not verify which bot it belongs to."
         local use_unverified_current_bot="n"
@@ -635,7 +689,22 @@ prompt_telegram_bot_token() {
     fi
 
     echo "Checking Telegram bot token..."
-    if verify_telegram_token_with_api "$token"; then
+    local token_response=""
+    local token_bot_id=""
+    local token_bot_username=""
+    token_response="$(telegram_get_me_response "$token")"
+    token_bot_id="$(telegram_bot_id_from_response "$token_response")"
+    token_bot_username="$(telegram_bot_username_from_response "$token_response")"
+    if [[ "$token_response" == *'"ok":true'* ]]; then
+      if is_production_telegram_bot_id "$token_bot_id"; then
+        print_production_bot_token_error "$token_bot_id" "$token_bot_username"
+        if [[ -t 0 ]]; then
+          current_value=""
+          continue
+        fi
+        exit 1
+      fi
+
       echo "Telegram bot token verified."
       printf -v "$result_variable" "%s" "$token"
       return
@@ -651,13 +720,17 @@ prompt_telegram_bot_token() {
 }
 
 configure_env() {
-  print_step "Telegram bot configuration"
+  print_step "Telegram and Splitwise configuration"
 
   local env_file=".env"
   local current_token=""
   local current_admin_ids=""
+  local current_splitwise_api_key=""
+  local current_splitwise_group_id=""
   local telegram_bot_token=""
   local telegram_admin_ids=""
+  local splitwise_api_key=""
+  local splitwise_group_id=""
   local make_admin_default="n"
   local make_admin="n"
 
@@ -667,6 +740,11 @@ configure_env() {
   else
     current_token="$(read_env_value TELEGRAM_BOT_TOKEN "$env_file" || true)"
     current_admin_ids="$(read_env_value TELEGRAM_ADMIN_IDS "$env_file" || true)"
+    current_splitwise_api_key="$(read_env_value SPLITWISE_API_KEY "$env_file" || true)"
+    current_splitwise_group_id="$(read_env_value SPLITWISE_GROUP_ID "$env_file" || true)"
+  fi
+  if [[ -z "$current_splitwise_group_id" ]]; then
+    current_splitwise_group_id="$(read_env_value SPLITWISE_GROUP_ID ".env.defaults" || true)"
   fi
 
   echo "Local Telegram bot configuration"
@@ -692,13 +770,23 @@ configure_env() {
     telegram_admin_ids=""
   fi
 
+  echo
+  if [[ -z "$current_splitwise_api_key" ]]; then
+    print_splitwise_api_key_instructions
+  fi
+  prompt_value splitwise_api_key "SPLITWISE_API_KEY" "$current_splitwise_api_key" 1 1
+  splitwise_group_id="$current_splitwise_group_id"
+
   umask 077
   ENV_TMP_FILE="$(mktemp "${env_file}.tmp.XXXXXX")"
   {
+    echo "FOODBOT_ENV=development"
     echo "TELEGRAM_BOT_TOKEN=$telegram_bot_token"
     echo "DATABASE_PATH=$DEFAULT_DATABASE_PATH"
     echo "TELEGRAM_ADMIN_IDS=$telegram_admin_ids"
     echo "FOODBOT_TIMEZONE=$DEFAULT_TIMEZONE"
+    echo "SPLITWISE_API_KEY=$splitwise_api_key"
+    echo "SPLITWISE_GROUP_ID=$splitwise_group_id"
   } >"$ENV_TMP_FILE"
 
   mv "$ENV_TMP_FILE" "$env_file"

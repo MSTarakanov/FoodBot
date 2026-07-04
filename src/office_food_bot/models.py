@@ -48,3 +48,29 @@ class RegisteredUser:
     username: str | None
     first_name: str | None
     last_name: str | None
+
+
+@dataclass(frozen=True)
+class SplitwiseMember:
+    splitwise_user_id: int
+    first_name: str
+    last_name: str | None
+    email: str
+
+
+@dataclass(frozen=True)
+class SplitwiseConnection:
+    splitwise_user_id: int
+    email: str
+
+
+@dataclass(frozen=True)
+class RegistrationDetails:
+    display_name: str
+    splitwise: SplitwiseConnection | None
+
+
+@dataclass(frozen=True)
+class PendingRegistration:
+    user: RegisteredUser
+    splitwise: SplitwiseConnection | None
