@@ -6,7 +6,12 @@ from aiogram.types import Message
 from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
-from office_food_bot.services.lunch import LUNCH_POLL_OPTIONS, LUNCH_POLL_QUESTION
+from office_food_bot.services.lunch import (
+    LUNCH_PLACE_POLL_OPTIONS,
+    LUNCH_PLACE_POLL_QUESTION,
+    LUNCH_POLL_OPTIONS,
+    LUNCH_POLL_QUESTION,
+)
 
 
 async def lunch_command(
@@ -32,5 +37,13 @@ async def lunch_command(
         LUNCH_POLL_OPTIONS,
         is_anonymous=False,
         allows_multiple_answers=False,
+        allow_adding_options=True,
+    )
+    await messenger.reply_poll(
+        message,
+        LUNCH_PLACE_POLL_QUESTION,
+        LUNCH_PLACE_POLL_OPTIONS,
+        is_anonymous=False,
+        allows_multiple_answers=True,
         allow_adding_options=True,
     )

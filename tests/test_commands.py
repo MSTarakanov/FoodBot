@@ -36,7 +36,12 @@ from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
 from office_food_bot.models import SplitwiseBalance, SplitwiseMember, UserStatus
 from office_food_bot.repositories import UserRepository
-from office_food_bot.services.lunch import LUNCH_POLL_OPTIONS, LUNCH_POLL_QUESTION
+from office_food_bot.services.lunch import (
+    LUNCH_PLACE_POLL_OPTIONS,
+    LUNCH_PLACE_POLL_QUESTION,
+    LUNCH_POLL_OPTIONS,
+    LUNCH_POLL_QUESTION,
+)
 from office_food_bot.services.splitwise import SplitwiseUnavailableError
 
 DEFAULT_ADMIN_IDS = frozenset({7})
@@ -1086,7 +1091,7 @@ async def test_lunch_requires_active_user(tmp_path: Path) -> None:
     assert session.sent_polls == []
 
 
-async def test_lunch_creates_non_anonymous_poll_for_active_user(tmp_path: Path) -> None:
+async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path) -> None:
     database = make_database(tmp_path)
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
@@ -1099,10 +1104,18 @@ async def test_lunch_creates_non_anonymous_poll_for_active_user(tmp_path: Path) 
     await dispatcher.feed_update(bot, make_update("/lunch"))
 
     assert sent_texts(session) == []
-    assert len(session.sent_polls) == 1
-    poll = session.sent_polls[0]
-    assert poll.question == LUNCH_POLL_QUESTION
-    assert poll_option_texts(poll) == list(LUNCH_POLL_OPTIONS)
-    assert poll.is_anonymous is False
-    assert poll.allows_multiple_answers is False
-    assert poll.allow_adding_options is True
+    assert len(session.sent_polls) == 2
+
+    lunch_poll = session.sent_polls[0]
+    assert lunch_poll.question == LUNCH_POLL_QUESTION
+    assert poll_option_texts(lunch_poll) == list(LUNCH_POLL_OPTIONS)
+    assert lunch_poll.is_anonymous is False
+    assert lunch_poll.allows_multiple_answers is False
+    assert lunch_poll.allow_adding_options is True
+
+    place_poll = session.sent_polls[1]
+    assert place_poll.question == LUNCH_PLACE_POLL_QUESTION
+    assert poll_option_texts(place_poll) == list(LUNCH_PLACE_POLL_OPTIONS)
+    assert place_poll.is_anonymous is False
+    assert place_poll.allows_multiple_answers is True
+    assert place_poll.allow_adding_options is True
