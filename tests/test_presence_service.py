@@ -78,6 +78,32 @@ def test_meta_uses_display_name_and_fixed_clock(users: UserRepository) -> None:
     assert make_presence(users).meta(42, "25") == "Максим будет в 12:40"
 
 
+def test_delivery_eta_requires_registration(users: UserRepository) -> None:
+    assert make_presence(users).delivery_eta(42, "20") == "Сначала зарегистрируйся: /register"
+
+
+@pytest.mark.parametrize("raw_minutes", ["abc", "0", "-1", "1441"])
+def test_delivery_eta_requires_positive_minutes(
+    raw_minutes: str,
+    users: UserRepository,
+) -> None:
+    create_active_user(users)
+
+    assert (
+        make_presence(users).delivery_eta(42, raw_minutes)
+        == "Минуты должны быть положительным числом: /eta 20"
+    )
+
+
+def test_delivery_eta_uses_fixed_clock(users: UserRepository) -> None:
+    create_active_user(users)
+
+    assert (
+        make_presence(users).delivery_eta(42, "20")
+        == "Ожидаемое время прибытия доставки 12:35"
+    )
+
+
 def test_meta_treats_naive_clock_as_utc(users: UserRepository) -> None:
     create_active_user(users)
     presence = PresenceService(

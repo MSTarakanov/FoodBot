@@ -417,6 +417,7 @@ async def test_setup_bot_commands_registers_telegram_menu() -> None:
         "register",
         "cancel",
         "meta",
+        "eta",
         "balance",
         "lunch",
     ]
@@ -1003,6 +1004,32 @@ async def test_meta_uses_registered_display_name(tmp_path: Path) -> None:
     await dispatcher.feed_update(bot, make_update("/meta 25"))
 
     assert sent_texts(session) == ["Максим будет в 12:40"]
+
+
+async def test_eta_reports_delivery_arrival_time(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/eta 20"))
+
+    assert sent_texts(session) == ["Ожидаемое время прибытия доставки 12:35"]
+
+
+async def test_eta_requires_minutes_argument(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/eta"))
+
+    assert sent_texts(session) == ["Напиши через сколько минут: /eta 20"]
 
 
 async def test_registration_happy_path_allows_meta_after_approval(tmp_path: Path) -> None:

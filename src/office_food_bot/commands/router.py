@@ -5,6 +5,7 @@ from aiogram.filters import Command, CommandStart
 
 from office_food_bot.commands.approve import approve_command
 from office_food_bot.commands.balance import balance_command
+from office_food_bot.commands.eta import eta_command
 from office_food_bot.commands.help import help_command
 from office_food_bot.commands.hi import hi_command
 from office_food_bot.commands.lunch import lunch_command
@@ -35,6 +36,7 @@ def create_command_router() -> Router:
     router.message.register(approve_command, Command("approve"))
     router.message.register(register_requests_list_command, Command("register_requests_list"))
     router.message.register(meta_command, Command("meta"))
+    router.message.register(eta_command, Command("eta"))
     router.message.register(balance_command, Command("balance"))
     router.message.register(lunch_command, Command("lunch"))
     router.poll_answer.register(poll_answer_handler)
