@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import StrEnum
 
 
@@ -51,11 +52,18 @@ class RegisteredUser:
 
 
 @dataclass(frozen=True)
+class SplitwiseBalance:
+    currency_code: str
+    amount: Decimal
+
+
+@dataclass(frozen=True)
 class SplitwiseMember:
     splitwise_user_id: int
     first_name: str
     last_name: str | None
     email: str
+    balance: tuple[SplitwiseBalance, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -74,3 +82,10 @@ class RegistrationDetails:
 class PendingRegistration:
     user: RegisteredUser
     splitwise: SplitwiseConnection | None
+
+
+@dataclass(frozen=True)
+class ActiveSplitwiseUser:
+    display_name: str
+    splitwise_user_id: int
+    email: str

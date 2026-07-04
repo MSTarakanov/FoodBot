@@ -48,6 +48,17 @@ WHERE users.status = ?
 ORDER BY users.created_at, users.id
 """
 
+LIST_ACTIVE_SPLITWISE_USERS_SQL = """
+SELECT
+    users.display_name,
+    splitwise_users.splitwise_user_id,
+    splitwise_users.email AS splitwise_email
+FROM users
+JOIN splitwise_users ON splitwise_users.user_id = users.id
+WHERE users.status = ?
+ORDER BY users.display_name, users.id
+"""
+
 GET_REGISTRATION_DETAILS_BY_TELEGRAM_ID_SQL = """
 SELECT
     users.display_name,

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -33,7 +34,7 @@ from office_food_bot.commands.definitions import (
 )
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
-from office_food_bot.models import SplitwiseMember, UserStatus
+from office_food_bot.models import SplitwiseBalance, SplitwiseMember, UserStatus
 from office_food_bot.repositories import UserRepository
 from office_food_bot.services.splitwise import SplitwiseUnavailableError
 
@@ -223,12 +224,22 @@ def keyboard_texts(message: SendMessage) -> list[list[str]]:
 def make_splitwise_member(
     splitwise_user_id: int = 1001,
     email: str = "max@example.com",
+    balance_amount: str | None = None,
 ) -> SplitwiseMember:
+    balance: tuple[SplitwiseBalance, ...] = ()
+    if balance_amount is not None:
+        balance = (
+            SplitwiseBalance(
+                currency_code="RSD",
+                amount=Decimal(balance_amount),
+            ),
+        )
     return SplitwiseMember(
         splitwise_user_id=splitwise_user_id,
         first_name="Max",
         last_name=None,
         email=email,
+        balance=balance,
     )
 
 
@@ -951,3 +962,69 @@ async def test_balance_requires_active_user_and_has_placeholder(tmp_path: Path) 
     await dispatcher.feed_update(bot, make_update("/balance"))
 
     assert sent_texts(session) == ["Splitwise пока не подключен."]
+
+
+async def test_balance_returns_splitwise_balances_for_active_linked_users(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(
+        database,
+        splitwise_members=(
+            make_splitwise_member(email="max@example.com", balance_amount="277.97"),
+            make_splitwise_member(
+                splitwise_user_id=1002,
+                email="anton@example.com",
+                balance_amount="-10837.88",
+            ),
+            make_splitwise_member(
+                splitwise_user_id=1003,
+                email="tim@example.com",
+                balance_amount="18976.74",
+            ),
+        ),
+    )
+
+    await submit_registration(
+        dispatcher,
+        bot,
+        session,
+        display_name="Максим",
+        splitwise_answer="max@example.com",
+    )
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    await submit_registration(
+        dispatcher,
+        bot,
+        session,
+        user_id=43,
+        first_name="Anton",
+        username="anton",
+        display_name="Антон",
+        splitwise_answer="anton@example.com",
+    )
+    await dispatcher.feed_update(bot, make_update("/approve 43", user_id=7, first_name="Admin"))
+    await submit_registration(
+        dispatcher,
+        bot,
+        session,
+        user_id=44,
+        first_name="Tim",
+        username="tim",
+        display_name="Тимофей",
+        splitwise_answer="tim@example.com",
+    )
+    await dispatcher.feed_update(bot, make_update("/approve 44", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/balance"))
+
+    assert sent_texts(session) == [
+        "Текущая ситуация по балансам в Splitwise:\n"
+        "\n"
+        "🔴 Антон: -10837.88 RSD\n"
+        "⚪ Максим: +277.97 RSD\n"
+        "🟢 Тимофей: +18976.74 RSD"
+    ]

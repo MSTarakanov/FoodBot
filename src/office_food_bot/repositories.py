@@ -12,12 +12,14 @@ from office_food_bot.database.user_queries import (
     INSERT_SPLITWISE_USER_SQL,
     INSERT_TELEGRAM_ACCOUNT_SQL,
     INSERT_USER_SQL,
+    LIST_ACTIVE_SPLITWISE_USERS_SQL,
     LIST_PENDING_REGISTRATIONS_SQL,
     LIST_PENDING_USERS_SQL,
     UPDATE_TELEGRAM_PROFILE_SQL,
     UPDATE_USER_REGISTRATION_BY_TELEGRAM_ID_SQL,
 )
 from office_food_bot.models import (
+    ActiveSplitwiseUser,
     PendingRegistration,
     RegisteredUser,
     RegistrationDetails,
@@ -55,6 +57,13 @@ class UserRepository:
             (UserStatus.PENDING.value,),
         ).fetchall()
         return tuple(_pending_registration_from_row(row) for row in rows)
+
+    def list_active_splitwise_users(self) -> tuple[ActiveSplitwiseUser, ...]:
+        rows = self._database.connection.execute(
+            LIST_ACTIVE_SPLITWISE_USERS_SQL,
+            (UserStatus.ACTIVE.value,),
+        ).fetchall()
+        return tuple(_active_splitwise_user_from_row(row) for row in rows)
 
     def get_registration_details_by_telegram_id(
         self,
@@ -235,6 +244,14 @@ def _registration_details_from_row(row: sqlite3.Row) -> RegistrationDetails:
     return RegistrationDetails(
         display_name=str(row["display_name"]),
         splitwise=_splitwise_connection_from_row(row),
+    )
+
+
+def _active_splitwise_user_from_row(row: sqlite3.Row) -> ActiveSplitwiseUser:
+    return ActiveSplitwiseUser(
+        display_name=str(row["display_name"]),
+        splitwise_user_id=int(row["splitwise_user_id"]),
+        email=str(row["splitwise_email"]),
     )
 
 

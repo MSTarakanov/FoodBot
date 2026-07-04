@@ -20,4 +20,4 @@ async def balance_command(
         await messenger.reply(message, "Не вижу твой Telegram user id.")
         return
 
-    await messenger.reply(message, services.balances.balance(profile.telegram_user_id))
+    await messenger.reply(message, await services.balances.balance(profile.telegram_user_id))
