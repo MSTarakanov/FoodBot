@@ -579,6 +579,44 @@ telegram_bot_username_from_token() {
   printf "%s" "$username"
 }
 
+telegram_bot_id_from_response() {
+  local response="$1"
+
+  printf "%s" "$response" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p'
+}
+
+telegram_bot_username_from_response() {
+  local response="$1"
+
+  printf "%s" "$response" | sed -n 's/.*"username":"\([^"]*\)".*/\1/p'
+}
+
+production_telegram_bot_id() {
+  read_env_value PRODUCTION_TELEGRAM_BOT_ID "$REPO_ROOT/.env.defaults" || true
+}
+
+is_production_telegram_bot_id() {
+  local bot_id="$1"
+  local production_bot_id=""
+  production_bot_id="$(production_telegram_bot_id)"
+
+  [[ -n "$production_bot_id" && "$bot_id" == "$production_bot_id" ]]
+}
+
+print_production_bot_token_error() {
+  local bot_id="$1"
+  local username="$2"
+  local username_text="@${username}"
+
+  if [[ -z "$username" ]]; then
+    username_text="unknown username"
+  fi
+
+  printf "%s\n" \
+    "TELEGRAM_BOT_TOKEN belongs to the production bot (${username_text}, id ${bot_id})." \
+    "Use a separate development bot token from @BotFather for local runs." >&2
+}
+
 prompt_telegram_bot_token() {
   local result_variable="$1"
   local current_value="$2"
@@ -587,9 +625,17 @@ prompt_telegram_bot_token() {
 
   if [[ -n "$current_value" && "$SKIP_TOKEN_CHECK" -eq 0 ]]; then
     if telegram_token_has_valid_shape "$current_value"; then
+      local current_bot_response=""
+      local current_bot_id=""
       local current_bot_username=""
-      current_bot_username="$(telegram_bot_username_from_token "$current_value" || true)"
+      current_bot_response="$(telegram_get_me_response "$current_value")"
+      current_bot_id="$(telegram_bot_id_from_response "$current_bot_response")"
+      current_bot_username="$(telegram_bot_username_from_response "$current_bot_response")"
       if [[ -n "$current_bot_username" ]]; then
+        if is_production_telegram_bot_id "$current_bot_id"; then
+          print_production_bot_token_error "$current_bot_id" "$current_bot_username"
+          current_value=""
+        else
         echo "Current TELEGRAM_BOT_TOKEN belongs to @$current_bot_username."
         echo "Bot link: https://t.me/$current_bot_username"
 
@@ -601,6 +647,7 @@ prompt_telegram_bot_token() {
         fi
 
         current_value=""
+        fi
       else
         echo "Current TELEGRAM_BOT_TOKEN is configured, but setup could not verify which bot it belongs to."
         local use_unverified_current_bot="n"
@@ -642,7 +689,22 @@ prompt_telegram_bot_token() {
     fi
 
     echo "Checking Telegram bot token..."
-    if verify_telegram_token_with_api "$token"; then
+    local token_response=""
+    local token_bot_id=""
+    local token_bot_username=""
+    token_response="$(telegram_get_me_response "$token")"
+    token_bot_id="$(telegram_bot_id_from_response "$token_response")"
+    token_bot_username="$(telegram_bot_username_from_response "$token_response")"
+    if [[ "$token_response" == *'"ok":true'* ]]; then
+      if is_production_telegram_bot_id "$token_bot_id"; then
+        print_production_bot_token_error "$token_bot_id" "$token_bot_username"
+        if [[ -t 0 ]]; then
+          current_value=""
+          continue
+        fi
+        exit 1
+      fi
+
       echo "Telegram bot token verified."
       printf -v "$result_variable" "%s" "$token"
       return
@@ -718,6 +780,7 @@ configure_env() {
   umask 077
   ENV_TMP_FILE="$(mktemp "${env_file}.tmp.XXXXXX")"
   {
+    echo "FOODBOT_ENV=development"
     echo "TELEGRAM_BOT_TOKEN=$telegram_bot_token"
     echo "DATABASE_PATH=$DEFAULT_DATABASE_PATH"
     echo "TELEGRAM_ADMIN_IDS=$telegram_admin_ids"

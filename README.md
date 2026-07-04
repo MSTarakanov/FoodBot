@@ -43,13 +43,14 @@ Use a personal development Telegram bot token in `.env`. This file is local-only
 git. Setup prints where to get the token in `@BotFather`, rejects placeholder-looking values, and
 verifies the token with Telegram before saving it. If `.env` already has a token, setup shows the
 bot username and `https://t.me/...` link before asking whether to keep it.
+Setup refuses to save the production Telegram bot token for local development.
 
 ## Configuration
 
 Committed defaults live in `.env.defaults`. Use it for shared non-secret values such as
-`DATABASE_PATH`, `FOODBOT_TIMEZONE`, and `SPLITWISE_GROUP_ID`. It also keeps
-`TELEGRAM_ADMIN_IDS` as an empty required key; real admin ids live in local `.env` files or
-GitHub Secrets.
+`FOODBOT_ENV`, `DATABASE_PATH`, `FOODBOT_TIMEZONE`, `SPLITWISE_GROUP_ID`, and
+`PRODUCTION_TELEGRAM_BOT_ID`. It also keeps `TELEGRAM_ADMIN_IDS` as an empty required key; real
+admin ids live in local `.env` files or GitHub Secrets.
 
 The bot requires those keys to exist; keep shared defaults in `.env.defaults` instead of relying
 on hidden Python fallback values.
@@ -57,6 +58,9 @@ on hidden Python fallback values.
 Local overrides live in `.env`. `./setup-dev` creates or rewrites it interactively. Use `.env` for
 secrets such as `TELEGRAM_BOT_TOKEN` and `SPLITWISE_API_KEY`, and to override
 `TELEGRAM_ADMIN_IDS` or `SPLITWISE_GROUP_ID` while debugging locally.
+Local `.env` uses `FOODBOT_ENV=development`; production deploy writes `FOODBOT_ENV=production`.
+When running in development, the bot validates its token before polling and refuses to start if it
+points at `PRODUCTION_TELEGRAM_BOT_ID`.
 Re-run `./setup-dev` to update values while keeping existing answers by pressing Enter. Run
 `./setup-dev --reset-env` to re-ask local git identity, ignore current `.env` values, and configure
 them from scratch.
@@ -102,6 +106,8 @@ cloning the repository. `scripts/setup` remains as a compatibility wrapper.
 Use a separate development Telegram bot for local manual testing. Do not use the production
 `TELEGRAM_BOT_TOKEN` while the production service is running, because Telegram long polling should
 not be active from two places for the same bot token.
+The local runtime has a guard for this: if `.env` accidentally contains the production bot token,
+`./run office-food-bot` exits before starting polling.
 
 Recommended developer flow:
 

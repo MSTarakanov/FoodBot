@@ -95,6 +95,7 @@ jobs:
 
           umask 077
           {
+            printf 'FOODBOT_ENV=%s\n' "production"
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
             printf 'DATABASE_PATH=%s\n' "/opt/foodbot/foodbot.sqlite3"
             printf 'TELEGRAM_ADMIN_IDS=%s\n' "$TELEGRAM_ADMIN_IDS"

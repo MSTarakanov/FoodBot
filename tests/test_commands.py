@@ -23,7 +23,7 @@ from office_food_bot.commands.definitions import (
     PUBLIC_HELP_TEXT,
     START_TEXT,
 )
-from office_food_bot.config import Settings
+from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
 from office_food_bot.models import SplitwiseMember, UserStatus
 from office_food_bot.repositories import UserRepository
@@ -181,12 +181,14 @@ def make_dispatcher(
     splitwise_unavailable: bool = False,
 ) -> Dispatcher:
     settings = Settings(
+        environment=RuntimeEnvironment.DEVELOPMENT,
         telegram_bot_token="123456:test-token",
         database_path=database.path,
         telegram_admin_ids=admin_ids,
         timezone="Europe/Belgrade",
         splitwise_api_key=None,
         splitwise_group_id=DEFAULT_SPLITWISE_GROUP_ID,
+        production_telegram_bot_id=8490386710,
     )
     services = create_services(
         database,

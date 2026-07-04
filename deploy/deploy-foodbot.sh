@@ -21,6 +21,7 @@ install_env_from_stdin() {
     return
   fi
 
+  require_env_value "$incoming_env" FOODBOT_ENV
   require_env_value "$incoming_env" TELEGRAM_BOT_TOKEN
   require_env_value "$incoming_env" DATABASE_PATH
   require_env_value "$incoming_env" TELEGRAM_ADMIN_IDS
