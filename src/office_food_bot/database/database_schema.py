@@ -24,7 +24,16 @@ CREATE TABLE IF NOT EXISTS telegram_accounts (
 CREATE TABLE IF NOT EXISTS splitwise_users (
     splitwise_user_id INTEGER PRIMARY KEY,
     user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-    display_name TEXT NOT NULL,
+    email TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+"""
+
+SPLITWISE_USERS_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS splitwise_users (
+    splitwise_user_id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
 """

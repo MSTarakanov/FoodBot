@@ -15,6 +15,8 @@ class Settings:
     database_path: str
     telegram_admin_ids: frozenset[int]
     timezone: str
+    splitwise_api_key: str | None
+    splitwise_group_id: int | None
 
 
 def load_settings() -> Settings:
@@ -27,6 +29,8 @@ def load_settings() -> Settings:
             _required_env_value(env, "TELEGRAM_ADMIN_IDS", allow_empty=True)
         ),
         timezone=_required_env_value(env, "FOODBOT_TIMEZONE"),
+        splitwise_api_key=_optional_env_value(env, "SPLITWISE_API_KEY"),
+        splitwise_group_id=_parse_optional_int(env, "SPLITWISE_GROUP_ID"),
     )
 
 
@@ -60,6 +64,24 @@ def _required_env_value(
         msg = f"{name} environment variable is required"
         raise RuntimeError(msg)
     return value
+
+
+def _optional_env_value(env: dict[str, str], name: str) -> str | None:
+    value = env.get(name)
+    if value is None or not value.strip():
+        return None
+    return value.strip()
+
+
+def _parse_optional_int(env: dict[str, str], name: str) -> int | None:
+    value = _optional_env_value(env, name)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError as error:
+        msg = f"{name} must be an integer"
+        raise RuntimeError(msg) from error
 
 
 def _parse_admin_ids(raw_admin_ids: str) -> frozenset[int]:

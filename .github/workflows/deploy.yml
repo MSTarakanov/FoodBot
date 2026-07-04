@@ -18,6 +18,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Check required secrets
         env:
           VPS_HOST: ${{ secrets.FOODBOT_VPS_HOST }}
@@ -25,8 +28,12 @@ jobs:
           VPS_KNOWN_HOSTS: ${{ secrets.FOODBOT_VPS_KNOWN_HOSTS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ADMIN_IDS: ${{ secrets.TELEGRAM_ADMIN_IDS }}
+          SPLITWISE_API_KEY: ${{ secrets.SPLITWISE_API_KEY }}
+          SPLITWISE_GROUP_ID: ${{ vars.SPLITWISE_GROUP_ID }}
         run: |
           missing=0
+          default_splitwise_group_id="$(sed -n 's/^SPLITWISE_GROUP_ID=//p' .env.defaults | head -n 1)"
+          splitwise_group_id="${SPLITWISE_GROUP_ID:-$default_splitwise_group_id}"
 
           if [ -z "${VPS_HOST:-}" ]; then
             echo "::error::FOODBOT_VPS_HOST is not set."
@@ -53,6 +60,16 @@ jobs:
             missing=1
           fi
 
+          if [ -z "${SPLITWISE_API_KEY:-}" ]; then
+            echo "::error::SPLITWISE_API_KEY is not set."
+            missing=1
+          fi
+
+          if [ -z "$splitwise_group_id" ]; then
+            echo "::error::SPLITWISE_GROUP_ID is not set in repository variables or .env.defaults."
+            missing=1
+          fi
+
           exit "$missing"
 
       - name: Configure SSH
@@ -70,13 +87,20 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ADMIN_IDS: ${{ secrets.TELEGRAM_ADMIN_IDS }}
+          SPLITWISE_API_KEY: ${{ secrets.SPLITWISE_API_KEY }}
+          SPLITWISE_GROUP_ID: ${{ vars.SPLITWISE_GROUP_ID }}
         run: |
+          default_splitwise_group_id="$(sed -n 's/^SPLITWISE_GROUP_ID=//p' .env.defaults | head -n 1)"
+          splitwise_group_id="${SPLITWISE_GROUP_ID:-$default_splitwise_group_id}"
+
           umask 077
           {
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
             printf 'DATABASE_PATH=%s\n' "/opt/foodbot/foodbot.sqlite3"
             printf 'TELEGRAM_ADMIN_IDS=%s\n' "$TELEGRAM_ADMIN_IDS"
             printf 'FOODBOT_TIMEZONE=%s\n' "Europe/Belgrade"
+            printf 'SPLITWISE_API_KEY=%s\n' "$SPLITWISE_API_KEY"
+            printf 'SPLITWISE_GROUP_ID=%s\n' "$splitwise_group_id"
           } > production.env
 
       - name: Deploy to VPS

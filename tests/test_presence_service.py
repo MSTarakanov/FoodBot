@@ -34,7 +34,7 @@ def create_active_user(users: UserRepository) -> None:
 
 
 def test_meta_requires_registration(users: UserRepository) -> None:
-    assert make_presence(users).meta(42, "25") == "Сначала зарегистрируйся: /register Имя"
+    assert make_presence(users).meta(42, "25") == "Сначала зарегистрируйся: /register"
 
 
 def test_meta_requires_approved_registration(users: UserRepository) -> None:

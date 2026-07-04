@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import pytest
+
 from office_food_bot.database import Database
-from office_food_bot.models import TelegramProfile, UserRole, UserStatus
+from office_food_bot.database.database_schema import SCHEMA_SQL
+from office_food_bot.models import SplitwiseMember, TelegramProfile, UserRole, UserStatus
 from office_food_bot.repositories import UserRepository
+
+LEGACY_SCHEMA_SQL = SCHEMA_SQL.replace("email TEXT NOT NULL,", "display_name TEXT NOT NULL,")
 
 
 def make_profile(
@@ -98,10 +103,116 @@ def test_count_splitwise_users_counts_linked_splitwise_users(
     with database.connection:
         database.connection.execute(
             """
-            INSERT INTO splitwise_users (splitwise_user_id, user_id, display_name)
+            INSERT INTO splitwise_users (splitwise_user_id, user_id, email)
             VALUES (?, ?, ?)
             """,
-            (1001, user.id, "Max Splitwise"),
+            (1001, user.id, "max@example.com"),
         )
 
     assert users.count_splitwise_users() == 1
+
+
+def test_save_pending_registration_stores_splitwise_member(
+    users: UserRepository,
+) -> None:
+    user = users.save_pending_registration(
+        make_profile(),
+        "Максим",
+        SplitwiseMember(
+            splitwise_user_id=1001,
+            first_name="Max",
+            last_name=None,
+            email="max@example.com",
+        ),
+    )
+
+    pending_registrations = users.list_pending_registrations()
+
+    assert user.display_name == "Максим"
+    assert len(pending_registrations) == 1
+    assert pending_registrations[0].user.telegram_user_id == 42
+    assert pending_registrations[0].splitwise is not None
+    assert pending_registrations[0].splitwise.splitwise_user_id == 1001
+    assert pending_registrations[0].splitwise.email == "max@example.com"
+
+
+def test_save_pending_registration_with_skip_removes_existing_splitwise_member(
+    users: UserRepository,
+) -> None:
+    users.save_pending_registration(
+        make_profile(),
+        "Максим",
+        SplitwiseMember(
+            splitwise_user_id=1001,
+            first_name="Max",
+            last_name=None,
+            email="max@example.com",
+        ),
+    )
+
+    users.save_pending_registration(make_profile(), "Максим", None)
+
+    pending_registrations = users.list_pending_registrations()
+    assert len(pending_registrations) == 1
+    assert pending_registrations[0].splitwise is None
+
+
+def test_database_init_creates_clean_splitwise_users_schema(tmp_path) -> None:
+    database = Database(tmp_path / "test.sqlite3")
+    database.init_schema()
+    try:
+        columns = [
+            str(row["name"])
+            for row in database.connection.execute("PRAGMA table_info(splitwise_users)")
+        ]
+    finally:
+        database.close()
+
+    assert columns == ["splitwise_user_id", "user_id", "email", "updated_at"]
+
+
+def test_database_init_recreates_empty_legacy_splitwise_users_table(tmp_path) -> None:
+    database = Database(tmp_path / "test.sqlite3")
+    with database.connection:
+        database.connection.executescript(LEGACY_SCHEMA_SQL)
+    database.close()
+
+    database = Database(tmp_path / "test.sqlite3")
+    database.init_schema()
+    try:
+        columns = [
+            str(row["name"])
+            for row in database.connection.execute("PRAGMA table_info(splitwise_users)")
+        ]
+    finally:
+        database.close()
+
+    assert columns == ["splitwise_user_id", "user_id", "email", "updated_at"]
+
+
+def test_database_init_rejects_non_empty_legacy_splitwise_users_table(tmp_path) -> None:
+    database = Database(tmp_path / "test.sqlite3")
+    with database.connection:
+        database.connection.executescript(LEGACY_SCHEMA_SQL)
+        database.connection.execute(
+            """
+            INSERT INTO users (display_name, status, role)
+            VALUES (?, ?, ?)
+            """,
+            ("Максим", UserStatus.PENDING.value, UserRole.MEMBER.value),
+        )
+        database.connection.execute(
+            """
+            INSERT INTO splitwise_users (splitwise_user_id, user_id, display_name)
+            VALUES (?, ?, ?)
+            """,
+            (1001, 1, "Max Splitwise"),
+        )
+    database.close()
+
+    database = Database(tmp_path / "test.sqlite3")
+    try:
+        with pytest.raises(RuntimeError, match="splitwise_users has legacy rows"):
+            database.init_schema()
+    finally:
+        database.close()

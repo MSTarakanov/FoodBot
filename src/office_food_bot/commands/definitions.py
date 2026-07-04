@@ -15,7 +15,7 @@ COMMANDS: tuple[CommandDefinition, ...] = (
     CommandDefinition("start", "показать приветствие", "/start"),
     CommandDefinition("help", "показать список команд", "/help"),
     CommandDefinition("hi", "проверить, что бот на месте", "/hi"),
-    CommandDefinition("register", "зарегистрироваться по имени", "/register Максим"),
+    CommandDefinition("register", "пройти регистрацию", "/register"),
     CommandDefinition("cancel", "отменить текущий сценарий", "/cancel"),
     CommandDefinition(
         "approve",

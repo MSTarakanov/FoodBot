@@ -12,9 +12,9 @@ Regular users see:
 - `/start` - introduces the bot.
 - `/help` - shows available commands.
 - `/hi` - replies with a short greeting.
-- `/register <name>` - asks an admin to approve a Telegram user with a display name.
-  Running `/register` without a name starts a guided registration flow. A new
-  registration overwrites an existing pending request for the same Telegram user.
+- `/register` - starts guided registration: the bot asks for a display name, then asks for a
+  Splitwise email or lets the user skip Splitwise linking. A new registration overwrites an
+  existing pending request for the same Telegram user.
   Already approved users see their current data and choose whether to send a
   re-registration request back to the pending approval list.
 - `/meta <minutes>` - says when a registered user will arrive.
@@ -47,14 +47,16 @@ bot username and `https://t.me/...` link before asking whether to keep it.
 ## Configuration
 
 Committed defaults live in `.env.defaults`. Use it for shared non-secret values such as
-`DATABASE_PATH` and `FOODBOT_TIMEZONE`. It also keeps `TELEGRAM_ADMIN_IDS` as an empty required
-key; real admin ids live in local `.env` files or GitHub Secrets.
+`DATABASE_PATH`, `FOODBOT_TIMEZONE`, and `SPLITWISE_GROUP_ID`. It also keeps
+`TELEGRAM_ADMIN_IDS` as an empty required key; real admin ids live in local `.env` files or
+GitHub Secrets.
 
 The bot requires those keys to exist; keep shared defaults in `.env.defaults` instead of relying
 on hidden Python fallback values.
 
 Local overrides live in `.env`. `./setup-dev` creates or rewrites it interactively. Use `.env` for
-secrets such as `TELEGRAM_BOT_TOKEN`, and to override `TELEGRAM_ADMIN_IDS` while debugging locally.
+secrets such as `TELEGRAM_BOT_TOKEN` and `SPLITWISE_API_KEY`, and to override
+`TELEGRAM_ADMIN_IDS` or `SPLITWISE_GROUP_ID` while debugging locally.
 Re-run `./setup-dev` to update values while keeping existing answers by pressing Enter. Run
 `./setup-dev --reset-env` to re-ask local git identity, ignore current `.env` values, and configure
 them from scratch.
@@ -113,6 +115,8 @@ git remote add upstream git@github.com:MSTarakanov/FoodBot.git
 Create a personal development bot via `@BotFather`; setup asks for its token and writes it to
 `.env`. If you want admin commands in your dev bot, setup also prints how to get your Telegram user
 id from `@userinfobot` or `@RawDataBot` and writes it to `TELEGRAM_ADMIN_IDS`.
+`SPLITWISE_API_KEY` is optional for local development. Without it, registration still works through
+the `Пропустить` path, but Splitwise email checks are unavailable.
 
 Run the bot locally:
 
@@ -212,6 +216,12 @@ Repository secrets:
 - `FOODBOT_VPS_USER` - optional SSH user, defaults to `root`.
 - `TELEGRAM_BOT_TOKEN` - production Telegram bot token.
 - `TELEGRAM_ADMIN_IDS` - comma-separated production Telegram admin user ids.
+- `SPLITWISE_API_KEY` - production Splitwise API key.
+
+Repository variables:
+
+- `SPLITWISE_GROUP_ID` - optional override for the office Splitwise group id. If it is not set,
+  deployment reads the value from `.env.defaults`.
 
 Deployment secrets are maintainer-only. Contributors should only run the bot locally with their
 own development Telegram bot token.

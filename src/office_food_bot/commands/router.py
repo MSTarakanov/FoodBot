@@ -15,7 +15,9 @@ from office_food_bot.commands.register import (
     confirm_reregistration_unknown_message,
     register_command,
     register_name_message,
+    register_splitwise_email_message,
     registration_waiting_for_name_unknown_message,
+    registration_waiting_for_splitwise_unknown_message,
 )
 from office_food_bot.commands.register_requests_list import register_requests_list_command
 from office_food_bot.commands.start import start_command
@@ -34,6 +36,11 @@ def create_command_router() -> Router:
     router.message.register(balance_command, Command("balance"))
     router.message.register(register_name_message, RegistrationFlow.waiting_for_name, F.text)
     router.message.register(
+        register_splitwise_email_message,
+        RegistrationFlow.waiting_for_splitwise_email,
+        F.text,
+    )
+    router.message.register(
         confirm_reregistration_message,
         RegistrationFlow.confirming_reregistration,
         F.text,
@@ -45,5 +52,9 @@ def create_command_router() -> Router:
     router.message.register(
         registration_waiting_for_name_unknown_message,
         RegistrationFlow.waiting_for_name,
+    )
+    router.message.register(
+        registration_waiting_for_splitwise_unknown_message,
+        RegistrationFlow.waiting_for_splitwise_email,
     )
     return router

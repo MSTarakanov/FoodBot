@@ -656,8 +656,12 @@ configure_env() {
   local env_file=".env"
   local current_token=""
   local current_admin_ids=""
+  local current_splitwise_api_key=""
+  local current_splitwise_group_id=""
   local telegram_bot_token=""
   local telegram_admin_ids=""
+  local splitwise_api_key=""
+  local splitwise_group_id=""
   local make_admin_default="n"
   local make_admin="n"
 
@@ -667,6 +671,11 @@ configure_env() {
   else
     current_token="$(read_env_value TELEGRAM_BOT_TOKEN "$env_file" || true)"
     current_admin_ids="$(read_env_value TELEGRAM_ADMIN_IDS "$env_file" || true)"
+    current_splitwise_api_key="$(read_env_value SPLITWISE_API_KEY "$env_file" || true)"
+    current_splitwise_group_id="$(read_env_value SPLITWISE_GROUP_ID "$env_file" || true)"
+  fi
+  if [[ -z "$current_splitwise_group_id" ]]; then
+    current_splitwise_group_id="$(read_env_value SPLITWISE_GROUP_ID ".env.defaults" || true)"
   fi
 
   echo "Local Telegram bot configuration"
@@ -692,6 +701,9 @@ configure_env() {
     telegram_admin_ids=""
   fi
 
+  splitwise_api_key="$current_splitwise_api_key"
+  splitwise_group_id="$current_splitwise_group_id"
+
   umask 077
   ENV_TMP_FILE="$(mktemp "${env_file}.tmp.XXXXXX")"
   {
@@ -699,6 +711,8 @@ configure_env() {
     echo "DATABASE_PATH=$DEFAULT_DATABASE_PATH"
     echo "TELEGRAM_ADMIN_IDS=$telegram_admin_ids"
     echo "FOODBOT_TIMEZONE=$DEFAULT_TIMEZONE"
+    echo "SPLITWISE_API_KEY=$splitwise_api_key"
+    echo "SPLITWISE_GROUP_ID=$splitwise_group_id"
   } >"$ENV_TMP_FILE"
 
   mv "$ENV_TMP_FILE" "$env_file"

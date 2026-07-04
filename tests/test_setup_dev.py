@@ -38,6 +38,8 @@ def test_setup_dev_creates_env_with_admin_id(tmp_path: Path) -> None:
         "DATABASE_PATH": "foodbot.local.sqlite3",
         "TELEGRAM_ADMIN_IDS": "42",
         "FOODBOT_TIMEZONE": "Europe/Belgrade",
+        "SPLITWISE_API_KEY": "",
+        "SPLITWISE_GROUP_ID": "",
     }
     assert "123456:test-token" not in result.stdout
     assert "123456:test-token" not in result.stderr
@@ -51,6 +53,8 @@ def test_setup_dev_keeps_existing_values_on_empty_answers(tmp_path: Path) -> Non
                 "DATABASE_PATH=old.sqlite3",
                 "TELEGRAM_ADMIN_IDS=42",
                 "FOODBOT_TIMEZONE=UTC",
+                "SPLITWISE_API_KEY=existing-splitwise-key",
+                "SPLITWISE_GROUP_ID=1001",
             ]
         ),
         encoding="utf-8",
@@ -63,6 +67,8 @@ def test_setup_dev_keeps_existing_values_on_empty_answers(tmp_path: Path) -> Non
         "DATABASE_PATH": "foodbot.local.sqlite3",
         "TELEGRAM_ADMIN_IDS": "42",
         "FOODBOT_TIMEZONE": "Europe/Belgrade",
+        "SPLITWISE_API_KEY": "existing-splitwise-key",
+        "SPLITWISE_GROUP_ID": "1001",
     }
     assert "existing-token" not in result.stdout
     assert "existing-token" not in result.stderr
@@ -77,6 +83,8 @@ def test_setup_dev_reads_existing_env_with_export_spaces_and_quotes(tmp_path: Pa
                 "DATABASE_PATH=old.sqlite3",
                 "TELEGRAM_ADMIN_IDS = '42'",
                 "FOODBOT_TIMEZONE=UTC",
+                'SPLITWISE_API_KEY = "existing-splitwise-key"',
+                "SPLITWISE_GROUP_ID = '1001'",
             ]
         ),
         encoding="utf-8",
@@ -89,6 +97,8 @@ def test_setup_dev_reads_existing_env_with_export_spaces_and_quotes(tmp_path: Pa
         "DATABASE_PATH": "foodbot.local.sqlite3",
         "TELEGRAM_ADMIN_IDS": "42",
         "FOODBOT_TIMEZONE": "Europe/Belgrade",
+        "SPLITWISE_API_KEY": "existing-splitwise-key",
+        "SPLITWISE_GROUP_ID": "1001",
     }
     assert "existing-token" not in result.stdout
     assert "existing-token" not in result.stderr
@@ -103,6 +113,8 @@ def test_setup_dev_replaces_token_and_clears_admin_ids(tmp_path: Path) -> None:
                 "DATABASE_PATH=old.sqlite3",
                 "TELEGRAM_ADMIN_IDS=42",
                 "FOODBOT_TIMEZONE=UTC",
+                "SPLITWISE_API_KEY=old-splitwise-key",
+                "SPLITWISE_GROUP_ID=1001",
             ]
         ),
         encoding="utf-8",
@@ -115,6 +127,8 @@ def test_setup_dev_replaces_token_and_clears_admin_ids(tmp_path: Path) -> None:
         "DATABASE_PATH": "foodbot.local.sqlite3",
         "TELEGRAM_ADMIN_IDS": "",
         "FOODBOT_TIMEZONE": "Europe/Belgrade",
+        "SPLITWISE_API_KEY": "old-splitwise-key",
+        "SPLITWISE_GROUP_ID": "1001",
     }
     assert "old-token" not in result.stdout
     assert "old-token" not in result.stderr
@@ -129,6 +143,8 @@ def test_setup_dev_keeps_existing_env_when_interrupted_before_replace(tmp_path: 
             "DATABASE_PATH=old.sqlite3",
             "TELEGRAM_ADMIN_IDS=42",
             "FOODBOT_TIMEZONE=UTC",
+            "SPLITWISE_API_KEY=old-splitwise-key",
+            "SPLITWISE_GROUP_ID=1001",
         ]
     )
     (tmp_path / ".env").write_text(existing_env, encoding="utf-8")
@@ -170,6 +186,8 @@ def test_setup_dev_reset_env_ignores_existing_values(tmp_path: Path) -> None:
                 "DATABASE_PATH=old.sqlite3",
                 "TELEGRAM_ADMIN_IDS=42",
                 "FOODBOT_TIMEZONE=UTC",
+                "SPLITWISE_API_KEY=old-splitwise-key",
+                "SPLITWISE_GROUP_ID=1001",
             ]
         ),
         encoding="utf-8",
@@ -182,6 +200,8 @@ def test_setup_dev_reset_env_ignores_existing_values(tmp_path: Path) -> None:
         "DATABASE_PATH": "foodbot.local.sqlite3",
         "TELEGRAM_ADMIN_IDS": "",
         "FOODBOT_TIMEZONE": "Europe/Belgrade",
+        "SPLITWISE_API_KEY": "",
+        "SPLITWISE_GROUP_ID": "",
     }
     assert "old-token" not in result.stdout
     assert "old-token" not in result.stderr

@@ -4,8 +4,10 @@ from dataclasses import dataclass
 
 from office_food_bot.models import (
     ApprovalKind,
+    PendingRegistration,
     RegisteredUser,
     RegistrationKind,
+    SplitwiseMember,
     TelegramProfile,
     UserStatus,
 )
@@ -29,12 +31,21 @@ class RegistrationService:
         self._users = users
         self.admin_ids = admin_ids
 
-    def register(self, profile: TelegramProfile, raw_display_name: str) -> RegistrationResult:
+    def register(
+        self,
+        profile: TelegramProfile,
+        raw_display_name: str,
+        splitwise_member: SplitwiseMember | None,
+    ) -> RegistrationResult:
         display_name = _clean_display_name(profile, raw_display_name)
         existing_user = self._users.get_by_telegram_id(profile.telegram_user_id)
         if existing_user is not None:
             if existing_user.status == UserStatus.PENDING:
-                user = self._users.update_registration(profile, display_name)
+                user = self._users.save_pending_registration(
+                    profile,
+                    display_name,
+                    splitwise_member,
+                )
                 return RegistrationResult(RegistrationKind.UPDATED_PENDING, user)
 
             self._users.refresh_telegram_profile(profile)
@@ -44,17 +55,19 @@ class RegistrationService:
                 raise RuntimeError(msg)
             return RegistrationResult(_registration_kind_for(refreshed_user), refreshed_user)
 
-        user = self._users.create_pending_user(profile, display_name)
+        user = self._users.save_pending_registration(profile, display_name, splitwise_member)
         return RegistrationResult(RegistrationKind.CREATED, user)
 
     def re_register(
         self,
         profile: TelegramProfile,
         raw_display_name: str,
+        splitwise_member: SplitwiseMember | None,
     ) -> RegisteredUser:
-        return self._users.update_registration(
+        return self._users.save_pending_registration(
             profile,
             self.display_name_from_input(profile, raw_display_name),
+            splitwise_member,
         )
 
     def display_name_from_input(self, profile: TelegramProfile, raw_display_name: str) -> str:
@@ -76,10 +89,13 @@ class RegistrationService:
     def can_approve(self, telegram_user_id: int) -> bool:
         return telegram_user_id in self.admin_ids or self._users.is_active_admin(telegram_user_id)
 
-    def list_pending_requests(self, requester_telegram_user_id: int) -> tuple[RegisteredUser, ...]:
+    def list_pending_requests(
+        self,
+        requester_telegram_user_id: int,
+    ) -> tuple[PendingRegistration, ...]:
         if not self.can_approve(requester_telegram_user_id):
             return ()
-        return self._users.list_pending_users()
+        return self._users.list_pending_registrations()
 
 
 def _registration_kind_for(user: RegisteredUser) -> RegistrationKind:

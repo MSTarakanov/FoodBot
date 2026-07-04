@@ -8,12 +8,38 @@ from aiogram.types import Message
 
 from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.models import RegisteredUser, RegistrationKind, TelegramProfile
+from office_food_bot.models import (
+    RegisteredUser,
+    RegistrationKind,
+    SplitwiseMember,
+    TelegramProfile,
+)
 from office_food_bot.services import BotServices
+from office_food_bot.services.splitwise import SplitwiseLookupKind
+
+NAME_PROMPT_TEXT = (
+    "Напиши имя одним сообщением. Например: Максим\n"
+    "Чтобы выйти из регистрации, отправь /cancel или запусти другую команду."
+)
+REGISTER_WITH_ARGUMENTS_TEXT = (
+    "Регистрация теперь пошаговая: имя нужно прислать отдельным сообщением.\n"
+    f"{NAME_PROMPT_TEXT}"
+)
+SPLITWISE_PROMPT_TEXT = (
+    "Пришли email аккаунта Splitwise, чтобы я проверил тебя в офисной группе.\n"
+    "Можно написать «Пропустить»."
+)
+SPLITWISE_SKIP_WARNING_TEXT = (
+    "Splitwise не указан. Когда /balance будет подключен, она не сможет учитывать тебя "
+    "без привязки."
+)
+SPLITWISE_SKIP_CHOICES = ("Пропустить",)
+SPLITWISE_SKIP_ANSWERS = {"пропустить", "skip"}
 
 
 class RegistrationFlow(StatesGroup):
     waiting_for_name = State()
+    waiting_for_splitwise_email = State()
     confirming_reregistration = State()
 
 
@@ -34,14 +60,11 @@ async def register_command(
 
     if not command.args:
         await state.set_state(RegistrationFlow.waiting_for_name)
-        await messenger.reply(
-            message,
-            "Напиши имя одним сообщением. Например: Максим\n"
-            "Чтобы выйти из регистрации, отправь /cancel или запусти другую команду.",
-        )
+        await messenger.reply(message, NAME_PROMPT_TEXT)
         return
 
-    await _complete_registration(state, message, bot, messenger, services, command.args)
+    await state.set_state(RegistrationFlow.waiting_for_name)
+    await messenger.reply(message, REGISTER_WITH_ARGUMENTS_TEXT)
 
 
 async def register_name_message(
@@ -56,8 +79,21 @@ async def register_name_message(
         await messenger.reply(message, "Имя не может быть пустым. Напиши имя, например: Максим")
         return
 
-    await state.clear()
-    await _complete_registration(state, message, bot, messenger, services, raw_display_name)
+    profile = telegram_profile_from_message(message)
+    if profile is None:
+        await messenger.reply(message, "Не вижу твой Telegram user id.")
+        return
+
+    display_name = services.registration.display_name_from_input(profile, raw_display_name)
+    await state.update_data(requested_display_name=display_name)
+    await state.set_state(RegistrationFlow.waiting_for_splitwise_email)
+    await messenger.reply_with_choices(
+        message,
+        f"Имя записал: {display_name}\n\n{SPLITWISE_PROMPT_TEXT}",
+        SPLITWISE_SKIP_CHOICES,
+        columns=1,
+        one_time_keyboard=False,
+    )
 
 
 async def cancel_registration_command(
@@ -82,6 +118,79 @@ async def registration_waiting_for_name_unknown_message(
     messenger: BotMessenger,
 ) -> None:
     await messenger.reply(message, "Напиши имя текстом. Например: Максим")
+
+
+async def register_splitwise_email_message(
+    message: Message,
+    bot: Bot,
+    messenger: BotMessenger,
+    services: BotServices,
+    state: FSMContext,
+) -> None:
+    raw_answer = message.text or ""
+    requested_display_name = await _requested_display_name_from_state(state, messenger, message)
+    if requested_display_name is None:
+        return
+
+    if _is_splitwise_skip(raw_answer):
+        await _complete_registration(
+            state,
+            message,
+            bot,
+            messenger,
+            services,
+            requested_display_name,
+            splitwise_member=None,
+        )
+        return
+
+    result = await services.splitwise.find_member_by_email(raw_answer)
+    if result.kind == SplitwiseLookupKind.FOUND and result.member is not None:
+        await _complete_registration(
+            state,
+            message,
+            bot,
+            messenger,
+            services,
+            requested_display_name,
+            splitwise_member=result.member,
+        )
+        return
+
+    if result.kind == SplitwiseLookupKind.NOT_FOUND:
+        await messenger.reply_with_choices(
+            message,
+            "Не нашел такой email в офисной Splitwise-группе.\n"
+            "Проверь email и пришли другой или нажми «Пропустить».\n\n"
+            f"{SPLITWISE_SKIP_WARNING_TEXT}",
+            SPLITWISE_SKIP_CHOICES,
+            columns=1,
+            one_time_keyboard=False,
+        )
+        return
+
+    await messenger.reply_with_choices(
+        message,
+        "Не смог проверить Splitwise прямо сейчас.\n"
+        "Можно попробовать другой email позже или нажать «Пропустить».\n\n"
+        f"{SPLITWISE_SKIP_WARNING_TEXT}",
+        SPLITWISE_SKIP_CHOICES,
+        columns=1,
+        one_time_keyboard=False,
+    )
+
+
+async def registration_waiting_for_splitwise_unknown_message(
+    message: Message,
+    messenger: BotMessenger,
+) -> None:
+    await messenger.reply_with_choices(
+        message,
+        "Пришли email текстом или нажми «Пропустить».",
+        SPLITWISE_SKIP_CHOICES,
+        columns=1,
+        one_time_keyboard=False,
+    )
 
 
 async def confirm_reregistration_message(
@@ -125,11 +234,15 @@ async def confirm_reregistration_message(
         )
         return
 
-    user = services.registration.re_register(profile, requested_display_name)
+    splitwise_member = _splitwise_member_from_state_data(data)
+    user = services.registration.re_register(profile, requested_display_name, splitwise_member)
     await state.clear()
     await messenger.reply(
         message,
-        "Заявка на перерегистрацию отправлена. Жду аппрув.",
+        _registration_reply_text(
+            "Заявка на перерегистрацию отправлена. Жду аппрув.",
+            splitwise_member,
+        ),
         reply_markup=messenger.remove_keyboard(),
     )
     await _notify_admins_about_registration(
@@ -138,6 +251,7 @@ async def confirm_reregistration_message(
         services,
         user,
         title="Перерегистрация:",
+        splitwise_member=splitwise_member,
     )
 
 
@@ -159,33 +273,50 @@ async def _complete_registration(
     messenger: BotMessenger,
     services: BotServices,
     raw_display_name: str,
+    *,
+    splitwise_member: SplitwiseMember | None,
 ) -> None:
     profile = telegram_profile_from_message(message)
     if profile is None:
         await messenger.reply(message, "Не вижу твой Telegram user id.")
         return
 
-    result = services.registration.register(profile, raw_display_name)
+    result = services.registration.register(profile, raw_display_name, splitwise_member)
 
     if result.kind == RegistrationKind.CREATED:
-        await messenger.reply(message, "Заявка на регистрацию отправлена. Жду аппрув.")
+        await state.clear()
+        await messenger.reply(
+            message,
+            _registration_reply_text(
+                "Заявка на регистрацию отправлена. Жду аппрув.",
+                splitwise_member,
+            ),
+            reply_markup=messenger.remove_keyboard(),
+        )
         await _notify_admins_about_registration(
             bot,
             messenger,
             services,
             result.user,
             title="Новая регистрация:",
+            splitwise_member=splitwise_member,
         )
         return
 
     if result.kind == RegistrationKind.UPDATED_PENDING:
-        await messenger.reply(message, "Заявка обновлена. Жду аппрув.")
+        await state.clear()
+        await messenger.reply(
+            message,
+            _registration_reply_text("Заявка обновлена. Жду аппрув.", splitwise_member),
+            reply_markup=messenger.remove_keyboard(),
+        )
         await _notify_admins_about_registration(
             bot,
             messenger,
             services,
             result.user,
             title="Обновленная регистрация:",
+            splitwise_member=splitwise_member,
         )
         return
 
@@ -198,13 +329,16 @@ async def _complete_registration(
             profile,
             result.user,
             raw_display_name,
+            splitwise_member,
         )
         return
 
     if result.kind == RegistrationKind.ALREADY_PENDING:
+        await state.clear()
         await messenger.reply(message, f"Заявка уже ждет аппрува, {result.user.display_name}")
         return
 
+    await state.clear()
     await messenger.reply(message, f"Регистрация сейчас недоступна, {result.user.display_name}")
 
 
@@ -215,6 +349,7 @@ async def _notify_admins_about_registration(
     registered_user: RegisteredUser,
     *,
     title: str,
+    splitwise_member: SplitwiseMember | None,
 ) -> None:
     for admin_id in services.registration.admin_ids:
         await messenger.try_send(
@@ -223,6 +358,7 @@ async def _notify_admins_about_registration(
             f"{title}\n"
             f"Имя: {registered_user.display_name}\n"
             f"Telegram ID: {registered_user.telegram_user_id}\n"
+            f"{_splitwise_admin_text(splitwise_member)}\n"
             f"Аппрув: /approve {registered_user.telegram_user_id}",
         )
 
@@ -235,13 +371,20 @@ async def _ask_reregistration_confirmation(
     profile: TelegramProfile,
     user: RegisteredUser,
     raw_display_name: str,
+    splitwise_member: SplitwiseMember | None,
 ) -> None:
     requested_display_name = services.registration.display_name_from_input(
         profile,
         raw_display_name,
     )
     await state.set_state(RegistrationFlow.confirming_reregistration)
-    await state.update_data(requested_display_name=requested_display_name)
+    await state.update_data(
+        requested_display_name=requested_display_name,
+        requested_splitwise_user_id=_splitwise_user_id(splitwise_member),
+        requested_splitwise_first_name=_splitwise_first_name(splitwise_member),
+        requested_splitwise_last_name=_splitwise_last_name(splitwise_member),
+        requested_splitwise_email=_splitwise_email(splitwise_member),
+    )
     await messenger.reply_with_choices(
         message,
         "Вы уже зарегистрированы.\n"
@@ -252,6 +395,7 @@ async def _ask_reregistration_confirmation(
         "\n"
         "Новые данные:\n"
         f"Имя: {requested_display_name}\n"
+        f"{_splitwise_admin_text(splitwise_member)}\n"
         "\n"
         "Перерегистрировать вас?",
         ["Да", "Нет"],
@@ -262,3 +406,81 @@ def _username_text(username: str | None) -> str:
     if username is None:
         return "не указан"
     return f"@{username}"
+
+
+async def _requested_display_name_from_state(
+    state: FSMContext,
+    messenger: BotMessenger,
+    message: Message,
+) -> str | None:
+    data = await state.get_data()
+    requested_display_name = data.get("requested_display_name")
+    if isinstance(requested_display_name, str):
+        return requested_display_name
+
+    await state.clear()
+    await messenger.reply(
+        message,
+        "Не нашел имя для регистрации. Запусти /register заново.",
+        reply_markup=messenger.remove_keyboard(),
+    )
+    return None
+
+
+def _registration_reply_text(base_text: str, splitwise_member: SplitwiseMember | None) -> str:
+    if splitwise_member is not None:
+        return base_text
+    return f"{base_text}\n\n{SPLITWISE_SKIP_WARNING_TEXT}"
+
+
+def _splitwise_admin_text(splitwise_member: SplitwiseMember | None) -> str:
+    if splitwise_member is None:
+        return "Splitwise: не указан"
+    return f"Splitwise: {splitwise_member.email} (ID {splitwise_member.splitwise_user_id})"
+
+
+def _is_splitwise_skip(raw_answer: str) -> bool:
+    return raw_answer.strip().lower() in SPLITWISE_SKIP_ANSWERS
+
+
+def _splitwise_user_id(splitwise_member: SplitwiseMember | None) -> int | None:
+    if splitwise_member is None:
+        return None
+    return splitwise_member.splitwise_user_id
+
+
+def _splitwise_first_name(splitwise_member: SplitwiseMember | None) -> str | None:
+    if splitwise_member is None:
+        return None
+    return splitwise_member.first_name
+
+
+def _splitwise_last_name(splitwise_member: SplitwiseMember | None) -> str | None:
+    if splitwise_member is None:
+        return None
+    return splitwise_member.last_name
+
+
+def _splitwise_email(splitwise_member: SplitwiseMember | None) -> str | None:
+    if splitwise_member is None:
+        return None
+    return splitwise_member.email
+
+
+def _splitwise_member_from_state_data(data: dict[str, object]) -> SplitwiseMember | None:
+    raw_user_id = data.get("requested_splitwise_user_id")
+    raw_email = data.get("requested_splitwise_email")
+    if not isinstance(raw_user_id, int) or not isinstance(raw_email, str):
+        return None
+
+    raw_first_name = data.get("requested_splitwise_first_name")
+    raw_last_name = data.get("requested_splitwise_last_name")
+    first_name = raw_first_name if isinstance(raw_first_name, str) else ""
+    last_name = raw_last_name if isinstance(raw_last_name, str) else None
+
+    return SplitwiseMember(
+        splitwise_user_id=raw_user_id,
+        first_name=first_name,
+        last_name=last_name,
+        email=raw_email,
+    )

@@ -6,14 +6,25 @@ from office_food_bot.database import Database
 from office_food_bot.database.user_queries import (
     APPROVE_USER_BY_TELEGRAM_ID_SQL,
     COUNT_SPLITWISE_USERS_SQL,
+    DELETE_SPLITWISE_USER_BY_USER_ID_SQL,
     GET_USER_BY_TELEGRAM_ID_SQL,
+    INSERT_SPLITWISE_USER_SQL,
     INSERT_TELEGRAM_ACCOUNT_SQL,
     INSERT_USER_SQL,
+    LIST_PENDING_REGISTRATIONS_SQL,
     LIST_PENDING_USERS_SQL,
     UPDATE_TELEGRAM_PROFILE_SQL,
     UPDATE_USER_REGISTRATION_BY_TELEGRAM_ID_SQL,
 )
-from office_food_bot.models import RegisteredUser, TelegramProfile, UserRole, UserStatus
+from office_food_bot.models import (
+    PendingRegistration,
+    RegisteredUser,
+    SplitwiseConnection,
+    SplitwiseMember,
+    TelegramProfile,
+    UserRole,
+    UserStatus,
+)
 
 
 class UserRepository:
@@ -35,6 +46,32 @@ class UserRepository:
             (UserStatus.PENDING.value,),
         ).fetchall()
         return tuple(_registered_user_from_row(row) for row in rows)
+
+    def list_pending_registrations(self) -> tuple[PendingRegistration, ...]:
+        rows = self._database.connection.execute(
+            LIST_PENDING_REGISTRATIONS_SQL,
+            (UserStatus.PENDING.value,),
+        ).fetchall()
+        return tuple(_pending_registration_from_row(row) for row in rows)
+
+    def save_pending_registration(
+        self,
+        profile: TelegramProfile,
+        display_name: str,
+        splitwise_member: SplitwiseMember | None,
+    ) -> RegisteredUser:
+        existing_user = self.get_by_telegram_id(profile.telegram_user_id)
+        if existing_user is None:
+            user = self.create_pending_user(profile, display_name)
+        else:
+            user = self.update_registration(profile, display_name)
+
+        self._replace_registration_splitwise_user(user.id, splitwise_member)
+        refreshed_user = self.get_by_telegram_id(profile.telegram_user_id)
+        if refreshed_user is None:
+            msg = "Saved registration user was not found"
+            raise RuntimeError(msg)
+        return refreshed_user
 
     def create_pending_user(
         self,
@@ -134,6 +171,27 @@ class UserRepository:
             return 0
         return int(count[0])
 
+    def _replace_registration_splitwise_user(
+        self,
+        user_id: int,
+        splitwise_member: SplitwiseMember | None,
+    ) -> None:
+        with self._database.connection:
+            self._database.connection.execute(
+                DELETE_SPLITWISE_USER_BY_USER_ID_SQL,
+                (user_id,),
+            )
+            if splitwise_member is None:
+                return
+            self._database.connection.execute(
+                INSERT_SPLITWISE_USER_SQL,
+                (
+                    splitwise_member.splitwise_user_id,
+                    user_id,
+                    splitwise_member.email,
+                ),
+            )
+
 
 def normalize_display_name(raw_display_name: str) -> str:
     return " ".join(raw_display_name.split())
@@ -149,6 +207,19 @@ def _registered_user_from_row(row: sqlite3.Row) -> RegisteredUser:
         username=_optional_str(row["username"]),
         first_name=_optional_str(row["first_name"]),
         last_name=_optional_str(row["last_name"]),
+    )
+
+
+def _pending_registration_from_row(row: sqlite3.Row) -> PendingRegistration:
+    splitwise: SplitwiseConnection | None = None
+    if row["splitwise_user_id"] is not None:
+        splitwise = SplitwiseConnection(
+            splitwise_user_id=int(row["splitwise_user_id"]),
+            email=str(row["splitwise_email"]),
+        )
+    return PendingRegistration(
+        user=_registered_user_from_row(row),
+        splitwise=splitwise,
     )
 
 

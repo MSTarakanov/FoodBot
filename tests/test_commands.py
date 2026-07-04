@@ -25,10 +25,12 @@ from office_food_bot.commands.definitions import (
 )
 from office_food_bot.config import Settings
 from office_food_bot.database import Database
-from office_food_bot.models import UserStatus
+from office_food_bot.models import SplitwiseMember, UserStatus
 from office_food_bot.repositories import UserRepository
+from office_food_bot.services.splitwise import SplitwiseUnavailableError
 
 DEFAULT_ADMIN_IDS = frozenset({7})
+DEFAULT_SPLITWISE_GROUP_ID = 55
 
 
 @dataclass(frozen=True)
@@ -110,6 +112,24 @@ class AdminChatNotFoundCommandMenuClient(RecordingCommandMenuClient):
         return await super().set_my_commands(commands, scope)
 
 
+class FakeSplitwiseClient:
+    def __init__(
+        self,
+        members: tuple[SplitwiseMember, ...] = (),
+        *,
+        unavailable: bool = False,
+    ) -> None:
+        self._members = members
+        self._unavailable = unavailable
+
+    async def group_members(self, group_id: int) -> tuple[SplitwiseMember, ...]:
+        if group_id != DEFAULT_SPLITWISE_GROUP_ID:
+            raise AssertionError(f"Unexpected Splitwise group id: {group_id}")
+        if self._unavailable:
+            raise SplitwiseUnavailableError("Splitwise is unavailable")
+        return self._members
+
+
 def _send_message_response(method: SendMessage, message_id: int) -> Message:
     chat_id = method.chat_id
     if not isinstance(chat_id, int):
@@ -157,23 +177,70 @@ def make_database(tmp_path: Path) -> Database:
 def make_dispatcher(
     database: Database,
     admin_ids: frozenset[int] = DEFAULT_ADMIN_IDS,
+    splitwise_members: tuple[SplitwiseMember, ...] = (),
+    splitwise_unavailable: bool = False,
 ) -> Dispatcher:
     settings = Settings(
         telegram_bot_token="123456:test-token",
         database_path=database.path,
         telegram_admin_ids=admin_ids,
         timezone="Europe/Belgrade",
+        splitwise_api_key=None,
+        splitwise_group_id=DEFAULT_SPLITWISE_GROUP_ID,
     )
     services = create_services(
         database,
         settings,
         clock=lambda: datetime(2026, 6, 30, 12, 15, tzinfo=ZoneInfo("Europe/Belgrade")),
+        splitwise_client=FakeSplitwiseClient(
+            splitwise_members,
+            unavailable=splitwise_unavailable,
+        ),
     )
     return create_dispatcher(services)
 
 
 def sent_texts(session: RecordingSession) -> list[str]:
     return [message.text for message in session.sent_messages]
+
+
+def make_splitwise_member(
+    splitwise_user_id: int = 1001,
+    email: str = "max@example.com",
+) -> SplitwiseMember:
+    return SplitwiseMember(
+        splitwise_user_id=splitwise_user_id,
+        first_name="Max",
+        last_name=None,
+        email=email,
+    )
+
+
+async def submit_registration(
+    dispatcher: Dispatcher,
+    bot: Bot,
+    session: RecordingSession,
+    *,
+    user_id: int = 42,
+    first_name: str = "Misha",
+    username: str | None = "misha",
+    display_name: str = "Максим",
+    splitwise_answer: str = "Пропустить",
+) -> None:
+    await dispatcher.feed_update(
+        bot,
+        make_update("/register", user_id=user_id, first_name=first_name, username=username),
+    )
+    session.clear_messages()
+    await dispatcher.feed_update(
+        bot,
+        make_update(display_name, user_id=user_id, first_name=first_name, username=username),
+    )
+    session.clear_messages()
+    await dispatcher.feed_update(
+        bot,
+        make_update(splitwise_answer, user_id=user_id, first_name=first_name, username=username),
+    )
 
 
 @pytest.mark.parametrize(
@@ -256,20 +323,45 @@ async def test_register_creates_pending_user_and_notifies_admin(tmp_path: Path) 
     database = make_database(tmp_path)
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
-    dispatcher = make_dispatcher(database)
+    splitwise_member = make_splitwise_member()
+    dispatcher = make_dispatcher(database, splitwise_members=(splitwise_member,))
 
-    await dispatcher.feed_update(bot, make_update("/register Максим"))
+    await dispatcher.feed_update(bot, make_update("/register"))
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Максим"))
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("MAX@example.com"))
 
     texts = sent_texts(session)
     assert texts[0] == "Заявка на регистрацию отправлена. Жду аппрув."
     assert "Новая регистрация" in texts[1]
     assert "Имя: Максим" in texts[1]
+    assert "Splitwise: max@example.com (ID 1001)" in texts[1]
     assert "Аппрув: /approve 42" in texts[1]
 
     user = UserRepository(database).get_by_telegram_id(42)
     assert user is not None
     assert user.display_name == "Максим"
     assert user.status == UserStatus.PENDING
+    pending_registrations = UserRepository(database).list_pending_registrations()
+    assert pending_registrations[0].splitwise is not None
+    assert pending_registrations[0].splitwise.email == "max@example.com"
+
+
+async def test_register_with_argument_starts_step_by_step_flow(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register Максим"))
+
+    assert sent_texts(session) == [
+        "Регистрация теперь пошаговая: имя нужно прислать отдельным сообщением.\n"
+        "Напиши имя одним сообщением. Например: Максим\n"
+        "Чтобы выйти из регистрации, отправь /cancel или запусти другую команду."
+    ]
+    assert UserRepository(database).get_by_telegram_id(42) is None
 
 
 async def test_register_flow_creates_pending_user_from_next_message(tmp_path: Path) -> None:
@@ -289,10 +381,24 @@ async def test_register_flow_creates_pending_user_from_next_message(tmp_path: Pa
     session.clear_messages()
     await dispatcher.feed_update(bot, make_update("Максим"))
 
+    assert sent_texts(session) == [
+        "Имя записал: Максим\n\n"
+        "Пришли email аккаунта Splitwise, чтобы я проверил тебя в офисной группе.\n"
+        "Можно написать «Пропустить»."
+    ]
+    assert UserRepository(database).get_by_telegram_id(42) is None
+
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Пропустить"))
+
     texts = sent_texts(session)
-    assert texts[0] == "Заявка на регистрацию отправлена. Жду аппрув."
+    assert texts[0] == (
+        "Заявка на регистрацию отправлена. Жду аппрув.\n\n"
+        "Splitwise не указан. Когда /balance будет подключен, она не сможет учитывать тебя "
+        "без привязки."
+    )
     assert "Новая регистрация" in texts[1]
-    assert "Имя: Максим" in texts[1]
+    assert "Splitwise: не указан" in texts[1]
 
     user = UserRepository(database).get_by_telegram_id(42)
     assert user is not None
@@ -317,10 +423,78 @@ async def test_register_flow_keeps_user_in_state_until_valid_name(tmp_path: Path
     session.clear_messages()
     await dispatcher.feed_update(bot, make_update("Максим"))
 
-    assert sent_texts(session)[0] == "Заявка на регистрацию отправлена. Жду аппрув."
+    assert sent_texts(session) == [
+        "Имя записал: Максим\n\n"
+        "Пришли email аккаунта Splitwise, чтобы я проверил тебя в офисной группе.\n"
+        "Можно написать «Пропустить»."
+    ]
+    assert UserRepository(database).get_by_telegram_id(42) is None
+
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Пропустить"))
+
+    assert sent_texts(session)[0].startswith("Заявка на регистрацию отправлена.")
     user = UserRepository(database).get_by_telegram_id(42)
     assert user is not None
     assert user.display_name == "Максим"
+
+
+async def test_register_flow_keeps_user_in_splitwise_step_when_email_not_found(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register"))
+    await dispatcher.feed_update(bot, make_update("Максим"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("missing@example.com"))
+
+    assert sent_texts(session) == [
+        "Не нашел такой email в офисной Splitwise-группе.\n"
+        "Проверь email и пришли другой или нажми «Пропустить».\n\n"
+        "Splitwise не указан. Когда /balance будет подключен, она не сможет учитывать тебя "
+        "без привязки."
+    ]
+    assert UserRepository(database).get_by_telegram_id(42) is None
+
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Пропустить"))
+
+    assert sent_texts(session)[0].startswith("Заявка на регистрацию отправлена.")
+    assert UserRepository(database).get_by_telegram_id(42) is not None
+
+
+async def test_register_flow_keeps_user_in_splitwise_step_when_check_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database, splitwise_unavailable=True)
+
+    await dispatcher.feed_update(bot, make_update("/register"))
+    await dispatcher.feed_update(bot, make_update("Максим"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("max@example.com"))
+
+    assert sent_texts(session) == [
+        "Не смог проверить Splitwise прямо сейчас.\n"
+        "Можно попробовать другой email позже или нажать «Пропустить».\n\n"
+        "Splitwise не указан. Когда /balance будет подключен, она не сможет учитывать тебя "
+        "без привязки."
+    ]
+    assert UserRepository(database).get_by_telegram_id(42) is None
+
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Пропустить"))
+
+    assert sent_texts(session)[0].startswith("Заявка на регистрацию отправлена.")
+    assert UserRepository(database).get_by_telegram_id(42) is not None
 
 
 async def test_command_interrupts_registration_flow(tmp_path: Path) -> None:
@@ -363,6 +537,29 @@ async def test_cancel_interrupts_registration_flow(tmp_path: Path) -> None:
     assert UserRepository(database).get_by_telegram_id(42) is None
 
 
+async def test_cancel_interrupts_registration_flow_from_splitwise_step(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register"))
+    await dispatcher.feed_update(bot, make_update("Максим"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/cancel"))
+
+    assert sent_texts(session) == ["Текущий сценарий отменен."]
+
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Пропустить"))
+
+    assert sent_texts(session) == []
+    assert UserRepository(database).get_by_telegram_id(42) is None
+
+
 async def test_cancel_without_active_flow_replies_with_noop(tmp_path: Path) -> None:
     database = make_database(tmp_path)
     session = RecordingSession()
@@ -380,12 +577,16 @@ async def test_register_notifies_admin_even_when_admin_registers(tmp_path: Path)
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
-    await dispatcher.feed_update(
+    await submit_registration(
+        dispatcher,
         bot,
-        make_update("/register Максим", user_id=7, first_name="Admin", username="admin"),
+        session,
+        user_id=7,
+        first_name="Admin",
+        username="admin",
     )
 
-    assert sent_texts(session)[0] == "Заявка на регистрацию отправлена. Жду аппрув."
+    assert sent_texts(session)[0].startswith("Заявка на регистрацию отправлена.")
     assert "Новая регистрация" in sent_texts(session)[1]
     assert "Имя: Максим" in sent_texts(session)[1]
     assert "Аппрув: /approve 7" in sent_texts(session)[1]
@@ -395,16 +596,22 @@ async def test_register_updates_existing_pending_request(tmp_path: Path) -> None
     database = make_database(tmp_path)
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
-    dispatcher = make_dispatcher(database)
+    dispatcher = make_dispatcher(database, splitwise_members=(make_splitwise_member(),))
 
-    await dispatcher.feed_update(bot, make_update("/register Максим"))
+    await submit_registration(
+        dispatcher,
+        bot,
+        session,
+        splitwise_answer="max@example.com",
+    )
     session.clear_messages()
-    await dispatcher.feed_update(bot, make_update("/register Другое"))
+    await submit_registration(dispatcher, bot, session, display_name="Другое")
 
     texts = sent_texts(session)
-    assert texts[0] == "Заявка обновлена. Жду аппрув."
+    assert texts[0].startswith("Заявка обновлена. Жду аппрув.")
     assert "Обновленная регистрация" in texts[1]
     assert "Имя: Другое" in texts[1]
+    assert "Splitwise: не указан" in texts[1]
 
     user = UserRepository(database).get_by_telegram_id(42)
     assert user is not None
@@ -415,7 +622,7 @@ async def test_register_updates_existing_pending_request(tmp_path: Path) -> None
 
     assert sent_texts(session) == [
         "Заявки на регистрацию:\n"
-        "1. Другое (@misha) - Telegram ID 42 - /approve 42"
+        "1. Другое (@misha) - Telegram ID 42 - Splitwise: не указан - /approve 42"
     ]
 
 
@@ -427,11 +634,11 @@ async def test_register_existing_active_user_asks_for_reregistration_confirmatio
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
-    await dispatcher.feed_update(bot, make_update("/register Максим"))
+    await submit_registration(dispatcher, bot, session)
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
     session.clear_messages()
 
-    await dispatcher.feed_update(bot, make_update("/register Другое"))
+    await submit_registration(dispatcher, bot, session, display_name="Другое")
 
     assert sent_texts(session) == [
         "Вы уже зарегистрированы.\n"
@@ -442,6 +649,7 @@ async def test_register_existing_active_user_asks_for_reregistration_confirmatio
         "\n"
         "Новые данные:\n"
         "Имя: Другое\n"
+        "Splitwise: не указан\n"
         "\n"
         "Перерегистрировать вас?"
     ]
@@ -461,11 +669,11 @@ async def test_register_existing_active_user_can_confirm_reregistration(
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
-    await dispatcher.feed_update(bot, make_update("/register Максим"))
+    await submit_registration(dispatcher, bot, session)
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
     session.clear_messages()
 
-    await dispatcher.feed_update(bot, make_update("/register Другое"))
+    await submit_registration(dispatcher, bot, session, display_name="Другое")
     session.clear_messages()
     await dispatcher.feed_update(
         bot,
@@ -473,9 +681,14 @@ async def test_register_existing_active_user_can_confirm_reregistration(
     )
 
     texts = sent_texts(session)
-    assert texts[0] == "Заявка на перерегистрацию отправлена. Жду аппрув."
+    assert texts[0] == (
+        "Заявка на перерегистрацию отправлена. Жду аппрув.\n\n"
+        "Splitwise не указан. Когда /balance будет подключен, она не сможет учитывать тебя "
+        "без привязки."
+    )
     assert "Перерегистрация" in texts[1]
     assert "Имя: Другое" in texts[1]
+    assert "Splitwise: не указан" in texts[1]
     assert "Аппрув: /approve 42" in texts[1]
     assert session.sent_messages[0].reply_markup is not None
     assert session.sent_messages[0].reply_markup.remove_keyboard is True
@@ -493,7 +706,7 @@ async def test_register_existing_active_user_can_confirm_reregistration(
 
     assert sent_texts(session) == [
         "Заявки на регистрацию:\n"
-        "1. Другое (@new_username) - Telegram ID 42 - /approve 42"
+        "1. Другое (@new_username) - Telegram ID 42 - Splitwise: не указан - /approve 42"
     ]
 
 
@@ -505,11 +718,11 @@ async def test_register_existing_active_user_can_decline_reregistration(
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
-    await dispatcher.feed_update(bot, make_update("/register Максим"))
+    await submit_registration(dispatcher, bot, session)
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
     session.clear_messages()
 
-    await dispatcher.feed_update(bot, make_update("/register Другое"))
+    await submit_registration(dispatcher, bot, session, display_name="Другое")
     session.clear_messages()
     await dispatcher.feed_update(bot, make_update("Нет"))
 
@@ -525,7 +738,7 @@ async def test_admin_can_approve_pending_user(tmp_path: Path) -> None:
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
-    await dispatcher.feed_update(bot, make_update("/register Максим"))
+    await submit_registration(dispatcher, bot, session)
     session.clear_messages()
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
 
@@ -545,7 +758,7 @@ async def test_non_admin_cannot_approve(tmp_path: Path) -> None:
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
-    await dispatcher.feed_update(bot, make_update("/register Максим"))
+    await submit_registration(dispatcher, bot, session)
     session.clear_messages()
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=99, first_name="NotAdmin"))
 
@@ -558,10 +771,15 @@ async def test_admin_can_list_pending_registration_requests(tmp_path: Path) -> N
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
-    await dispatcher.feed_update(bot, make_update("/register Максим"))
-    await dispatcher.feed_update(
+    await submit_registration(dispatcher, bot, session)
+    await submit_registration(
+        dispatcher,
         bot,
-        make_update("/register Оля", user_id=43, first_name="Olya", username="olya"),
+        session,
+        user_id=43,
+        first_name="Olya",
+        username="olya",
+        display_name="Оля",
     )
     session.clear_messages()
 
@@ -569,8 +787,8 @@ async def test_admin_can_list_pending_registration_requests(tmp_path: Path) -> N
 
     assert sent_texts(session) == [
         "Заявки на регистрацию:\n"
-        "1. Максим (@misha) - Telegram ID 42 - /approve 42\n"
-        "2. Оля (@olya) - Telegram ID 43 - /approve 43"
+        "1. Максим (@misha) - Telegram ID 42 - Splitwise: не указан - /approve 42\n"
+        "2. Оля (@olya) - Telegram ID 43 - Splitwise: не указан - /approve 43"
     ]
 
 
@@ -602,7 +820,7 @@ async def test_meta_uses_registered_display_name(tmp_path: Path) -> None:
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
-    await dispatcher.feed_update(bot, make_update("/register Максим"))
+    await submit_registration(dispatcher, bot, session)
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
     session.clear_messages()
 
@@ -617,8 +835,8 @@ async def test_registration_happy_path_allows_meta_after_approval(tmp_path: Path
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
-    await dispatcher.feed_update(bot, make_update("/register Максим"))
-    assert sent_texts(session)[0] == "Заявка на регистрацию отправлена. Жду аппрув."
+    await submit_registration(dispatcher, bot, session)
+    assert sent_texts(session)[0].startswith("Заявка на регистрацию отправлена. Жду аппрув.")
     assert "Аппрув: /approve 42" in sent_texts(session)[1]
 
     session.clear_messages()
@@ -639,7 +857,7 @@ async def test_meta_requires_approved_registration(tmp_path: Path) -> None:
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
-    await dispatcher.feed_update(bot, make_update("/register Максим"))
+    await submit_registration(dispatcher, bot, session)
     session.clear_messages()
 
     await dispatcher.feed_update(bot, make_update("/meta 25"))
@@ -653,7 +871,7 @@ async def test_balance_requires_active_user_and_has_placeholder(tmp_path: Path) 
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
-    await dispatcher.feed_update(bot, make_update("/register Максим"))
+    await submit_registration(dispatcher, bot, session)
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
     session.clear_messages()
 

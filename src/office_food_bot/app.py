@@ -9,14 +9,24 @@ from office_food_bot.config import Settings
 from office_food_bot.database import Database
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices, build_services
+from office_food_bot.services.splitwise import SplitwiseGroupClient
 
 
 def create_services(
     database: Database,
     settings: Settings,
     clock: Callable[[], datetime] | None = None,
+    splitwise_client: SplitwiseGroupClient | None = None,
 ) -> BotServices:
-    return build_services(database, settings.telegram_admin_ids, settings.timezone, clock)
+    return build_services(
+        database,
+        settings.telegram_admin_ids,
+        settings.timezone,
+        settings.splitwise_api_key,
+        settings.splitwise_group_id,
+        clock,
+        splitwise_client,
+    )
 
 
 def create_dispatcher(services: BotServices) -> Dispatcher:
