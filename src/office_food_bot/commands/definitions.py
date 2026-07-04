@@ -31,6 +31,7 @@ COMMANDS: tuple[CommandDefinition, ...] = (
     ),
     CommandDefinition("meta", "сообщить, через сколько минут придешь", "/meta 25"),
     CommandDefinition("balance", "показать баланс Splitwise", "/balance"),
+    CommandDefinition("lunch", "создать опрос про обед", "/lunch"),
 )
 
 START_TEXT = "Привет! Я офисный бот про еду. Напиши /help, чтобы увидеть команды."
