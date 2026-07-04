@@ -62,14 +62,13 @@ async def register_command(
 
     if not command.args:
         await state.set_state(RegistrationFlow.waiting_for_name)
-        await _reply_with_name_prompt(message, messenger, services, profile, NAME_PROMPT_TEXT)
+        await _reply_with_name_prompt(message, messenger, profile, NAME_PROMPT_TEXT)
         return
 
     await state.set_state(RegistrationFlow.waiting_for_name)
     await _reply_with_name_prompt(
         message,
         messenger,
-        services,
         profile,
         REGISTER_WITH_ARGUMENTS_TEXT,
     )
@@ -78,11 +77,10 @@ async def register_command(
 async def _reply_with_name_prompt(
     message: Message,
     messenger: BotMessenger,
-    services: BotServices,
     profile: TelegramProfile,
     text: str,
 ) -> None:
-    suggested_display_name = services.registration.display_name_from_input(profile, "")
+    suggested_display_name = " ".join(profile.first_name.split())
     await messenger.reply_with_choices(
         message,
         text,
@@ -364,7 +362,7 @@ async def _complete_registration(
             await state.clear()
             await messenger.reply(
                 message,
-                "Данные не изменились. Перерегистрацию не запускаю.",
+                "Ваши данные не изменились. Перерегистрацию не запускаю.",
                 reply_markup=messenger.remove_keyboard(),
             )
             return

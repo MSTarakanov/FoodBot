@@ -427,6 +427,17 @@ async def test_register_flow_creates_pending_user_from_next_message(tmp_path: Pa
     assert user.status == UserStatus.PENDING
 
 
+async def test_register_name_button_uses_telegram_first_name_only(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register", last_name="Tarakanov"))
+
+    assert keyboard_texts(session.sent_messages[0]) == [["Misha"]]
+
+
 async def test_register_flow_keeps_user_in_state_until_valid_name(tmp_path: Path) -> None:
     database = make_database(tmp_path)
     session = RecordingSession()
@@ -718,7 +729,7 @@ async def test_register_existing_active_user_with_same_data_does_not_reregister(
 
     await submit_registration(dispatcher, bot, session)
 
-    assert sent_texts(session) == ["Данные не изменились. Перерегистрацию не запускаю."]
+    assert sent_texts(session) == ["Ваши данные не изменились. Перерегистрацию не запускаю."]
     user = UserRepository(database).get_by_telegram_id(42)
     assert user is not None
     assert user.status == UserStatus.ACTIVE
