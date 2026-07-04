@@ -7,6 +7,7 @@ from office_food_bot.database.user_queries import (
     APPROVE_USER_BY_TELEGRAM_ID_SQL,
     COUNT_SPLITWISE_USERS_SQL,
     DELETE_SPLITWISE_USER_BY_USER_ID_SQL,
+    GET_REGISTRATION_DETAILS_BY_TELEGRAM_ID_SQL,
     GET_USER_BY_TELEGRAM_ID_SQL,
     INSERT_SPLITWISE_USER_SQL,
     INSERT_TELEGRAM_ACCOUNT_SQL,
@@ -19,6 +20,7 @@ from office_food_bot.database.user_queries import (
 from office_food_bot.models import (
     PendingRegistration,
     RegisteredUser,
+    RegistrationDetails,
     SplitwiseConnection,
     SplitwiseMember,
     TelegramProfile,
@@ -53,6 +55,18 @@ class UserRepository:
             (UserStatus.PENDING.value,),
         ).fetchall()
         return tuple(_pending_registration_from_row(row) for row in rows)
+
+    def get_registration_details_by_telegram_id(
+        self,
+        telegram_user_id: int,
+    ) -> RegistrationDetails | None:
+        row = self._database.connection.execute(
+            GET_REGISTRATION_DETAILS_BY_TELEGRAM_ID_SQL,
+            (telegram_user_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return _registration_details_from_row(row)
 
     def save_pending_registration(
         self,
@@ -211,15 +225,25 @@ def _registered_user_from_row(row: sqlite3.Row) -> RegisteredUser:
 
 
 def _pending_registration_from_row(row: sqlite3.Row) -> PendingRegistration:
-    splitwise: SplitwiseConnection | None = None
-    if row["splitwise_user_id"] is not None:
-        splitwise = SplitwiseConnection(
-            splitwise_user_id=int(row["splitwise_user_id"]),
-            email=str(row["splitwise_email"]),
-        )
     return PendingRegistration(
         user=_registered_user_from_row(row),
-        splitwise=splitwise,
+        splitwise=_splitwise_connection_from_row(row),
+    )
+
+
+def _registration_details_from_row(row: sqlite3.Row) -> RegistrationDetails:
+    return RegistrationDetails(
+        display_name=str(row["display_name"]),
+        splitwise=_splitwise_connection_from_row(row),
+    )
+
+
+def _splitwise_connection_from_row(row: sqlite3.Row) -> SplitwiseConnection | None:
+    if row["splitwise_user_id"] is None:
+        return None
+    return SplitwiseConnection(
+        splitwise_user_id=int(row["splitwise_user_id"]),
+        email=str(row["splitwise_email"]),
     )
 
 

@@ -12,7 +12,15 @@ from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import SetMyCommands, TelegramMethod
 from aiogram.methods.send_message import SendMessage
-from aiogram.types import BotCommand, BotCommandScopeChat, Chat, Message, Update, User
+from aiogram.types import (
+    BotCommand,
+    BotCommandScopeChat,
+    Chat,
+    Message,
+    ReplyKeyboardMarkup,
+    Update,
+    User,
+)
 
 from office_food_bot.app import create_dispatcher, create_services
 from office_food_bot.commands import setup_bot_commands
@@ -206,6 +214,12 @@ def sent_texts(session: RecordingSession) -> list[str]:
     return [message.text for message in session.sent_messages]
 
 
+def keyboard_texts(message: SendMessage) -> list[list[str]]:
+    reply_markup = message.reply_markup
+    assert isinstance(reply_markup, ReplyKeyboardMarkup)
+    return [[button.text for button in row] for row in reply_markup.keyboard]
+
+
 def make_splitwise_member(
     splitwise_user_id: int = 1001,
     email: str = "max@example.com",
@@ -335,7 +349,10 @@ async def test_register_creates_pending_user_and_notifies_admin(tmp_path: Path) 
     await dispatcher.feed_update(bot, make_update("MAX@example.com"))
 
     texts = sent_texts(session)
-    assert texts[0] == "Заявка на регистрацию отправлена. Жду аппрув."
+    assert texts[0] == (
+        "Заявка на регистрацию отправлена. Жду аппрув.\n\n"
+        "Splitwise найден: max@example.com (ID 1001)."
+    )
     assert "Новая регистрация" in texts[1]
     assert "Имя: Максим" in texts[1]
     assert "Splitwise: max@example.com (ID 1001)" in texts[1]
@@ -363,6 +380,7 @@ async def test_register_with_argument_starts_step_by_step_flow(tmp_path: Path) -
         "Напиши имя одним сообщением. Например: Максим\n"
         "Чтобы выйти из регистрации, отправь /cancel или запусти другую команду."
     ]
+    assert keyboard_texts(session.sent_messages[0]) == [["Misha"]]
     assert UserRepository(database).get_by_telegram_id(42) is None
 
 
@@ -378,6 +396,7 @@ async def test_register_flow_creates_pending_user_from_next_message(tmp_path: Pa
         "Напиши имя одним сообщением. Например: Максим\n"
         "Чтобы выйти из регистрации, отправь /cancel или запусти другую команду."
     ]
+    assert keyboard_texts(session.sent_messages[0]) == [["Misha"]]
     assert UserRepository(database).get_by_telegram_id(42) is None
 
     session.clear_messages()
@@ -612,8 +631,13 @@ async def test_register_updates_existing_pending_request(tmp_path: Path) -> None
     texts = sent_texts(session)
     assert texts[0].startswith("Заявка обновлена. Жду аппрув.")
     assert "Обновленная регистрация" in texts[1]
-    assert "Имя: Другое" in texts[1]
-    assert "Splitwise: не указан" in texts[1]
+    assert "Telegram ID: 42" in texts[1]
+    assert "Имя:\nБыло: Максим\nСтало: Другое" in texts[1]
+    assert (
+        "Splitwise:\n"
+        "Было: max@example.com (ID 1001)\n"
+        "Стало: не указан"
+    ) in texts[1]
 
     user = UserRepository(database).get_by_telegram_id(42)
     assert user is not None
@@ -626,6 +650,22 @@ async def test_register_updates_existing_pending_request(tmp_path: Path) -> None
         "Заявки на регистрацию:\n"
         "1. Другое (@misha) - Telegram ID 42 - Splitwise: не указан - /approve 42"
     ]
+
+
+async def test_register_existing_pending_request_with_same_data_is_noop(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    session.clear_messages()
+
+    await submit_registration(dispatcher, bot, session)
+
+    assert sent_texts(session) == ["Заявка уже ждет аппрува, Максим"]
 
 
 async def test_register_existing_active_user_asks_for_reregistration_confirmation(
@@ -648,6 +688,7 @@ async def test_register_existing_active_user_asks_for_reregistration_confirmatio
         "Имя: Максим\n"
         "Telegram ID: 42\n"
         "Username: @misha\n"
+        "Splitwise: не указан\n"
         "\n"
         "Новые данные:\n"
         "Имя: Другое\n"
@@ -661,6 +702,26 @@ async def test_register_existing_active_user_asks_for_reregistration_confirmatio
         [button.text for button in row]
         for row in reply_markup.keyboard
     ] == [["Да", "Нет"]]
+
+
+async def test_register_existing_active_user_with_same_data_does_not_reregister(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await submit_registration(dispatcher, bot, session)
+
+    assert sent_texts(session) == ["Данные не изменились. Перерегистрацию не запускаю."]
+    user = UserRepository(database).get_by_telegram_id(42)
+    assert user is not None
+    assert user.status == UserStatus.ACTIVE
 
 
 async def test_register_existing_active_user_can_confirm_reregistration(
@@ -689,8 +750,7 @@ async def test_register_existing_active_user_can_confirm_reregistration(
         "без привязки."
     )
     assert "Перерегистрация" in texts[1]
-    assert "Имя: Другое" in texts[1]
-    assert "Splitwise: не указан" in texts[1]
+    assert "Имя:\nБыло: Максим\nСтало: Другое" in texts[1]
     assert "Аппрув: /approve 42" in texts[1]
     assert session.sent_messages[0].reply_markup is not None
     assert session.sent_messages[0].reply_markup.remove_keyboard is True

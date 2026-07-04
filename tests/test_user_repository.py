@@ -136,6 +136,29 @@ def test_save_pending_registration_stores_splitwise_member(
     assert pending_registrations[0].splitwise.email == "max@example.com"
 
 
+def test_get_registration_details_by_telegram_id_returns_display_name_and_splitwise(
+    users: UserRepository,
+) -> None:
+    users.save_pending_registration(
+        make_profile(),
+        "Максим",
+        SplitwiseMember(
+            splitwise_user_id=1001,
+            first_name="Max",
+            last_name=None,
+            email="max@example.com",
+        ),
+    )
+
+    details = users.get_registration_details_by_telegram_id(42)
+
+    assert details is not None
+    assert details.display_name == "Максим"
+    assert details.splitwise is not None
+    assert details.splitwise.splitwise_user_id == 1001
+    assert details.splitwise.email == "max@example.com"
+
+
 def test_save_pending_registration_with_skip_removes_existing_splitwise_member(
     users: UserRepository,
 ) -> None:

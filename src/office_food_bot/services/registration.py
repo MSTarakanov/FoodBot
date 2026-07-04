@@ -6,7 +6,9 @@ from office_food_bot.models import (
     ApprovalKind,
     PendingRegistration,
     RegisteredUser,
+    RegistrationDetails,
     RegistrationKind,
+    SplitwiseConnection,
     SplitwiseMember,
     TelegramProfile,
     UserStatus,
@@ -18,6 +20,7 @@ from office_food_bot.repositories import UserRepository, normalize_display_name
 class RegistrationResult:
     kind: RegistrationKind
     user: RegisteredUser
+    previous_details: RegistrationDetails | None = None
 
 
 @dataclass(frozen=True)
@@ -40,20 +43,49 @@ class RegistrationService:
         display_name = _clean_display_name(profile, raw_display_name)
         existing_user = self._users.get_by_telegram_id(profile.telegram_user_id)
         if existing_user is not None:
+            previous_details = self._users.get_registration_details_by_telegram_id(
+                profile.telegram_user_id,
+            )
             if existing_user.status == UserStatus.PENDING:
+                if previous_details is not None and not _has_registration_changes(
+                    previous_details,
+                    display_name,
+                    splitwise_member,
+                ):
+                    self._users.refresh_telegram_profile(profile)
+                    refreshed_user = self._users.get_by_telegram_id(
+                        profile.telegram_user_id,
+                    )
+                    if refreshed_user is None:
+                        msg = "Refreshed user was not found"
+                        raise RuntimeError(msg)
+                    return RegistrationResult(
+                        RegistrationKind.ALREADY_PENDING,
+                        refreshed_user,
+                        previous_details,
+                    )
+
                 user = self._users.save_pending_registration(
                     profile,
                     display_name,
                     splitwise_member,
                 )
-                return RegistrationResult(RegistrationKind.UPDATED_PENDING, user)
+                return RegistrationResult(
+                    RegistrationKind.UPDATED_PENDING,
+                    user,
+                    previous_details,
+                )
 
             self._users.refresh_telegram_profile(profile)
             refreshed_user = self._users.get_by_telegram_id(profile.telegram_user_id)
             if refreshed_user is None:
                 msg = "Refreshed user was not found"
                 raise RuntimeError(msg)
-            return RegistrationResult(_registration_kind_for(refreshed_user), refreshed_user)
+            return RegistrationResult(
+                _registration_kind_for(refreshed_user),
+                refreshed_user,
+                previous_details,
+            )
 
         user = self._users.save_pending_registration(profile, display_name, splitwise_member)
         return RegistrationResult(RegistrationKind.CREATED, user)
@@ -109,7 +141,54 @@ def _registration_kind_for(user: RegisteredUser) -> RegistrationKind:
 def _clean_display_name(profile: TelegramProfile, raw_display_name: str) -> str:
     display_name = normalize_display_name(raw_display_name)
     if not display_name:
-        display_name = profile.first_name
+        display_name = _telegram_display_name(profile)
     if len(display_name) > 64:
         display_name = display_name[:64].rstrip()
     return display_name
+
+
+def _telegram_display_name(profile: TelegramProfile) -> str:
+    return normalize_display_name(
+        " ".join(
+            part
+            for part in (profile.first_name, profile.last_name)
+            if part is not None
+        )
+    )
+
+
+def _has_registration_changes(
+    previous_details: RegistrationDetails,
+    display_name: str,
+    splitwise_member: SplitwiseMember | None,
+) -> bool:
+    return (
+        previous_details.display_name != display_name
+        or not _same_splitwise_connection(
+            previous_details.splitwise,
+            _splitwise_connection_from_member(splitwise_member),
+        )
+    )
+
+
+def _same_splitwise_connection(
+    first: SplitwiseConnection | None,
+    second: SplitwiseConnection | None,
+) -> bool:
+    if first is None or second is None:
+        return first is None and second is None
+    return (
+        first.splitwise_user_id == second.splitwise_user_id
+        and first.email.casefold() == second.email.casefold()
+    )
+
+
+def _splitwise_connection_from_member(
+    splitwise_member: SplitwiseMember | None,
+) -> SplitwiseConnection | None:
+    if splitwise_member is None:
+        return None
+    return SplitwiseConnection(
+        splitwise_user_id=splitwise_member.splitwise_user_id,
+        email=splitwise_member.email,
+    )

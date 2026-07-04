@@ -48,6 +48,17 @@ WHERE users.status = ?
 ORDER BY users.created_at, users.id
 """
 
+GET_REGISTRATION_DETAILS_BY_TELEGRAM_ID_SQL = """
+SELECT
+    users.display_name,
+    splitwise_users.splitwise_user_id,
+    splitwise_users.email AS splitwise_email
+FROM telegram_accounts
+JOIN users ON users.id = telegram_accounts.user_id
+LEFT JOIN splitwise_users ON splitwise_users.user_id = users.id
+WHERE telegram_accounts.telegram_user_id = ?
+"""
+
 INSERT_USER_SQL = """
 INSERT INTO users (display_name, status, role)
 VALUES (?, ?, ?)

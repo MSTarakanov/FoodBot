@@ -65,6 +65,12 @@ class SplitwiseConnection:
 
 
 @dataclass(frozen=True)
+class RegistrationDetails:
+    display_name: str
+    splitwise: SplitwiseConnection | None
+
+
+@dataclass(frozen=True)
 class PendingRegistration:
     user: RegisteredUser
     splitwise: SplitwiseConnection | None
