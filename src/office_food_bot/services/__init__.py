@@ -1,5 +1,14 @@
 from office_food_bot.services.balances import BalanceService
+from office_food_bot.services.command_access import (
+    ADMIN_ONLY_MESSAGE,
+    GROUP_ONLY_MESSAGE,
+    PRIVATE_ONLY_MESSAGE,
+    CommandAccessResult,
+    CommandAccessService,
+    CommandAccessStatus,
+)
 from office_food_bot.services.container import BotServices
+from office_food_bot.services.debug import DebugService
 from office_food_bot.services.factory import build_services
 from office_food_bot.services.lunch import LunchService
 from office_food_bot.services.poll_tracking import (
@@ -27,11 +36,18 @@ __all__ = [
     "ApprovalResult",
     "BalanceService",
     "BotServices",
+    "CommandAccessResult",
+    "CommandAccessService",
+    "CommandAccessStatus",
+    "DebugService",
+    "ADMIN_ONLY_MESSAGE",
+    "GROUP_ONLY_MESSAGE",
     "LunchService",
     "PollAction",
     "PollActionRequest",
     "PollTrackingService",
     "PresenceService",
+    "PRIVATE_ONLY_MESSAGE",
     "RegistrationResult",
     "RegistrationService",
     "SplitwiseGroupClient",

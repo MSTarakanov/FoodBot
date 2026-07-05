@@ -23,7 +23,11 @@ async def main() -> None:
         database.init_schema()
         services = create_services(database, settings)
         dispatcher = create_dispatcher(services)
-        await setup_bot_commands(bot, services.registration.admin_ids)
+        await setup_bot_commands(
+            bot,
+            services.command_access,
+            services.registration.admin_ids,
+        )
         await dispatcher.start_polling(bot)
     finally:
         if database is not None:

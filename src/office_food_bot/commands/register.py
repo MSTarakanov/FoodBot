@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
+from office_food_bot.commands.access import ensure_command_allowed
 from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import (
@@ -53,6 +54,9 @@ async def register_command(
     services: BotServices,
     state: FSMContext,
 ) -> None:
+    if not await ensure_command_allowed(message, "register", messenger, services, state):
+        return
+
     await state.clear()
 
     profile = telegram_profile_from_message(message)
@@ -122,8 +126,12 @@ async def register_name_message(
 async def cancel_registration_command(
     message: Message,
     messenger: BotMessenger,
+    services: BotServices,
     state: FSMContext,
 ) -> None:
+    if not await ensure_command_allowed(message, "cancel", messenger, services, state):
+        return
+
     if await state.get_state() is None:
         await messenger.reply(message, "Нет активного сценария.")
         return

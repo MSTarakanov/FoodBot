@@ -5,7 +5,7 @@ import pytest
 from office_food_bot.database import Database
 from office_food_bot.database.database_schema import SCHEMA_SQL
 from office_food_bot.models import SplitwiseMember, TelegramProfile, UserRole, UserStatus
-from office_food_bot.repositories import UserRepository
+from office_food_bot.repositories import DebugRepository, UserRepository
 
 LEGACY_SCHEMA_SQL = SCHEMA_SQL.replace("email TEXT NOT NULL,", "display_name TEXT NOT NULL,")
 
@@ -227,6 +227,34 @@ def test_database_init_creates_clean_splitwise_users_schema(tmp_path) -> None:
         database.close()
 
     assert columns == ["splitwise_user_id", "user_id", "email", "updated_at"]
+
+
+def test_database_init_creates_telegram_debug_settings_table(tmp_path) -> None:
+    database = Database(tmp_path / "test.sqlite3")
+    database.init_schema()
+    try:
+        columns = [
+            str(row["name"])
+            for row in database.connection.execute(
+                "PRAGMA table_info(telegram_debug_settings)"
+            )
+        ]
+    finally:
+        database.close()
+
+    assert columns == ["telegram_user_id", "enabled", "updated_at"]
+
+
+def test_debug_repository_persists_debug_status(database: Database) -> None:
+    debug = DebugRepository(database)
+
+    assert not debug.is_enabled(7)
+
+    debug.set_enabled(7, True)
+    assert DebugRepository(database).is_enabled(7)
+
+    debug.set_enabled(7, False)
+    assert not DebugRepository(database).is_enabled(7)
 
 
 def test_database_init_recreates_empty_legacy_splitwise_users_table(tmp_path) -> None:
