@@ -9,7 +9,7 @@ from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
 
 
-async def meta_command(
+async def eta_command(
     message: Message,
     command: CommandObject,
     messenger: BotMessenger,
@@ -22,8 +22,15 @@ async def meta_command(
         await messenger.reply(message, "Не вижу твой Telegram user id.")
         return
 
+    command_name = command.command
     if not command.args:
-        await messenger.reply(message, "Напиши через сколько минут: /meta 25")
+        await messenger.reply(
+            message,
+            services.presence.eta_missing_minutes_reply(command_name),
+        )
         return
 
-    await messenger.reply(message, services.presence.meta(profile.telegram_user_id, command.args))
+    await messenger.reply(
+        message,
+        services.presence.eta(profile.telegram_user_id, command.args, command_name),
+    )

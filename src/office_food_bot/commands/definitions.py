@@ -30,6 +30,7 @@ COMMANDS: tuple[CommandDefinition, ...] = (
         admin_only=True,
     ),
     CommandDefinition("meta", "сообщить, через сколько минут придешь", "/meta 25"),
+    CommandDefinition("eta", "сообщить ожидаемое время доставки", "/eta 20"),
     CommandDefinition("balance", "показать баланс Splitwise", "/balance"),
     CommandDefinition("lunch", "создать опрос про обед", "/lunch"),
 )

@@ -34,13 +34,13 @@ def create_active_user(users: UserRepository) -> None:
 
 
 def test_meta_requires_registration(users: UserRepository) -> None:
-    assert make_presence(users).meta(42, "25") == "Сначала зарегистрируйся: /register"
+    assert make_presence(users).eta(42, "25", "meta") == "Сначала зарегистрируйся: /register"
 
 
 def test_meta_requires_approved_registration(users: UserRepository) -> None:
     users.create_pending_user(make_profile(), "Максим")
 
-    assert make_presence(users).meta(42, "25") == "Регистрация еще ждет аппрува."
+    assert make_presence(users).eta(42, "25", "meta") == "Регистрация еще ждет аппрува."
 
 
 def test_meta_rejects_inactive_registration(
@@ -56,7 +56,7 @@ def test_meta_rejects_inactive_registration(
             (UserStatus.DISABLED.value, user.id),
         )
 
-    assert make_presence(users).meta(42, "25") == "Регистрация сейчас неактивна."
+    assert make_presence(users).eta(42, "25", "meta") == "Регистрация сейчас неактивна."
 
 
 @pytest.mark.parametrize("raw_minutes", ["abc", "0", "-1", "1441"])
@@ -67,7 +67,7 @@ def test_meta_requires_positive_minutes(
     create_active_user(users)
 
     assert (
-        make_presence(users).meta(42, raw_minutes)
+        make_presence(users).eta(42, raw_minutes, "meta")
         == "Минуты должны быть положительным числом: /meta 25"
     )
 
@@ -75,7 +75,33 @@ def test_meta_requires_positive_minutes(
 def test_meta_uses_display_name_and_fixed_clock(users: UserRepository) -> None:
     create_active_user(users)
 
-    assert make_presence(users).meta(42, "25") == "Максим будет в 12:40"
+    assert make_presence(users).eta(42, "25", "meta") == "Максим будет в 12:40"
+
+
+def test_delivery_eta_requires_registration(users: UserRepository) -> None:
+    assert make_presence(users).eta(42, "20", "eta") == "Сначала зарегистрируйся: /register"
+
+
+@pytest.mark.parametrize("raw_minutes", ["abc", "0", "-1", "1441"])
+def test_delivery_eta_requires_positive_minutes(
+    raw_minutes: str,
+    users: UserRepository,
+) -> None:
+    create_active_user(users)
+
+    assert (
+        make_presence(users).eta(42, raw_minutes, "eta")
+        == "Минуты должны быть положительным числом: /eta 20"
+    )
+
+
+def test_delivery_eta_uses_fixed_clock(users: UserRepository) -> None:
+    create_active_user(users)
+
+    assert (
+        make_presence(users).eta(42, "20", "eta")
+        == "Ожидаемое время прибытия доставки 12:35"
+    )
 
 
 def test_meta_treats_naive_clock_as_utc(users: UserRepository) -> None:
@@ -86,4 +112,4 @@ def test_meta_treats_naive_clock_as_utc(users: UserRepository) -> None:
         clock=lambda: datetime(2026, 6, 30, 10, 15),
     )
 
-    assert presence.meta(42, "25") == "Максим будет в 12:40"
+    assert presence.eta(42, "25", "meta") == "Максим будет в 12:40"
