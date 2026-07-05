@@ -20,31 +20,52 @@ class PresenceService:
         self._clock = clock or (lambda: datetime.now(tz=UTC))
 
     def meta(self, telegram_user_id: int, raw_minutes: str) -> str:
-        user = self._users.get_by_telegram_id(telegram_user_id)
-        block_reason = _registration_block_reason(user)
-        if block_reason is not None:
-            return block_reason
-        assert user is not None
-
-        minutes = _parse_minutes(raw_minutes)
-        if minutes is None:
-            return "Минуты должны быть положительным числом: /meta 25"
-
-        eta = self._eta(minutes)
-        return f"{user.display_name} будет в {eta:%H:%M}"
+        return self._reply_with_eta(
+            telegram_user_id,
+            raw_minutes,
+            invalid_minutes_reply="Минуты должны быть положительным числом: /meta 25",
+            format_reply=_format_meta_reply,
+        )
 
     def delivery_eta(self, telegram_user_id: int, raw_minutes: str) -> str:
+        return self._reply_with_eta(
+            telegram_user_id,
+            raw_minutes,
+            invalid_minutes_reply="Минуты должны быть положительным числом: /eta 20",
+            format_reply=_format_delivery_eta_reply,
+        )
+
+    def _reply_with_eta(
+        self,
+        telegram_user_id: int,
+        raw_minutes: str,
+        *,
+        invalid_minutes_reply: str,
+        format_reply: Callable[[RegisteredUser, datetime], str],
+    ) -> str:
+        def reply_for_active_user(user: RegisteredUser) -> str:
+            minutes = _parse_minutes(raw_minutes)
+            if minutes is None:
+                return invalid_minutes_reply
+
+            eta = self._eta(minutes)
+            return format_reply(user, eta)
+
+        return self._reply_for_active_user(telegram_user_id, reply_for_active_user)
+
+    def _reply_for_active_user(
+        self,
+        telegram_user_id: int,
+        format_reply: Callable[[RegisteredUser], str],
+    ) -> str:
         user = self._users.get_by_telegram_id(telegram_user_id)
-        block_reason = _registration_block_reason(user)
-        if block_reason is not None:
-            return block_reason
-
-        minutes = _parse_minutes(raw_minutes)
-        if minutes is None:
-            return "Минуты должны быть положительным числом: /eta 20"
-
-        eta = self._eta(minutes)
-        return f"Ожидаемое время прибытия доставки {eta:%H:%M}"
+        if user is None:
+            return "Сначала зарегистрируйся: /register"
+        if user.status == UserStatus.PENDING:
+            return "Регистрация еще ждет аппрува."
+        if user.status != UserStatus.ACTIVE:
+            return "Регистрация сейчас неактивна."
+        return format_reply(user)
 
     def _eta(self, minutes: int) -> datetime:
         now = self._clock()
@@ -65,11 +86,9 @@ def _parse_minutes(raw_minutes: str) -> int | None:
     return minutes
 
 
-def _registration_block_reason(user: RegisteredUser | None) -> str | None:
-    if user is None:
-        return "Сначала зарегистрируйся: /register"
-    if user.status == UserStatus.PENDING:
-        return "Регистрация еще ждет аппрува."
-    if user.status != UserStatus.ACTIVE:
-        return "Регистрация сейчас неактивна."
-    return None
+def _format_meta_reply(user: RegisteredUser, eta: datetime) -> str:
+    return f"{user.display_name} будет в {eta:%H:%M}"
+
+
+def _format_delivery_eta_reply(_user: RegisteredUser, eta: datetime) -> str:
+    return f"Ожидаемое время прибытия доставки {eta:%H:%M}"
