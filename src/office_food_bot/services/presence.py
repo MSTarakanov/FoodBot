@@ -12,7 +12,7 @@ from office_food_bot.repositories import UserRepository
 @dataclass(frozen=True, slots=True)
 class EtaReplySpec:
     usage: str
-    format_reply: Callable[[RegisteredUser, datetime], str]
+    time_prefix: Callable[[RegisteredUser], str]
 
 
 class PresenceService:
@@ -26,19 +26,15 @@ class PresenceService:
         self._timezone = ZoneInfo(timezone_name)
         self._clock = clock or (lambda: datetime.now(tz=UTC))
 
-    def meta(self, telegram_user_id: int, raw_minutes: str) -> str:
+    def eta(self, telegram_user_id: int, raw_minutes: str, command_name: str) -> str:
         return self._reply_with_eta(
             telegram_user_id,
             raw_minutes,
-            _META_REPLY_SPEC,
+            _eta_reply_spec(command_name),
         )
 
-    def delivery_eta(self, telegram_user_id: int, raw_minutes: str) -> str:
-        return self._reply_with_eta(
-            telegram_user_id,
-            raw_minutes,
-            _DELIVERY_ETA_REPLY_SPEC,
-        )
+    def eta_missing_minutes_reply(self, command_name: str) -> str:
+        return f"Напиши через сколько минут: {_eta_reply_spec(command_name).usage}"
 
     def _reply_with_eta(
         self,
@@ -52,7 +48,7 @@ class PresenceService:
                 return _invalid_minutes_reply(reply_spec)
 
             eta = self._eta(minutes)
-            return reply_spec.format_reply(user, eta)
+            return f"{reply_spec.time_prefix(user)} {eta:%H:%M}"
 
         return self._reply_for_active_user(telegram_user_id, reply_for_active_user)
 
@@ -89,20 +85,28 @@ def _parse_minutes(raw_minutes: str) -> int | None:
     return minutes
 
 
-def _format_meta_reply(user: RegisteredUser, eta: datetime) -> str:
-    return f"{user.display_name} будет в {eta:%H:%M}"
+def _meta_time_prefix(user: RegisteredUser) -> str:
+    return f"{user.display_name} будет в"
 
 
-def _format_delivery_eta_reply(_user: RegisteredUser, eta: datetime) -> str:
-    return f"Ожидаемое время прибытия доставки {eta:%H:%M}"
+def _delivery_eta_time_prefix(_user: RegisteredUser) -> str:
+    return "Ожидаемое время прибытия доставки"
 
 
 def _invalid_minutes_reply(reply_spec: EtaReplySpec) -> str:
     return f"Минуты должны быть положительным числом: {reply_spec.usage}"
 
 
-_META_REPLY_SPEC = EtaReplySpec(usage="/meta 25", format_reply=_format_meta_reply)
+_META_REPLY_SPEC = EtaReplySpec(usage="/meta 25", time_prefix=_meta_time_prefix)
 _DELIVERY_ETA_REPLY_SPEC = EtaReplySpec(
     usage="/eta 20",
-    format_reply=_format_delivery_eta_reply,
+    time_prefix=_delivery_eta_time_prefix,
 )
+_ETA_REPLY_SPECS = {
+    "meta": _META_REPLY_SPEC,
+    "eta": _DELIVERY_ETA_REPLY_SPEC,
+}
+
+
+def _eta_reply_spec(command_name: str) -> EtaReplySpec:
+    return _ETA_REPLY_SPECS[command_name]

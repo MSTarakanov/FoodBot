@@ -1032,6 +1032,17 @@ async def test_eta_requires_minutes_argument(tmp_path: Path) -> None:
     assert sent_texts(session) == ["Напиши через сколько минут: /eta 20"]
 
 
+async def test_meta_requires_minutes_argument(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/meta"))
+
+    assert sent_texts(session) == ["Напиши через сколько минут: /meta 25"]
+
+
 async def test_registration_happy_path_allows_meta_after_approval(tmp_path: Path) -> None:
     database = make_database(tmp_path)
     session = RecordingSession()
