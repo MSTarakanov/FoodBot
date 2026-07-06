@@ -62,7 +62,8 @@ Setup refuses to save the production Telegram bot token for local development.
 Committed defaults live in `.env.defaults`. Use it for shared non-secret values such as
 `FOODBOT_ENV`, `DATABASE_PATH`, `FOODBOT_TIMEZONE`, `SPLITWISE_GROUP_ID`, and
 `PRODUCTION_TELEGRAM_BOT_ID`. It also keeps `TELEGRAM_BOT_USERNAME` and `TELEGRAM_ADMIN_IDS` as
-empty required keys; real values live in local `.env` files or GitHub Actions configuration.
+empty required keys. Local values live in `.env`; production deploy derives
+`TELEGRAM_BOT_USERNAME` from Telegram `getMe` and writes it to the VPS `.env`.
 
 The bot requires those keys to exist; keep shared defaults in `.env.defaults` instead of relying
 on hidden Python fallback values.
@@ -243,8 +244,6 @@ Repository secrets:
 
 Repository variables:
 
-- `TELEGRAM_BOT_USERNAME` - production Telegram bot username without `@`; used for private-chat
-  links in group replies.
 - `SPLITWISE_GROUP_ID` - optional override for the office Splitwise group id. If it is not set,
   deployment reads the value from `.env.defaults`.
 
@@ -255,5 +254,6 @@ The matching public key on the server should be restricted with a forced command
 `/usr/local/sbin/deploy-foodbot`. The source version of that command is kept in
 `deploy/deploy-foodbot.sh`.
 
-During deploy, GitHub Actions writes the production `/opt/foodbot/.env` on the VPS from secrets.
-Local debugging still uses the uncommitted `.env` file in each developer clone.
+During deploy, GitHub Actions gets the production bot username from Telegram `getMe`, then writes
+the production `/opt/foodbot/.env` on the VPS from secrets plus that username. Local debugging still
+uses the uncommitted `.env` file in each developer clone.
