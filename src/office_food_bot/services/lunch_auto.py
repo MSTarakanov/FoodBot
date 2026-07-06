@@ -10,6 +10,7 @@ from aiogram.exceptions import TelegramAPIError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
 from apscheduler.triggers.cron import CronTrigger  # type: ignore[import-untyped]
 
+from office_food_bot.execution import CommandExecutionMode
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import LunchAutoChat, RegisteredUser
 from office_food_bot.repositories import (
@@ -29,11 +30,6 @@ from office_food_bot.services.lunch import (
 from office_food_bot.services.poll_tracking import PollAction, PollTrackingService
 
 AUTO_LUNCH_JOB_ID = "auto_lunch"
-
-
-class LunchPublishMode(StrEnum):
-    MANUAL = "manual"
-    AUTOMATIC = "automatic"
 
 
 class LunchPublishKind(StrEnum):
@@ -82,10 +78,10 @@ class LunchPollPublisher:
         self,
         bot: Bot,
         chat_id: int,
-        mode: LunchPublishMode,
+        mode: CommandExecutionMode,
     ) -> LunchPublishKind:
         active_users = self._active_users_available_for_lunch()
-        if not active_users and mode == LunchPublishMode.AUTOMATIC:
+        if not active_users and mode == CommandExecutionMode.AUTOMATIC:
             return LunchPublishKind.SKIPPED_ALL_ON_VACATION
 
         await self._messenger.send(
@@ -184,7 +180,7 @@ class LunchSchedulerService:
                 await self._publisher.publish(
                     bot,
                     chat.chat_id,
-                    LunchPublishMode.AUTOMATIC,
+                    CommandExecutionMode.AUTOMATIC,
                 )
             except TelegramAPIError:
                 continue
