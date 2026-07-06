@@ -289,7 +289,7 @@ def _splitwise_connection_from_row(row: sqlite3.Row) -> SplitwiseConnection | No
     )
 
 
-def _optional_str(value: object) -> str | None:
+def _optional_str[Value](value: Value | None) -> str | None:
     if value is None:
         return None
     return str(value)

@@ -11,6 +11,7 @@ import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import Command
 from aiogram.methods import SendPoll, SetMyCommands, TelegramMethod
 from aiogram.methods.base import TelegramType
 from aiogram.methods.send_message import SendMessage
@@ -33,6 +34,7 @@ from aiogram.types import (
 
 from office_food_bot.app import create_dispatcher, create_services
 from office_food_bot.commands.definitions import COMMANDS, START_TEXT
+from office_food_bot.commands.errors import UNHANDLED_ERROR_REPLY_TEXT
 from office_food_bot.commands.menu import setup_bot_commands
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
@@ -497,6 +499,23 @@ async def test_private_only_command_in_group_points_to_private_bot_link(
         "Команда доступна только в личке: https://t.me/foodbot_dev"
     ]
     assert UserRepository(database).get_by_telegram_id(42) is None
+
+
+async def test_unhandled_command_error_replies_with_generic_message(tmp_path: Path) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    async def broken_command(message: Message) -> None:
+        msg = "secret internal detail"
+        raise RuntimeError(msg)
+
+    dispatcher.message.register(broken_command, Command("boom"))
+
+    await dispatcher.feed_update(bot, make_update("/boom"))
+
+    assert sent_texts(session) == [UNHANDLED_ERROR_REPLY_TEXT]
 
 
 async def test_command_addressed_to_another_bot_is_ignored(tmp_path: Path) -> None:

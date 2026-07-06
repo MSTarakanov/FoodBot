@@ -120,7 +120,7 @@ def normalize_email(raw_email: str) -> str:
     return raw_email.strip().lower()
 
 
-def _members_from_group_payload(payload: object) -> tuple[SplitwiseMember, ...]:
+def _members_from_group_payload[Payload](payload: Payload) -> tuple[SplitwiseMember, ...]:
     if not isinstance(payload, dict):
         msg = "Splitwise group payload must be an object"
         raise ValueError(msg)
@@ -138,7 +138,7 @@ def _members_from_group_payload(payload: object) -> tuple[SplitwiseMember, ...]:
     return tuple(_member_from_payload(member) for member in members)
 
 
-def _member_from_payload(payload: object) -> SplitwiseMember:
+def _member_from_payload[Payload](payload: Payload) -> SplitwiseMember:
     if not isinstance(payload, dict):
         msg = "Splitwise member must be an object"
         raise ValueError(msg)
@@ -152,7 +152,7 @@ def _member_from_payload(payload: object) -> SplitwiseMember:
     )
 
 
-def _balances_from_payload(payload: object) -> tuple[SplitwiseBalance, ...]:
+def _balances_from_payload[Payload](payload: Payload) -> tuple[SplitwiseBalance, ...]:
     if payload is None:
         return ()
     if not isinstance(payload, list):
@@ -161,7 +161,7 @@ def _balances_from_payload(payload: object) -> tuple[SplitwiseBalance, ...]:
     return tuple(_balance_from_payload(balance) for balance in payload)
 
 
-def _balance_from_payload(payload: object) -> SplitwiseBalance:
+def _balance_from_payload[Payload](payload: Payload) -> SplitwiseBalance:
     if not isinstance(payload, dict):
         msg = "Splitwise balance must be an object"
         raise ValueError(msg)
@@ -178,7 +178,7 @@ def _balance_from_payload(payload: object) -> SplitwiseBalance:
     )
 
 
-def _optional_str(value: object) -> str | None:
+def _optional_str[Value](value: Value | None) -> str | None:
     if value is None:
         return None
     return str(value)

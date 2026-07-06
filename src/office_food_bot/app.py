@@ -4,6 +4,7 @@ from datetime import datetime
 from aiogram import Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
+from office_food_bot.commands.errors import unhandled_error_handler
 from office_food_bot.commands.router import create_command_router
 from office_food_bot.config import Settings
 from office_food_bot.database import Database
@@ -37,5 +38,6 @@ def create_dispatcher(services: BotServices) -> Dispatcher:
         services=services,
         messenger=messenger,
     )
+    dispatcher.errors.register(unhandled_error_handler)
     dispatcher.include_router(create_command_router(services, messenger))
     return dispatcher
