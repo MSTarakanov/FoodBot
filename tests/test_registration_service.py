@@ -156,6 +156,21 @@ def test_register_existing_active_user_returns_already_active(
     assert result.previous_details.display_name == "Максим"
 
 
+def test_register_existing_abandoned_user_creates_new_pending_request(
+    users: UserRepository,
+) -> None:
+    service = make_service(users)
+    service.register(make_profile(), "Максим", None)
+    assert service.quit_registration(42)
+
+    result = service.register(make_profile(username="new"), "Другое", None)
+
+    assert result.kind == RegistrationKind.CREATED
+    assert result.user.display_name == "Другое"
+    assert result.user.status == UserStatus.PENDING
+    assert result.user.username == "new"
+
+
 def test_re_register_existing_active_user_updates_display_name_and_profile(
     users: UserRepository,
 ) -> None:
@@ -187,6 +202,39 @@ def test_approve_forbids_non_admin(users: UserRepository) -> None:
     user = users.get_by_telegram_id(42)
     assert user is not None
     assert user.status == UserStatus.PENDING
+
+
+def test_request_registration_block_reason_depends_on_status(
+    users: UserRepository,
+) -> None:
+    service = make_service(users)
+
+    assert service.request_registration_block_reason(42) is None
+
+    service.register(make_profile(), "Максим", None)
+    assert service.request_registration_block_reason(42) == (
+        "Заявка уже ждет аппрува. Если хотите отменить регистрацию, отправьте /quit."
+    )
+
+    service.approve(7, 42)
+    assert service.request_registration_block_reason(42) == (
+        "Вы уже зарегистрированы. Если хотите отрегистрироваться, отправьте /quit."
+    )
+
+    assert service.quit_registration(42)
+    assert service.request_registration_block_reason(42) is None
+
+
+def test_quit_registration_returns_false_for_unknown_or_abandoned_user(
+    users: UserRepository,
+) -> None:
+    service = make_service(users)
+
+    assert not service.quit_registration(42)
+
+    service.register(make_profile(), "Максим", None)
+    assert service.quit_registration(42)
+    assert not service.quit_registration(42)
 
 
 def test_approve_returns_not_found_for_unknown_target(users: UserRepository) -> None:

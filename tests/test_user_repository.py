@@ -82,6 +82,37 @@ def test_approve_by_telegram_id_returns_none_for_unknown_user(
     assert users.approve_by_telegram_id(404) is None
 
 
+def test_abandon_by_telegram_id_marks_user_abandoned_and_removes_splitwise(
+    users: UserRepository,
+) -> None:
+    users.save_pending_registration(
+        make_profile(),
+        "Максим",
+        SplitwiseMember(
+            splitwise_user_id=1001,
+            first_name="Max",
+            last_name=None,
+            email="max@example.com",
+        ),
+    )
+    users.approve_by_telegram_id(42)
+
+    user = users.abandon_by_telegram_id(42)
+
+    assert user is not None
+    assert user.status == UserStatus.ABANDONED
+    assert users.list_active_splitwise_users() == ()
+    details = users.get_registration_details_by_telegram_id(42)
+    assert details is not None
+    assert details.splitwise is None
+
+
+def test_abandon_by_telegram_id_returns_none_for_unknown_user(
+    users: UserRepository,
+) -> None:
+    assert users.abandon_by_telegram_id(404) is None
+
+
 def test_list_pending_users_returns_only_pending_users(users: UserRepository) -> None:
     users.create_pending_user(make_profile(telegram_user_id=42, username="misha"), "Максим")
     users.create_pending_user(make_profile(telegram_user_id=43, username="olya"), "Оля")
@@ -243,6 +274,21 @@ def test_database_init_creates_telegram_debug_settings_table(tmp_path) -> None:
         database.close()
 
     assert columns == ["telegram_user_id", "enabled", "updated_at"]
+
+
+def test_database_init_creates_users_status_check_with_abandoned(tmp_path) -> None:
+    database = Database(tmp_path / "test.sqlite3")
+    database.init_schema()
+    try:
+        row = database.connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'",
+        ).fetchone()
+    finally:
+        database.close()
+
+    assert row is not None
+    assert "CHECK (status" in str(row["sql"])
+    assert "'abandoned'" in str(row["sql"])
 
 
 def test_debug_repository_persists_debug_status(database: Database) -> None:

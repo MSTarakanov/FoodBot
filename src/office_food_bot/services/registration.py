@@ -46,6 +46,14 @@ class RegistrationService:
             previous_details = self._users.get_registration_details_by_telegram_id(
                 profile.telegram_user_id,
             )
+            if existing_user.status == UserStatus.ABANDONED:
+                user = self._users.save_pending_registration(
+                    profile,
+                    display_name,
+                    splitwise_member,
+                )
+                return RegistrationResult(RegistrationKind.CREATED, user)
+
             if existing_user.status == UserStatus.PENDING:
                 if previous_details is not None and not _has_registration_changes(
                     previous_details,
@@ -104,6 +112,48 @@ class RegistrationService:
 
     def display_name_from_input(self, profile: TelegramProfile, raw_display_name: str) -> str:
         return _clean_display_name(profile, raw_display_name)
+
+    def registration_profile_for_telegram_id(self, telegram_user_id: int) -> TelegramProfile:
+        user = self._users.get_by_telegram_id(telegram_user_id)
+        if user is None:
+            return TelegramProfile(
+                telegram_user_id=telegram_user_id,
+                username=None,
+                first_name=f"Telegram ID {telegram_user_id}",
+                last_name=None,
+            )
+
+        return TelegramProfile(
+            telegram_user_id=user.telegram_user_id,
+            username=user.username,
+            first_name=user.first_name or user.display_name,
+            last_name=user.last_name,
+        )
+
+    def request_registration_block_reason(self, telegram_user_id: int) -> str | None:
+        user = self._users.get_by_telegram_id(telegram_user_id)
+        if user is None or user.status == UserStatus.ABANDONED:
+            return None
+        if user.status == UserStatus.PENDING:
+            return (
+                "Заявка уже ждет аппрува. "
+                "Если хотите отменить регистрацию, отправьте /quit."
+            )
+        if user.status == UserStatus.ACTIVE:
+            return (
+                "Вы уже зарегистрированы. "
+                "Если хотите отрегистрироваться, отправьте /quit."
+            )
+        return (
+            "Регистрация сейчас недоступна. "
+            "Если хотите отрегистрироваться, отправьте /quit."
+        )
+
+    def quit_registration(self, telegram_user_id: int) -> bool:
+        user = self._users.get_by_telegram_id(telegram_user_id)
+        if user is None or user.status == UserStatus.ABANDONED:
+            return False
+        return self._users.abandon_by_telegram_id(telegram_user_id) is not None
 
     def approve(
         self,

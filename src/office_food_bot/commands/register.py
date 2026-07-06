@@ -37,6 +37,10 @@ SPLITWISE_SKIP_WARNING_TEXT = (
     "Splitwise не указан. Когда /balance будет подключен, она не сможет учитывать тебя "
     "без привязки."
 )
+REQUEST_REGISTER_REPLY_TEXT = "Запрос на регистрацию отправлен админам."
+REGISTER_TARGET_USAGE_TEXT = "Telegram ID должен быть числом: /register 123456789"
+QUIT_SUCCESS_TEXT = "Вы отрегистрированы. Если захотите вернуться, отправьте /request_register."
+QUIT_NOT_FOUND_TEXT = "Я не нашел вашу регистрацию."
 SPLITWISE_SKIP_CHOICES = ("Пропустить",)
 SPLITWISE_SKIP_ANSWERS = {"пропустить", "skip"}
 
@@ -52,6 +56,9 @@ class RegistrationStateData(Protocol):
             "requested_splitwise_email",
             "previous_display_name",
             "previous_splitwise_email",
+            "target_username",
+            "target_first_name",
+            "target_last_name",
         ],
     ) -> str | None: ...
 
@@ -61,6 +68,7 @@ class RegistrationStateData(Protocol):
         key: Literal[
             "requested_splitwise_user_id",
             "previous_splitwise_user_id",
+            "target_telegram_user_id",
         ],
     ) -> int | None: ...
 
@@ -69,6 +77,35 @@ class RegistrationFlow(StatesGroup):
     waiting_for_name = State()
     waiting_for_splitwise_email = State()
     confirming_reregistration = State()
+
+
+async def request_register_command(
+    message: Message,
+    bot: Bot,
+    messenger: BotMessenger,
+    services: BotServices,
+    state: FSMContext,
+) -> None:
+    await state.clear()
+    profile = telegram_profile_from_message(message)
+    if profile is None:
+        await messenger.reply(message, "Не вижу твой Telegram user id.")
+        return
+
+    block_reason = services.registration.request_registration_block_reason(
+        profile.telegram_user_id,
+    )
+    if block_reason is not None:
+        await messenger.reply(message, block_reason)
+        return
+
+    await messenger.reply(message, REQUEST_REGISTER_REPLY_TEXT)
+    for admin_id in services.registration.admin_ids:
+        await messenger.try_send(
+            bot,
+            admin_id,
+            _registration_request_admin_text(profile),
+        )
 
 
 async def register_command(
@@ -86,17 +123,75 @@ async def register_command(
         await messenger.reply(message, "Не вижу твой Telegram user id.")
         return
 
-    if not command.args:
+    if command.args:
+        target_telegram_user_id = _parse_telegram_user_id(command.args)
+        if target_telegram_user_id is None:
+            if services.registration.can_approve(profile.telegram_user_id):
+                await messenger.reply(message, REGISTER_TARGET_USAGE_TEXT)
+                return
+
+            await state.set_state(RegistrationFlow.waiting_for_name)
+            await _save_registration_target(state, profile)
+            await _reply_with_name_prompt(
+                message,
+                messenger,
+                profile,
+                REGISTER_WITH_ARGUMENTS_TEXT,
+            )
+            return
+
+        if not services.registration.can_approve(profile.telegram_user_id):
+            await messenger.reply(message, "Команда доступна только админам.")
+            return
+
+        target_profile = services.registration.registration_profile_for_telegram_id(
+            target_telegram_user_id,
+        )
         await state.set_state(RegistrationFlow.waiting_for_name)
-        await _reply_with_name_prompt(message, messenger, profile, NAME_PROMPT_TEXT)
+        await _save_registration_target(state, target_profile)
+        await _reply_with_name_prompt(
+            message,
+            messenger,
+            target_profile,
+            f"Регистрируем пользователя Telegram ID {target_telegram_user_id}.\n\n"
+            f"{NAME_PROMPT_TEXT}",
+        )
         return
 
     await state.set_state(RegistrationFlow.waiting_for_name)
-    await _reply_with_name_prompt(
-        message,
-        messenger,
-        profile,
-        REGISTER_WITH_ARGUMENTS_TEXT,
+    await _save_registration_target(state, profile)
+    await _reply_with_name_prompt(message, messenger, profile, NAME_PROMPT_TEXT)
+
+
+async def quit_command(
+    message: Message,
+    messenger: BotMessenger,
+    services: BotServices,
+    state: FSMContext,
+) -> None:
+    await state.clear()
+    profile = telegram_profile_from_message(message)
+    if profile is None:
+        await messenger.reply(message, "Не вижу твой Telegram user id.")
+        return
+
+    if services.registration.quit_registration(profile.telegram_user_id):
+        await messenger.reply(
+            message,
+            QUIT_SUCCESS_TEXT,
+            reply_markup=messenger.remove_keyboard(),
+        )
+        return
+
+    await messenger.reply(message, QUIT_NOT_FOUND_TEXT, reply_markup=messenger.remove_keyboard())
+
+
+async def _save_registration_target(state: FSMContext, profile: TelegramProfile) -> None:
+    await state.update_data(
+        target_telegram_user_id=profile.telegram_user_id,
+        target_username=profile.username,
+        target_first_name=profile.first_name,
+        target_last_name=profile.last_name,
     )
 
 
@@ -128,9 +223,8 @@ async def register_name_message(
         await messenger.reply(message, "Имя не может быть пустым. Напиши имя, например: Максим")
         return
 
-    profile = telegram_profile_from_message(message)
+    profile = await _target_profile_from_state(state, messenger, message)
     if profile is None:
-        await messenger.reply(message, "Не вижу твой Telegram user id.")
         return
 
     display_name = services.registration.display_name_from_input(profile, raw_display_name)
@@ -267,9 +361,8 @@ async def confirm_reregistration_message(
         )
         return
 
-    profile = telegram_profile_from_message(message)
+    profile = await _target_profile_from_state(state, messenger, message)
     if profile is None:
-        await messenger.reply(message, "Не вижу твой Telegram user id.")
         return
 
     data = await state.get_data()
@@ -327,9 +420,8 @@ async def _complete_registration(
     *,
     splitwise_member: SplitwiseMember | None,
 ) -> None:
-    profile = telegram_profile_from_message(message)
+    profile = await _target_profile_from_state(state, messenger, message)
     if profile is None:
-        await messenger.reply(message, "Не вижу твой Telegram user id.")
         return
 
     result = services.registration.register(profile, raw_display_name, splitwise_member)
@@ -512,6 +604,44 @@ async def _requested_display_name_from_state(
     return None
 
 
+async def _target_profile_from_state(
+    state: FSMContext,
+    messenger: BotMessenger,
+    message: Message,
+) -> TelegramProfile | None:
+    data = await state.get_data()
+    raw_telegram_user_id = data.get("target_telegram_user_id")
+    raw_first_name = data.get("target_first_name")
+    if isinstance(raw_telegram_user_id, int) and isinstance(raw_first_name, str):
+        current_profile = telegram_profile_from_message(message)
+        if (
+            current_profile is not None
+            and current_profile.telegram_user_id == raw_telegram_user_id
+        ):
+            return current_profile
+
+        raw_username = data.get("target_username")
+        raw_last_name = data.get("target_last_name")
+        return TelegramProfile(
+            telegram_user_id=raw_telegram_user_id,
+            username=raw_username if isinstance(raw_username, str) else None,
+            first_name=raw_first_name,
+            last_name=raw_last_name if isinstance(raw_last_name, str) else None,
+        )
+
+    profile = telegram_profile_from_message(message)
+    if profile is not None:
+        return profile
+
+    await state.clear()
+    await messenger.reply(
+        message,
+        "Не нашел пользователя для регистрации. Запусти /register заново.",
+        reply_markup=messenger.remove_keyboard(),
+    )
+    return None
+
+
 def _registration_reply_text(base_text: str, splitwise_member: SplitwiseMember | None) -> str:
     if splitwise_member is not None:
         return (
@@ -520,6 +650,40 @@ def _registration_reply_text(base_text: str, splitwise_member: SplitwiseMember |
             f"(ID {splitwise_member.splitwise_user_id})."
         )
     return f"{base_text}\n\n{SPLITWISE_SKIP_WARNING_TEXT}"
+
+
+def _registration_request_admin_text(profile: TelegramProfile) -> str:
+    return (
+        "Запрос на регистрацию:\n"
+        f"Telegram ID: {profile.telegram_user_id}\n"
+        f"Username: {_profile_username_text(profile)}\n"
+        f"Имя в Telegram: {_profile_display_name_text(profile)}\n"
+        f"Начать регистрацию: /register {profile.telegram_user_id}"
+    )
+
+
+def _profile_username_text(profile: TelegramProfile) -> str:
+    if profile.username is None:
+        return "не указан"
+    return f"@{profile.username}"
+
+
+def _profile_display_name_text(profile: TelegramProfile) -> str:
+    return " ".join(
+        part
+        for part in (profile.first_name, profile.last_name)
+        if part is not None
+    )
+
+
+def _parse_telegram_user_id(raw_value: str) -> int | None:
+    stripped_value = raw_value.strip()
+    if not stripped_value.isdecimal():
+        return None
+    value = int(stripped_value)
+    if value <= 0:
+        return None
+    return value
 
 
 def _splitwise_admin_text(splitwise_member: SplitwiseMember | None) -> str:

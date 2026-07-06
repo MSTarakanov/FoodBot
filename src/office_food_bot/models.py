@@ -10,6 +10,7 @@ class UserStatus(StrEnum):
     ACTIVE = "active"
     REJECTED = "rejected"
     DISABLED = "disabled"
+    ABANDONED = "abandoned"
 
 
 class UserRole(StrEnum):

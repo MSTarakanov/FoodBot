@@ -3,7 +3,10 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from office_food_bot.database.database_schema import SCHEMA_SQL, SPLITWISE_USERS_SCHEMA_SQL
+from office_food_bot.database.database_schema import (
+    SCHEMA_SQL,
+    SPLITWISE_USERS_SCHEMA_SQL,
+)
 
 EXPECTED_SPLITWISE_USERS_COLUMNS = {
     "splitwise_user_id",
@@ -29,6 +32,7 @@ class Database:
     def init_schema(self) -> None:
         with self._connection:
             self._connection.executescript(SCHEMA_SQL)
+        with self._connection:
             self._ensure_splitwise_users_schema()
 
     def close(self) -> None:
