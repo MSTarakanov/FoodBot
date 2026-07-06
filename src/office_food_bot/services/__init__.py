@@ -1,5 +1,11 @@
 from office_food_bot.services.balances import BalanceService
+from office_food_bot.services.command_access import (
+    CommandAccessDenialReason,
+    CommandAccessResult,
+    CommandAccessService,
+)
 from office_food_bot.services.container import BotServices
+from office_food_bot.services.debug import DebugService
 from office_food_bot.services.factory import build_services
 from office_food_bot.services.lunch import LunchService
 from office_food_bot.services.poll_tracking import (
@@ -27,6 +33,10 @@ __all__ = [
     "ApprovalResult",
     "BalanceService",
     "BotServices",
+    "CommandAccessDenialReason",
+    "CommandAccessResult",
+    "CommandAccessService",
+    "DebugService",
     "LunchService",
     "PollAction",
     "PollActionRequest",

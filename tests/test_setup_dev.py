@@ -31,11 +31,15 @@ def read_env(tmp_path: Path) -> dict[str, str]:
 
 
 def test_setup_dev_creates_env_with_admin_id(tmp_path: Path) -> None:
-    result = run_env_setup(tmp_path, "123456:test-token\ny\n42\ndev-splitwise-key\n")
+    result = run_env_setup(
+        tmp_path,
+        "123456:test-token\nfoodbot_dev\ny\n42\ndev-splitwise-key\n",
+    )
 
     assert read_env(tmp_path) == {
         "FOODBOT_ENV": "development",
         "TELEGRAM_BOT_TOKEN": "123456:test-token",
+        "TELEGRAM_BOT_USERNAME": "foodbot_dev",
         "DATABASE_PATH": "foodbot.local.sqlite3",
         "TELEGRAM_ADMIN_IDS": "42",
         "FOODBOT_TIMEZONE": "Europe/Belgrade",
@@ -53,6 +57,7 @@ def test_setup_dev_keeps_existing_values_on_empty_answers(tmp_path: Path) -> Non
         "\n".join(
             [
                 "TELEGRAM_BOT_TOKEN=existing-token",
+                "TELEGRAM_BOT_USERNAME=existing_dev_bot",
                 "DATABASE_PATH=old.sqlite3",
                 "TELEGRAM_ADMIN_IDS=42",
                 "FOODBOT_TIMEZONE=UTC",
@@ -63,11 +68,12 @@ def test_setup_dev_keeps_existing_values_on_empty_answers(tmp_path: Path) -> Non
         encoding="utf-8",
     )
 
-    result = run_env_setup(tmp_path, "\n\n\n\n")
+    result = run_env_setup(tmp_path, "\n\n\n\n\n")
 
     assert read_env(tmp_path) == {
         "FOODBOT_ENV": "development",
         "TELEGRAM_BOT_TOKEN": "existing-token",
+        "TELEGRAM_BOT_USERNAME": "existing_dev_bot",
         "DATABASE_PATH": "foodbot.local.sqlite3",
         "TELEGRAM_ADMIN_IDS": "42",
         "FOODBOT_TIMEZONE": "Europe/Belgrade",
@@ -84,6 +90,7 @@ def test_setup_dev_reads_existing_env_with_export_spaces_and_quotes(tmp_path: Pa
         "\n".join(
             [
                 'export TELEGRAM_BOT_TOKEN = "existing-token"',
+                'export TELEGRAM_BOT_USERNAME = "@existing_dev_bot"',
                 "DATABASE_PATH=old.sqlite3",
                 "TELEGRAM_ADMIN_IDS = '42'",
                 "FOODBOT_TIMEZONE=UTC",
@@ -94,11 +101,12 @@ def test_setup_dev_reads_existing_env_with_export_spaces_and_quotes(tmp_path: Pa
         encoding="utf-8",
     )
 
-    result = run_env_setup(tmp_path, "\n\n\n\n")
+    result = run_env_setup(tmp_path, "\n\n\n\n\n")
 
     assert read_env(tmp_path) == {
         "FOODBOT_ENV": "development",
         "TELEGRAM_BOT_TOKEN": "existing-token",
+        "TELEGRAM_BOT_USERNAME": "existing_dev_bot",
         "DATABASE_PATH": "foodbot.local.sqlite3",
         "TELEGRAM_ADMIN_IDS": "42",
         "FOODBOT_TIMEZONE": "Europe/Belgrade",
@@ -115,6 +123,7 @@ def test_setup_dev_replaces_token_and_clears_admin_ids(tmp_path: Path) -> None:
         "\n".join(
             [
                 "TELEGRAM_BOT_TOKEN=old-token",
+                "TELEGRAM_BOT_USERNAME=old_dev_bot",
                 "DATABASE_PATH=old.sqlite3",
                 "TELEGRAM_ADMIN_IDS=42",
                 "FOODBOT_TIMEZONE=UTC",
@@ -125,11 +134,12 @@ def test_setup_dev_replaces_token_and_clears_admin_ids(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    result = run_env_setup(tmp_path, "new-token\nn\nnew-splitwise-key\n")
+    result = run_env_setup(tmp_path, "new-token\nnew_dev_bot\nn\nnew-splitwise-key\n")
 
     assert read_env(tmp_path) == {
         "FOODBOT_ENV": "development",
         "TELEGRAM_BOT_TOKEN": "new-token",
+        "TELEGRAM_BOT_USERNAME": "new_dev_bot",
         "DATABASE_PATH": "foodbot.local.sqlite3",
         "TELEGRAM_ADMIN_IDS": "",
         "FOODBOT_TIMEZONE": "Europe/Belgrade",
@@ -148,6 +158,7 @@ def test_setup_dev_keeps_existing_env_when_interrupted_before_replace(tmp_path: 
     existing_env = "\n".join(
         [
             "TELEGRAM_BOT_TOKEN=old-token",
+            "TELEGRAM_BOT_USERNAME=old_dev_bot",
             "DATABASE_PATH=old.sqlite3",
             "TELEGRAM_ADMIN_IDS=42",
             "FOODBOT_TIMEZONE=UTC",
@@ -172,7 +183,7 @@ def test_setup_dev_keeps_existing_env_when_interrupted_before_replace(tmp_path: 
     result = subprocess.run(
         ["bash", str(SETUP_DEV), "--env-only", "--skip-token-check"],
         cwd=tmp_path,
-        input="new-token\nn\nnew-splitwise-key\n",
+        input="new-token\nnew_dev_bot\nn\nnew-splitwise-key\n",
         text=True,
         capture_output=True,
         check=False,
@@ -193,6 +204,7 @@ def test_setup_dev_reset_env_ignores_existing_values(tmp_path: Path) -> None:
         "\n".join(
             [
                 "TELEGRAM_BOT_TOKEN=old-token",
+                "TELEGRAM_BOT_USERNAME=old_dev_bot",
                 "DATABASE_PATH=old.sqlite3",
                 "TELEGRAM_ADMIN_IDS=42",
                 "FOODBOT_TIMEZONE=UTC",
@@ -203,11 +215,16 @@ def test_setup_dev_reset_env_ignores_existing_values(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    result = run_env_setup(tmp_path, "fresh-token\nn\nfresh-splitwise-key\n", "--reset-env")
+    result = run_env_setup(
+        tmp_path,
+        "fresh-token\nfresh_dev_bot\nn\nfresh-splitwise-key\n",
+        "--reset-env",
+    )
 
     assert read_env(tmp_path) == {
         "FOODBOT_ENV": "development",
         "TELEGRAM_BOT_TOKEN": "fresh-token",
+        "TELEGRAM_BOT_USERNAME": "fresh_dev_bot",
         "DATABASE_PATH": "foodbot.local.sqlite3",
         "TELEGRAM_ADMIN_IDS": "",
         "FOODBOT_TIMEZONE": "Europe/Belgrade",
@@ -226,7 +243,7 @@ def test_setup_dev_requires_splitwise_api_key(tmp_path: Path) -> None:
     result = subprocess.run(
         ["bash", str(SETUP_DEV), "--env-only", "--skip-token-check"],
         cwd=tmp_path,
-        input="123456:test-token\nn\n\n",
+        input="123456:test-token\ndev_bot\nn\n\n",
         text=True,
         capture_output=True,
         check=False,
@@ -235,6 +252,43 @@ def test_setup_dev_requires_splitwise_api_key(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert "SPLITWISE_API_KEY is required." in result.stderr
     assert not (tmp_path / ".env").exists()
+
+
+def test_setup_dev_detects_bot_username_from_verified_token(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    fake_curl = fake_bin / "curl"
+    fake_curl.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' "
+        "'{\"ok\":true,\"result\":{\"id\":123456789,\"username\":\"foodbot_dev\"}}'\n",
+        encoding="utf-8",
+    )
+    fake_curl.chmod(0o755)
+
+    result = subprocess.run(
+        ["bash", str(SETUP_DEV), "--env-only"],
+        cwd=tmp_path,
+        input="123456789:abcdefghijklmnopqrstuvwxyzABCDE\n\nn\ndev-splitwise-key\n",
+        text=True,
+        capture_output=True,
+        check=True,
+        env={"PATH": f"{fake_bin}:/usr/bin:/bin:/usr/sbin:/sbin"},
+    )
+
+    assert read_env(tmp_path) == {
+        "FOODBOT_ENV": "development",
+        "TELEGRAM_BOT_TOKEN": "123456789:abcdefghijklmnopqrstuvwxyzABCDE",
+        "TELEGRAM_BOT_USERNAME": "foodbot_dev",
+        "DATABASE_PATH": "foodbot.local.sqlite3",
+        "TELEGRAM_ADMIN_IDS": "",
+        "FOODBOT_TIMEZONE": "Europe/Belgrade",
+        "SPLITWISE_API_KEY": "dev-splitwise-key",
+        "SPLITWISE_GROUP_ID": "",
+    }
+    assert "Telegram bot username: @foodbot_dev" in result.stdout
+    assert "123456789:abcdefghijklmnopqrstuvwxyzABCDE" not in result.stdout
+    assert "dev-splitwise-key" not in result.stdout
 
 
 def test_setup_dev_rejects_production_telegram_bot_token(tmp_path: Path) -> None:

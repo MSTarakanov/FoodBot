@@ -18,6 +18,7 @@ def make_settings(
     return Settings(
         environment=environment,
         telegram_bot_token="123456:test-token",
+        telegram_bot_username="foodbot_dev",
         database_path=":memory:",
         telegram_admin_ids=frozenset(),
         timezone="Europe/Belgrade",

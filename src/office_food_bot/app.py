@@ -4,7 +4,8 @@ from datetime import datetime
 from aiogram import Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from office_food_bot.commands import create_command_router
+from office_food_bot.commands.errors import unhandled_error_handler
+from office_food_bot.commands.router import create_command_router
 from office_food_bot.config import Settings
 from office_food_bot.database import Database
 from office_food_bot.messaging import BotMessenger
@@ -20,6 +21,7 @@ def create_services(
 ) -> BotServices:
     return build_services(
         database,
+        settings.telegram_bot_username,
         settings.telegram_admin_ids,
         settings.timezone,
         settings.splitwise_api_key,
@@ -30,10 +32,12 @@ def create_services(
 
 
 def create_dispatcher(services: BotServices) -> Dispatcher:
+    messenger = BotMessenger()
     dispatcher = Dispatcher(
         storage=MemoryStorage(),
         services=services,
-        messenger=BotMessenger(),
+        messenger=messenger,
     )
-    dispatcher.include_router(create_command_router())
+    dispatcher.errors.register(unhandled_error_handler)
+    dispatcher.include_router(create_command_router(services, messenger))
     return dispatcher

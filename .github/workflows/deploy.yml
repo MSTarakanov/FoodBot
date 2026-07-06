@@ -92,11 +92,29 @@ jobs:
         run: |
           default_splitwise_group_id="$(sed -n 's/^SPLITWISE_GROUP_ID=//p' .env.defaults | head -n 1)"
           splitwise_group_id="${SPLITWISE_GROUP_ID:-$default_splitwise_group_id}"
+          telegram_get_me_response="$(
+            printf 'url = "https://api.telegram.org/bot%s/getMe"\n' "$TELEGRAM_BOT_TOKEN" \
+              | curl --silent --show-error --fail --config -
+          )"
+          telegram_bot_username="$(
+            TELEGRAM_GET_ME_RESPONSE="$telegram_get_me_response" python3 <<'PY'
+import json
+import os
+import sys
+
+payload = json.loads(os.environ["TELEGRAM_GET_ME_RESPONSE"])
+username = payload.get("result", {}).get("username")
+if payload.get("ok") is not True or not isinstance(username, str) or not username:
+    sys.exit("Telegram getMe response did not include bot username")
+print(username)
+PY
+          )"
 
           umask 077
           {
             printf 'FOODBOT_ENV=%s\n' "production"
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
+            printf 'TELEGRAM_BOT_USERNAME=%s\n' "$telegram_bot_username"
             printf 'DATABASE_PATH=%s\n' "/opt/foodbot/foodbot.sqlite3"
             printf 'TELEGRAM_ADMIN_IDS=%s\n' "$TELEGRAM_ADMIN_IDS"
             printf 'FOODBOT_TIMEZONE=%s\n' "Europe/Belgrade"

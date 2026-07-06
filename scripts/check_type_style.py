@@ -25,6 +25,7 @@ class TypeStyleChecker(ast.NodeVisitor):
         self.path = path
         self.violations: list[Violation] = []
         self.any_names = {"Any"}
+        self.object_names = {"object"}
         self.optional_names = {"Optional"}
         self.union_names = {"Union"}
         self.typing_module_names = {"typing"}
@@ -78,6 +79,10 @@ class TypeStyleChecker(ast.NodeVisitor):
     def _check_annotation(self, node: ast.AST) -> None:
         if self._is_any(node):
             self._add_violation(node, "TYP001", "Do not use typing.Any in src.")
+            return
+
+        if self._is_object(node):
+            self._add_violation(node, "TYP003", "Do not use object annotations in src.")
             return
 
         union_members = self._union_members(node)
@@ -145,6 +150,9 @@ class TypeStyleChecker(ast.NodeVisitor):
 
     def _is_any(self, node: ast.AST) -> bool:
         return self._is_name(node, self.any_names) or self._is_typing_attribute(node, "Any")
+
+    def _is_object(self, node: ast.AST) -> bool:
+        return self._is_name(node, self.object_names)
 
     def _is_none(self, node: ast.AST) -> bool:
         return isinstance(node, ast.Constant) and node.value is None

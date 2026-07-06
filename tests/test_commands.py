@@ -11,11 +11,17 @@ import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import Command
 from aiogram.methods import SendPoll, SetMyCommands, TelegramMethod
+from aiogram.methods.base import TelegramType
 from aiogram.methods.send_message import SendMessage
 from aiogram.types import (
     BotCommand,
+    BotCommandScopeAllGroupChats,
+    BotCommandScopeAllPrivateChats,
     BotCommandScopeChat,
+    BotCommandScopeDefault,
+    BotCommandScopeUnion,
     Chat,
     Message,
     Poll,
@@ -27,18 +33,14 @@ from aiogram.types import (
 )
 
 from office_food_bot.app import create_dispatcher, create_services
-from office_food_bot.commands import setup_bot_commands
-from office_food_bot.commands.definitions import (
-    ADMIN_COMMANDS,
-    ADMIN_HELP_TEXT,
-    PUBLIC_COMMANDS,
-    PUBLIC_HELP_TEXT,
-    START_TEXT,
-)
+from office_food_bot.commands.definitions import COMMANDS, START_TEXT
+from office_food_bot.commands.errors import UNHANDLED_ERROR_REPLY_TEXT
+from office_food_bot.commands.menu import setup_bot_commands
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
 from office_food_bot.models import SplitwiseBalance, SplitwiseMember, UserStatus
 from office_food_bot.repositories import UserRepository
+from office_food_bot.services import BotServices
 from office_food_bot.services.lunch import (
     LUNCH_OTHER_FOOD_POLL_OPTIONS,
     LUNCH_OTHER_FOOD_POLL_QUESTION,
@@ -52,11 +54,42 @@ from office_food_bot.services.splitwise import SplitwiseUnavailableError
 
 DEFAULT_ADMIN_IDS = frozenset({7})
 DEFAULT_SPLITWISE_GROUP_ID = 55
+PRIVATE_HELP_TEXT = (
+    "Команды:\n"
+    "/start - показать приветствие\n"
+    "/help - показать список команд\n"
+    "/hi - проверить, что бот на месте\n"
+    "/register - пройти регистрацию\n"
+    "/cancel - отменить текущий сценарий\n"
+    "/balance - показать баланс Splitwise"
+)
+ADMIN_PRIVATE_HELP_TEXT = (
+    "Команды:\n"
+    "/start - показать приветствие\n"
+    "/help - показать список команд\n"
+    "/hi - проверить, что бот на месте\n"
+    "/register - пройти регистрацию\n"
+    "/cancel - отменить текущий сценарий\n"
+    "/approve 123456789 - подтвердить регистрацию\n"
+    "/register_requests_list - показать заявки на регистрацию\n"
+    "/debug 1 - включить или выключить debug режим\n"
+    "/balance - показать баланс Splitwise"
+)
+GROUP_HELP_TEXT = (
+    "Команды:\n"
+    "/help - показать список команд\n"
+    "/hi - проверить, что бот на месте\n"
+    "/meta 25 - сообщить, через сколько минут придешь\n"
+    "/eta 20 - сообщить ожидаемое время доставки\n"
+    "/balance - показать баланс Splitwise\n"
+    "/lunch - создать опрос про обед"
+)
 
 
 @dataclass(frozen=True)
-class ChatCommandMenu:
-    chat_id: int
+class CommandMenu:
+    scope_name: str
+    chat_id: int | None
     commands: tuple[BotCommand, ...]
 
 
@@ -66,6 +99,7 @@ class RecordingSession(BaseSession):
         self.sent_messages: list[SendMessage] = []
         self.sent_polls: list[SendPoll] = []
         self.sent_poll_ids: list[str] = []
+        self.set_command_requests: list[SetMyCommands] = []
 
     async def close(self) -> None:
         return None
@@ -73,9 +107,9 @@ class RecordingSession(BaseSession):
     async def make_request(
         self,
         bot: Bot,
-        method: TelegramMethod[Message],
+        method: TelegramMethod[TelegramType],
         timeout: int | None = None,
-    ) -> Message:
+    ) -> TelegramType:
         if isinstance(method, SendMessage):
             self.sent_messages.append(method)
             return _send_message_response(method, len(self.sent_messages) + len(self.sent_polls))
@@ -86,6 +120,9 @@ class RecordingSession(BaseSession):
                 raise AssertionError("Expected fake sendPoll response to include poll")
             self.sent_poll_ids.append(message.poll.id)
             return message
+        if isinstance(method, SetMyCommands):
+            self.set_command_requests.append(method)
+            return True
 
         raise AssertionError(f"Unexpected Telegram method: {type(method).__name__}")
 
@@ -108,24 +145,14 @@ class RecordingSession(BaseSession):
 
 class RecordingCommandMenuClient:
     def __init__(self) -> None:
-        self.public_command_menus: list[tuple[BotCommand, ...]] = []
-        self.chat_command_menus: list[ChatCommandMenu] = []
+        self.command_menus: list[CommandMenu] = []
 
     async def set_my_commands(
         self,
         commands: list[BotCommand],
-        scope: BotCommandScopeChat | None = None,
+        scope: BotCommandScopeUnion | None = None,
     ) -> bool:
-        command_menu = tuple(commands)
-        if scope is None:
-            self.public_command_menus.append(command_menu)
-            return True
-
-        chat_id = scope.chat_id
-        if not isinstance(chat_id, int):
-            raise AssertionError(f"Expected numeric admin chat id, got {chat_id!r}")
-
-        self.chat_command_menus.append(ChatCommandMenu(chat_id=chat_id, commands=command_menu))
+        self.command_menus.append(_command_menu(scope, tuple(commands)))
         return True
 
 
@@ -133,15 +160,37 @@ class AdminChatNotFoundCommandMenuClient(RecordingCommandMenuClient):
     async def set_my_commands(
         self,
         commands: list[BotCommand],
-        scope: BotCommandScopeChat | None = None,
+        scope: BotCommandScopeUnion | None = None,
     ) -> bool:
-        if scope is not None:
+        if isinstance(scope, BotCommandScopeChat):
             raise TelegramBadRequest(
                 method=SetMyCommands(commands=commands, scope=scope),
                 message="Bad Request: chat not found",
             )
 
         return await super().set_my_commands(commands, scope)
+
+
+def _command_menu(
+    scope: BotCommandScopeUnion | None,
+    commands: tuple[BotCommand, ...],
+) -> CommandMenu:
+    if scope is None or isinstance(scope, BotCommandScopeDefault):
+        return CommandMenu("default", None, commands)
+
+    if isinstance(scope, BotCommandScopeAllPrivateChats):
+        return CommandMenu("all_private", None, commands)
+
+    if isinstance(scope, BotCommandScopeAllGroupChats):
+        return CommandMenu("all_group", None, commands)
+
+    if isinstance(scope, BotCommandScopeChat):
+        chat_id = scope.chat_id
+        if not isinstance(chat_id, int):
+            raise AssertionError(f"Expected numeric admin chat id, got {chat_id!r}")
+        return CommandMenu("chat", chat_id, commands)
+
+    raise AssertionError(f"Unexpected command menu scope: {scope!r}")
 
 
 class FakeSplitwiseClient:
@@ -212,6 +261,8 @@ def make_update(
     first_name: str = "Misha",
     username: str | None = "misha",
     last_name: str | None = None,
+    chat_type: str = "private",
+    chat_id: int | None = None,
 ) -> Update:
     user = User(
         id=user_id,
@@ -220,7 +271,12 @@ def make_update(
         last_name=last_name,
         username=username,
     )
-    chat = Chat(id=user_id, type="private")
+    resolved_chat_id = chat_id
+    if resolved_chat_id is None:
+        resolved_chat_id = user_id
+    if chat_type != "private" and chat_id is None:
+        resolved_chat_id = -100
+    chat = Chat(id=resolved_chat_id, type=chat_type)
     message = Message(
         message_id=100,
         date=datetime.now(tz=UTC),
@@ -264,15 +320,16 @@ def make_database(tmp_path: Path) -> Database:
     return database
 
 
-def make_dispatcher(
+def make_test_services(
     database: Database,
     admin_ids: frozenset[int] = DEFAULT_ADMIN_IDS,
     splitwise_members: tuple[SplitwiseMember, ...] = (),
     splitwise_unavailable: bool = False,
-) -> Dispatcher:
+) -> BotServices:
     settings = Settings(
         environment=RuntimeEnvironment.DEVELOPMENT,
         telegram_bot_token="123456:test-token",
+        telegram_bot_username="foodbot_dev",
         database_path=database.path,
         telegram_admin_ids=admin_ids,
         timezone="Europe/Belgrade",
@@ -289,11 +346,30 @@ def make_dispatcher(
             unavailable=splitwise_unavailable,
         ),
     )
+    return services
+
+
+def make_dispatcher(
+    database: Database,
+    admin_ids: frozenset[int] = DEFAULT_ADMIN_IDS,
+    splitwise_members: tuple[SplitwiseMember, ...] = (),
+    splitwise_unavailable: bool = False,
+) -> Dispatcher:
+    services = make_test_services(
+        database,
+        admin_ids,
+        splitwise_members,
+        splitwise_unavailable,
+    )
     return create_dispatcher(services)
 
 
 def sent_texts(session: RecordingSession) -> list[str]:
     return [message.text for message in session.sent_messages]
+
+
+def _command_names(commands: tuple[BotCommand, ...]) -> list[str]:
+    return [command.command for command in commands]
 
 
 def keyboard_texts(message: SendMessage) -> list[list[str]]:
@@ -365,7 +441,7 @@ async def submit_registration(
     ("incoming_text", "expected_text"),
     [
         ("/start", START_TEXT),
-        ("/help", PUBLIC_HELP_TEXT),
+        ("/help", PRIVATE_HELP_TEXT),
         ("/hi", "Привет! Я на месте."),
     ],
 )
@@ -395,48 +471,161 @@ async def test_help_shows_admin_commands_to_admins(tmp_path: Path) -> None:
 
     await dispatcher.feed_update(bot, make_update("/help", user_id=7, first_name="Admin"))
 
-    assert sent_texts(session) == [ADMIN_HELP_TEXT]
+    assert sent_texts(session) == [ADMIN_PRIVATE_HELP_TEXT]
+
+
+async def test_help_shows_group_commands_in_group_chat(tmp_path: Path) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/help", chat_type="group"))
+
+    assert sent_texts(session) == [GROUP_HELP_TEXT]
+
+
+async def test_private_only_command_in_group_points_to_private_bot_link(
+    tmp_path: Path,
+) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register", chat_type="group"))
+
+    assert sent_texts(session) == [
+        "Команда доступна только в личке: https://t.me/foodbot_dev"
+    ]
+    assert UserRepository(database).get_by_telegram_id(42) is None
+
+
+async def test_unhandled_command_error_replies_with_generic_message(tmp_path: Path) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    async def broken_command(message: Message) -> None:
+        msg = "secret internal detail"
+        raise RuntimeError(msg)
+
+    dispatcher.message.register(broken_command, Command("boom"))
+
+    await dispatcher.feed_update(bot, make_update("/boom"))
+
+    assert sent_texts(session) == [UNHANDLED_ERROR_REPLY_TEXT]
+
+
+async def test_command_addressed_to_another_bot_is_ignored(tmp_path: Path) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register@another_bot", chat_type="group"))
+
+    assert sent_texts(session) == []
+    assert UserRepository(database).get_by_telegram_id(42) is None
 
 
 async def test_setup_bot_commands_registers_telegram_menu() -> None:
+    database = Database(Path(":memory:"))
+    database.init_schema()
     bot = RecordingCommandMenuClient()
+    services = make_test_services(database)
 
-    await setup_bot_commands(bot, DEFAULT_ADMIN_IDS)
+    await setup_bot_commands(bot, services.command_access)
 
-    assert len(bot.public_command_menus) == 1
-    assert len(bot.chat_command_menus) == 1
+    assert len(bot.command_menus) == 4
 
-    public_commands = bot.public_command_menus[0]
-    assert [command.command for command in public_commands] == [
-        definition.name for definition in PUBLIC_COMMANDS
-    ]
-    assert [command.command for command in public_commands] == [
+    default_menu = bot.command_menus[0]
+    assert default_menu.scope_name == "default"
+    assert _command_names(default_menu.commands) == [
         "start",
         "help",
         "hi",
         "register",
         "cancel",
+        "balance",
+    ]
+
+    private_menu = bot.command_menus[1]
+    assert private_menu.scope_name == "all_private"
+    assert _command_names(private_menu.commands) == [
+        "start",
+        "help",
+        "hi",
+        "register",
+        "cancel",
+        "balance",
+    ]
+
+    group_menu = bot.command_menus[2]
+    assert group_menu.scope_name == "all_group"
+    assert _command_names(group_menu.commands) == [
+        "help",
+        "hi",
         "meta",
         "eta",
         "balance",
         "lunch",
     ]
 
-    admin_menu = bot.chat_command_menus[0]
+    admin_menu = bot.command_menus[3]
+    assert admin_menu.scope_name == "chat"
     assert admin_menu.chat_id == 7
-    assert [command.command for command in admin_menu.commands] == [
-        definition.name for definition in ADMIN_COMMANDS
+    assert _command_names(admin_menu.commands) == [
+        "start",
+        "help",
+        "hi",
+        "register",
+        "cancel",
+        "approve",
+        "register_requests_list",
+        "debug",
+        "balance",
     ]
-    assert "approve" in [command.command for command in admin_menu.commands]
+
+    database.close()
+
+
+async def test_setup_bot_commands_uses_debug_menu_for_admin_chat() -> None:
+    database = Database(Path(":memory:"))
+    database.init_schema()
+    bot = RecordingCommandMenuClient()
+    services = make_test_services(database)
+    services.debug.set_enabled(7, True)
+
+    await setup_bot_commands(bot, services.command_access)
+
+    admin_menu = bot.command_menus[3]
+    assert admin_menu.scope_name == "chat"
+    assert admin_menu.chat_id == 7
+    assert _command_names(admin_menu.commands) == [
+        definition.name for definition in COMMANDS
+    ]
+
+    database.close()
 
 
 async def test_setup_bot_commands_ignores_missing_admin_chat() -> None:
+    database = Database(Path(":memory:"))
+    database.init_schema()
     bot = AdminChatNotFoundCommandMenuClient()
+    services = make_test_services(database)
 
-    await setup_bot_commands(bot, DEFAULT_ADMIN_IDS)
+    await setup_bot_commands(bot, services.command_access)
 
-    assert len(bot.public_command_menus) == 1
-    assert len(bot.chat_command_menus) == 0
+    assert len(bot.command_menus) == 3
+    assert [menu.scope_name for menu in bot.command_menus] == [
+        "default",
+        "all_private",
+        "all_group",
+    ]
+
+    database.close()
 
 
 async def test_register_creates_pending_user_and_notifies_admin(tmp_path: Path) -> None:
@@ -644,7 +833,7 @@ async def test_command_interrupts_registration_flow(tmp_path: Path) -> None:
 
     await dispatcher.feed_update(bot, make_update("/help"))
 
-    assert sent_texts(session) == [PUBLIC_HELP_TEXT]
+    assert sent_texts(session) == [PRIVATE_HELP_TEXT]
 
     session.clear_messages()
     await dispatcher.feed_update(bot, make_update("Максим"))
@@ -939,7 +1128,7 @@ async def test_non_admin_cannot_approve(tmp_path: Path) -> None:
     session.clear_messages()
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=99, first_name="NotAdmin"))
 
-    assert sent_texts(session) == ["Не могу: аппрувить могут только админы."]
+    assert sent_texts(session) == ["Команда доступна только админам."]
 
 
 async def test_admin_can_list_pending_registration_requests(tmp_path: Path) -> None:
@@ -977,7 +1166,7 @@ async def test_non_admin_cannot_list_pending_registration_requests(tmp_path: Pat
 
     await dispatcher.feed_update(bot, make_update("/register_requests_list", user_id=99))
 
-    assert sent_texts(session) == ["Не могу: список заявок доступен только админам."]
+    assert sent_texts(session) == ["Команда доступна только админам."]
 
 
 async def test_admin_sees_empty_registration_request_list(tmp_path: Path) -> None:
@@ -1001,7 +1190,7 @@ async def test_meta_uses_registered_display_name(tmp_path: Path) -> None:
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
     session.clear_messages()
 
-    await dispatcher.feed_update(bot, make_update("/meta 25"))
+    await dispatcher.feed_update(bot, make_update("/meta 25", chat_type="group"))
 
     assert sent_texts(session) == ["Максим будет в 12:40"]
 
@@ -1016,7 +1205,7 @@ async def test_eta_reports_delivery_arrival_time(tmp_path: Path) -> None:
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
     session.clear_messages()
 
-    await dispatcher.feed_update(bot, make_update("/eta 20"))
+    await dispatcher.feed_update(bot, make_update("/eta 20", chat_type="group"))
 
     assert sent_texts(session) == ["Ожидаемое время прибытия доставки 12:35"]
 
@@ -1027,7 +1216,7 @@ async def test_eta_requires_minutes_argument(tmp_path: Path) -> None:
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
-    await dispatcher.feed_update(bot, make_update("/eta"))
+    await dispatcher.feed_update(bot, make_update("/eta", chat_type="group"))
 
     assert sent_texts(session) == ["Напиши через сколько минут: /eta 20"]
 
@@ -1038,7 +1227,7 @@ async def test_meta_requires_minutes_argument(tmp_path: Path) -> None:
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
-    await dispatcher.feed_update(bot, make_update("/meta"))
+    await dispatcher.feed_update(bot, make_update("/meta", chat_type="group"))
 
     assert sent_texts(session) == ["Напиши через сколько минут: /meta 25"]
 
@@ -1061,7 +1250,7 @@ async def test_registration_happy_path_allows_meta_after_approval(tmp_path: Path
     ]
 
     session.clear_messages()
-    await dispatcher.feed_update(bot, make_update("/meta 25"))
+    await dispatcher.feed_update(bot, make_update("/meta 25", chat_type="group"))
     assert sent_texts(session) == ["Максим будет в 12:40"]
 
 
@@ -1074,7 +1263,7 @@ async def test_meta_requires_approved_registration(tmp_path: Path) -> None:
     await submit_registration(dispatcher, bot, session)
     session.clear_messages()
 
-    await dispatcher.feed_update(bot, make_update("/meta 25"))
+    await dispatcher.feed_update(bot, make_update("/meta 25", chat_type="group"))
 
     assert sent_texts(session) == ["Регистрация еще ждет аппрува."]
 
@@ -1090,6 +1279,21 @@ async def test_balance_requires_active_user_and_has_placeholder(tmp_path: Path) 
     session.clear_messages()
 
     await dispatcher.feed_update(bot, make_update("/balance"))
+
+    assert sent_texts(session) == ["Splitwise пока не подключен."]
+
+
+async def test_balance_works_in_group_chat(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/balance", chat_type="group"))
 
     assert sent_texts(session) == ["Splitwise пока не подключен."]
 
@@ -1166,7 +1370,7 @@ async def test_lunch_requires_registered_user(tmp_path: Path) -> None:
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
-    await dispatcher.feed_update(bot, make_update("/lunch"))
+    await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
 
     assert sent_texts(session) == ["Сначала зарегистрируйся: /register"]
     assert session.sent_polls == []
@@ -1181,7 +1385,7 @@ async def test_lunch_requires_active_user(tmp_path: Path) -> None:
     await submit_registration(dispatcher, bot, session)
     session.clear_messages()
 
-    await dispatcher.feed_update(bot, make_update("/lunch"))
+    await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
 
     assert sent_texts(session) == ["Регистрация еще ждет аппрува."]
     assert session.sent_polls == []
@@ -1197,7 +1401,7 @@ async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path)
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
     session.clear_messages()
 
-    await dispatcher.feed_update(bot, make_update("/lunch"))
+    await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
 
     assert sent_texts(session) == []
     assert len(session.sent_polls) == 2
@@ -1217,6 +1421,58 @@ async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path)
     assert place_poll.allow_adding_options is True
 
 
+async def test_admin_debug_allows_group_only_command_in_private_chat(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(
+        dispatcher,
+        bot,
+        session,
+        user_id=7,
+        first_name="Admin",
+        username="admin",
+    )
+    await dispatcher.feed_update(bot, make_update("/approve 7", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/lunch", user_id=7, first_name="Admin"))
+
+    assert sent_texts(session) == ["Команда доступна только в групповом чате."]
+    assert session.sent_polls == []
+
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("/debug 1", user_id=7, first_name="Admin"))
+
+    assert sent_texts(session) == ["Debug включен. В личке доступны все команды."]
+    assert len(session.set_command_requests) == 1
+    assert _command_names(tuple(session.set_command_requests[0].commands)) == [
+        definition.name for definition in COMMANDS
+    ]
+
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("/lunch", user_id=7, first_name="Admin"))
+
+    assert sent_texts(session) == []
+    assert len(session.sent_polls) == 2
+
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("/debug 0", user_id=7, first_name="Admin"))
+
+    assert sent_texts(session) == ["Debug выключен."]
+    assert len(session.set_command_requests) == 2
+
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("/lunch", user_id=7, first_name="Admin"))
+
+    assert sent_texts(session) == ["Команда доступна только в групповом чате."]
+    assert session.sent_polls == []
+
+
 async def test_lunch_other_place_answer_creates_other_food_poll_once(
     tmp_path: Path,
 ) -> None:
@@ -1229,7 +1485,7 @@ async def test_lunch_other_place_answer_creates_other_food_poll_once(
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
     session.clear_messages()
 
-    await dispatcher.feed_update(bot, make_update("/lunch"))
+    await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
     place_poll_id = session.sent_poll_ids[1]
     session.clear_messages()
 
@@ -1273,7 +1529,7 @@ async def test_lunch_place_answer_without_other_choice_does_not_create_poll(
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
     session.clear_messages()
 
-    await dispatcher.feed_update(bot, make_update("/lunch"))
+    await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
     place_poll_id = session.sent_poll_ids[1]
     session.clear_messages()
 

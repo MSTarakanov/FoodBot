@@ -3,6 +3,10 @@ from __future__ import annotations
 import sqlite3
 
 from office_food_bot.database import Database
+from office_food_bot.database.debug_queries import (
+    GET_TELEGRAM_DEBUG_ENABLED_SQL,
+    UPSERT_TELEGRAM_DEBUG_SQL,
+)
 from office_food_bot.database.user_queries import (
     APPROVE_USER_BY_TELEGRAM_ID_SQL,
     COUNT_SPLITWISE_USERS_SQL,
@@ -216,6 +220,27 @@ class UserRepository:
             )
 
 
+class DebugRepository:
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    def is_enabled(self, telegram_user_id: int) -> bool:
+        row = self._database.connection.execute(
+            GET_TELEGRAM_DEBUG_ENABLED_SQL,
+            (telegram_user_id,),
+        ).fetchone()
+        if row is None:
+            return False
+        return bool(row["enabled"])
+
+    def set_enabled(self, telegram_user_id: int, enabled: bool) -> None:
+        with self._database.connection:
+            self._database.connection.execute(
+                UPSERT_TELEGRAM_DEBUG_SQL,
+                (telegram_user_id, int(enabled)),
+            )
+
+
 def normalize_display_name(raw_display_name: str) -> str:
     return " ".join(raw_display_name.split())
 
@@ -264,7 +289,7 @@ def _splitwise_connection_from_row(row: sqlite3.Row) -> SplitwiseConnection | No
     )
 
 
-def _optional_str(value: object) -> str | None:
+def _optional_str[Value](value: Value | None) -> str | None:
     if value is None:
         return None
     return str(value)

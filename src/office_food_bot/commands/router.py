@@ -5,10 +5,12 @@ from aiogram.filters import Command, CommandStart
 
 from office_food_bot.commands.approve import approve_command
 from office_food_bot.commands.balance import balance_command
+from office_food_bot.commands.debug import debug_command
 from office_food_bot.commands.eta import eta_command
 from office_food_bot.commands.help import help_command
 from office_food_bot.commands.hi import hi_command
 from office_food_bot.commands.lunch import lunch_command
+from office_food_bot.commands.middleware import CommandAccessMiddleware
 from office_food_bot.commands.poll_tracking import poll_answer_handler
 from office_food_bot.commands.register import (
     RegistrationFlow,
@@ -23,10 +25,13 @@ from office_food_bot.commands.register import (
 )
 from office_food_bot.commands.register_requests_list import register_requests_list_command
 from office_food_bot.commands.start import start_command
+from office_food_bot.messaging import BotMessenger
+from office_food_bot.services import BotServices
 
 
-def create_command_router() -> Router:
+def create_command_router(services: BotServices, messenger: BotMessenger) -> Router:
     router = Router(name="commands")
+    router.message.outer_middleware(CommandAccessMiddleware(services, messenger))
     router.message.register(cancel_registration_command, Command("cancel"))
     router.message.register(start_command, CommandStart())
     router.message.register(help_command, Command("help"))
@@ -34,6 +39,7 @@ def create_command_router() -> Router:
     router.message.register(register_command, Command("register"))
     router.message.register(approve_command, Command("approve"))
     router.message.register(register_requests_list_command, Command("register_requests_list"))
+    router.message.register(debug_command, Command("debug"))
     router.message.register(eta_command, Command("meta", "eta"))
     router.message.register(balance_command, Command("balance"))
     router.message.register(lunch_command, Command("lunch"))

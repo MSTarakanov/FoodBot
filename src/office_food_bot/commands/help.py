@@ -17,8 +17,16 @@ async def help_command(
 ) -> None:
     await state.clear()
     profile = telegram_profile_from_message(message)
-    is_admin = (
-        profile is not None
-        and services.registration.can_approve(profile.telegram_user_id)
+    telegram_user_id = None
+    if profile is not None:
+        telegram_user_id = profile.telegram_user_id
+
+    await messenger.reply(
+        message,
+        help_text(
+            services.command_access.visible_commands(
+                str(message.chat.type),
+                telegram_user_id,
+            )
+        ),
     )
-    await messenger.reply(message, help_text(is_admin=is_admin))

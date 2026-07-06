@@ -16,13 +16,13 @@ async def eta_command(
     services: BotServices,
     state: FSMContext,
 ) -> None:
+    command_name = command.command
     await state.clear()
     profile = telegram_profile_from_message(message)
     if profile is None:
         await messenger.reply(message, "Не вижу твой Telegram user id.")
         return
 
-    command_name = command.command
     if not command.args:
         await messenger.reply(
             message,

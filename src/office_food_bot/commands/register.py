@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal, Protocol, overload
+
 from aiogram import Bot
 from aiogram.filters.command import CommandObject
 from aiogram.fsm.context import FSMContext
@@ -37,6 +39,30 @@ SPLITWISE_SKIP_WARNING_TEXT = (
 )
 SPLITWISE_SKIP_CHOICES = ("Пропустить",)
 SPLITWISE_SKIP_ANSWERS = {"пропустить", "skip"}
+
+
+class RegistrationStateData(Protocol):
+    @overload
+    def get(
+        self,
+        key: Literal[
+            "requested_display_name",
+            "requested_splitwise_first_name",
+            "requested_splitwise_last_name",
+            "requested_splitwise_email",
+            "previous_display_name",
+            "previous_splitwise_email",
+        ],
+    ) -> str | None: ...
+
+    @overload
+    def get(
+        self,
+        key: Literal[
+            "requested_splitwise_user_id",
+            "previous_splitwise_user_id",
+        ],
+    ) -> int | None: ...
 
 
 class RegistrationFlow(StatesGroup):
@@ -661,7 +687,9 @@ def _splitwise_connection_email(splitwise: SplitwiseConnection | None) -> str | 
     return splitwise.email
 
 
-def _previous_details_from_state_data(data: dict[str, object]) -> RegistrationDetails | None:
+def _previous_details_from_state_data(
+    data: RegistrationStateData,
+) -> RegistrationDetails | None:
     raw_display_name = data.get("previous_display_name")
     if not isinstance(raw_display_name, str):
         return None
@@ -673,7 +701,7 @@ def _previous_details_from_state_data(data: dict[str, object]) -> RegistrationDe
 
 
 def _splitwise_connection_from_state_data(
-    data: dict[str, object],
+    data: RegistrationStateData,
 ) -> SplitwiseConnection | None:
     raw_user_id = data.get("previous_splitwise_user_id")
     raw_email = data.get("previous_splitwise_email")
@@ -686,7 +714,9 @@ def _splitwise_connection_from_state_data(
     )
 
 
-def _splitwise_member_from_state_data(data: dict[str, object]) -> SplitwiseMember | None:
+def _splitwise_member_from_state_data(
+    data: RegistrationStateData,
+) -> SplitwiseMember | None:
     raw_user_id = data.get("requested_splitwise_user_id")
     raw_email = data.get("requested_splitwise_email")
     if not isinstance(raw_user_id, int) or not isinstance(raw_email, str):
