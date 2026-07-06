@@ -68,6 +68,27 @@ COMMANDS: tuple[CommandDefinition, ...] = (
     ),
     CommandDefinition("balance", "показать баланс Splitwise", "/balance", CommandScope.ANY),
     CommandDefinition("lunch", "создать опрос про обед", "/lunch", CommandScope.GROUP),
+    CommandDefinition(
+        "lunch_auto_on",
+        "включить авто-ланч в этом чате",
+        "/lunch_auto_on",
+        CommandScope.GROUP,
+        admin_only=True,
+    ),
+    CommandDefinition(
+        "lunch_auto_off",
+        "выключить авто-ланч в этом чате",
+        "/lunch_auto_off",
+        CommandScope.GROUP,
+        admin_only=True,
+    ),
+    CommandDefinition(
+        "lunch_auto_status",
+        "показать статус авто-ланча",
+        "/lunch_auto_status",
+        CommandScope.GROUP,
+        admin_only=True,
+    ),
 )
 
 START_TEXT = "Привет! Я офисный бот про еду. Напиши /help, чтобы увидеть команды."

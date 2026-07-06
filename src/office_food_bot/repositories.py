@@ -7,6 +7,12 @@ from office_food_bot.database.debug_queries import (
     GET_TELEGRAM_DEBUG_ENABLED_SQL,
     UPSERT_TELEGRAM_DEBUG_SQL,
 )
+from office_food_bot.database.lunch_auto_chat_queries import (
+    DISABLE_LUNCH_AUTO_CHAT_SQL,
+    GET_LUNCH_AUTO_CHAT_SQL,
+    LIST_ENABLED_LUNCH_AUTO_CHATS_SQL,
+    UPSERT_LUNCH_AUTO_CHAT_SQL,
+)
 from office_food_bot.database.user_queries import (
     COUNT_SPLITWISE_USERS_SQL,
     DELETE_SPLITWISE_USER_BY_USER_ID_SQL,
@@ -24,6 +30,7 @@ from office_food_bot.database.user_queries import (
 )
 from office_food_bot.models import (
     ActiveSplitwiseUser,
+    LunchAutoChat,
     PendingRegistration,
     RegisteredUser,
     RegistrationDetails,
@@ -257,6 +264,49 @@ class DebugRepository:
             )
 
 
+class LunchAutoChatRepository:
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    def enable(self, chat_id: int, title: str | None) -> LunchAutoChat:
+        with self._database.connection:
+            self._database.connection.execute(
+                UPSERT_LUNCH_AUTO_CHAT_SQL,
+                (chat_id, title),
+            )
+
+        chat = self.get(chat_id)
+        if chat is None:
+            msg = "Enabled lunch auto chat was not found"
+            raise RuntimeError(msg)
+        return chat
+
+    def disable(self, chat_id: int) -> LunchAutoChat | None:
+        existing_chat = self.get(chat_id)
+        if existing_chat is None:
+            return None
+
+        with self._database.connection:
+            self._database.connection.execute(DISABLE_LUNCH_AUTO_CHAT_SQL, (chat_id,))
+
+        return self.get(chat_id)
+
+    def get(self, chat_id: int) -> LunchAutoChat | None:
+        row = self._database.connection.execute(
+            GET_LUNCH_AUTO_CHAT_SQL,
+            (chat_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return _lunch_auto_chat_from_row(row)
+
+    def list_enabled(self) -> tuple[LunchAutoChat, ...]:
+        rows = self._database.connection.execute(
+            LIST_ENABLED_LUNCH_AUTO_CHATS_SQL,
+        ).fetchall()
+        return tuple(_lunch_auto_chat_from_row(row) for row in rows)
+
+
 def normalize_display_name(raw_display_name: str) -> str:
     return " ".join(raw_display_name.split())
 
@@ -293,6 +343,14 @@ def _active_splitwise_user_from_row(row: sqlite3.Row) -> ActiveSplitwiseUser:
         display_name=str(row["display_name"]),
         splitwise_user_id=int(row["splitwise_user_id"]),
         email=str(row["splitwise_email"]),
+    )
+
+
+def _lunch_auto_chat_from_row(row: sqlite3.Row) -> LunchAutoChat:
+    return LunchAutoChat(
+        chat_id=int(row["chat_id"]),
+        title=_optional_str(row["title"]),
+        enabled=bool(row["enabled"]),
     )
 
 

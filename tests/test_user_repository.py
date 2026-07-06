@@ -5,7 +5,11 @@ import pytest
 from office_food_bot.database import Database
 from office_food_bot.database.database_schema import SCHEMA_SQL
 from office_food_bot.models import SplitwiseMember, TelegramProfile, UserRole, UserStatus
-from office_food_bot.repositories import DebugRepository, UserRepository
+from office_food_bot.repositories import (
+    DebugRepository,
+    LunchAutoChatRepository,
+    UserRepository,
+)
 
 LEGACY_SCHEMA_SQL = SCHEMA_SQL.replace("email TEXT NOT NULL,", "display_name TEXT NOT NULL,")
 
@@ -276,6 +280,20 @@ def test_database_init_creates_telegram_debug_settings_table(tmp_path) -> None:
     assert columns == ["telegram_user_id", "enabled", "updated_at"]
 
 
+def test_database_init_creates_lunch_auto_chats_table(tmp_path) -> None:
+    database = Database(tmp_path / "test.sqlite3")
+    database.init_schema()
+    try:
+        columns = [
+            str(row["name"])
+            for row in database.connection.execute("PRAGMA table_info(lunch_auto_chats)")
+        ]
+    finally:
+        database.close()
+
+    assert columns == ["chat_id", "title", "enabled", "created_at", "updated_at"]
+
+
 def test_database_init_creates_users_status_check_with_abandoned(tmp_path) -> None:
     database = Database(tmp_path / "test.sqlite3")
     database.init_schema()
@@ -289,6 +307,28 @@ def test_database_init_creates_users_status_check_with_abandoned(tmp_path) -> No
     assert row is not None
     assert "CHECK (status" in str(row["sql"])
     assert "'abandoned'" in str(row["sql"])
+
+
+def test_lunch_auto_chat_repository_enables_disables_and_lists_chats(
+    database: Database,
+) -> None:
+    chats = LunchAutoChatRepository(database)
+
+    chat = chats.enable(-100, "Office")
+    disabled_chat = chats.disable(-100)
+
+    assert chat.chat_id == -100
+    assert chat.title == "Office"
+    assert chat.enabled
+    assert disabled_chat is not None
+    assert not disabled_chat.enabled
+    assert chats.list_enabled() == ()
+
+    reenabled_chat = chats.enable(-100, "Office 2")
+
+    assert reenabled_chat.title == "Office 2"
+    assert reenabled_chat.enabled
+    assert [chat.chat_id for chat in chats.list_enabled()] == [-100]
 
 
 def test_debug_repository_persists_debug_status(database: Database) -> None:

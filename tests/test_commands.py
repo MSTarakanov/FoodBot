@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -39,7 +39,7 @@ from office_food_bot.commands.menu import setup_bot_commands
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
 from office_food_bot.models import SplitwiseBalance, SplitwiseMember, UserStatus
-from office_food_bot.repositories import UserRepository
+from office_food_bot.repositories import LunchAutoChatRepository, UserRepository
 from office_food_bot.services import BotServices
 from office_food_bot.services.lunch import (
     LUNCH_OTHER_FOOD_POLL_OPTIONS,
@@ -267,6 +267,7 @@ def make_update(
     last_name: str | None = None,
     chat_type: str = "private",
     chat_id: int | None = None,
+    chat_title: str | None = None,
 ) -> Update:
     user = User(
         id=user_id,
@@ -280,7 +281,7 @@ def make_update(
         resolved_chat_id = user_id
     if chat_type != "private" and chat_id is None:
         resolved_chat_id = -100
-    chat = Chat(id=resolved_chat_id, type=chat_type)
+    chat = Chat(id=resolved_chat_id, type=chat_type, title=chat_title)
     message = Message(
         message_id=100,
         date=datetime.now(tz=UTC),
@@ -329,6 +330,7 @@ def make_test_services(
     admin_ids: frozenset[int] = DEFAULT_ADMIN_IDS,
     splitwise_members: tuple[SplitwiseMember, ...] = (),
     splitwise_unavailable: bool = False,
+    clock: Callable[[], datetime] | None = None,
 ) -> BotServices:
     settings = Settings(
         environment=RuntimeEnvironment.DEVELOPMENT,
@@ -344,7 +346,8 @@ def make_test_services(
     services = create_services(
         database,
         settings,
-        clock=lambda: datetime(2026, 6, 30, 12, 15, tzinfo=ZoneInfo("Europe/Belgrade")),
+        clock=clock
+        or (lambda: datetime(2026, 6, 30, 12, 15, tzinfo=ZoneInfo("Europe/Belgrade"))),
         splitwise_client=FakeSplitwiseClient(
             splitwise_members,
             unavailable=splitwise_unavailable,
@@ -358,12 +361,14 @@ def make_dispatcher(
     admin_ids: frozenset[int] = DEFAULT_ADMIN_IDS,
     splitwise_members: tuple[SplitwiseMember, ...] = (),
     splitwise_unavailable: bool = False,
+    clock: Callable[[], datetime] | None = None,
 ) -> Dispatcher:
     services = make_test_services(
         database,
         admin_ids,
         splitwise_members,
         splitwise_unavailable,
+        clock,
     )
     return create_dispatcher(services)
 
@@ -1713,6 +1718,134 @@ async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path)
     assert place_poll.is_anonymous is False
     assert place_poll.allows_multiple_answers is True
     assert place_poll.allow_adding_options is True
+
+
+async def test_lunch_auto_commands_manage_current_group_chat(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update(
+            "/lunch_auto_on",
+            user_id=7,
+            first_name="Admin",
+            chat_type="group",
+            chat_id=-100,
+            chat_title="Office",
+        ),
+    )
+    await dispatcher.feed_update(
+        bot,
+        make_update(
+            "/lunch_auto_status",
+            user_id=7,
+            first_name="Admin",
+            chat_type="group",
+            chat_id=-100,
+            chat_title="Office",
+        ),
+    )
+    await dispatcher.feed_update(
+        bot,
+        make_update(
+            "/lunch_auto_off",
+            user_id=7,
+            first_name="Admin",
+            chat_type="group",
+            chat_id=-100,
+            chat_title="Office",
+        ),
+    )
+    await dispatcher.feed_update(
+        bot,
+        make_update(
+            "/lunch_auto_status",
+            user_id=7,
+            first_name="Admin",
+            chat_type="group",
+            chat_id=-100,
+            chat_title="Office",
+        ),
+    )
+
+    assert sent_texts(session) == [
+        "Авто-ланч включен для этого чата.",
+        "Авто-ланч включен для этого чата.",
+        "Авто-ланч выключен для этого чата.",
+        "Авто-ланч выключен для этого чата.",
+    ]
+    chat = LunchAutoChatRepository(database).get(-100)
+    assert chat is not None
+    assert chat.title == "Office"
+    assert not chat.enabled
+
+
+async def test_lunch_auto_commands_are_admin_only(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/lunch_auto_on", chat_type="group"))
+
+    assert sent_texts(session) == ["Команда доступна только админам."]
+    assert LunchAutoChatRepository(database).get(-100) is None
+
+
+async def test_scheduled_lunch_publishes_to_enabled_chats_and_tracks_poll(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    services.lunch_auto_chats.enable(-100, "Office")
+
+    await services.lunch_scheduler.run_due_lunch(bot)
+
+    assert len(session.sent_polls) == 2
+    assert session.sent_polls[0].chat_id == -100
+    assert session.sent_polls[0].question == LUNCH_POLL_QUESTION
+    assert session.sent_polls[1].question == LUNCH_PLACE_POLL_QUESTION
+    action_requests = services.poll_tracking.consume_action_requests(
+        session.sent_poll_ids[1],
+        (LUNCH_PLACE_OTHER_OPTION_INDEX,),
+    )
+    assert len(action_requests) == 1
+    assert action_requests[0].chat_id == -100
+
+
+async def test_scheduled_lunch_skips_serbian_holiday(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(
+        database,
+        clock=lambda: datetime(2026, 1, 1, 11, 30, tzinfo=ZoneInfo("Europe/Belgrade")),
+    )
+    services.lunch_auto_chats.enable(-100, "Office")
+
+    await services.lunch_scheduler.run_due_lunch(bot)
+
+    assert session.sent_polls == []
+
+
+async def test_scheduled_lunch_skips_weekend(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(
+        database,
+        clock=lambda: datetime(2026, 7, 4, 11, 30, tzinfo=ZoneInfo("Europe/Belgrade")),
+    )
+    services.lunch_auto_chats.enable(-100, "Office")
+
+    await services.lunch_scheduler.run_due_lunch(bot)
+
+    assert session.sent_polls == []
 
 
 async def test_admin_debug_allows_group_only_command_in_private_chat(

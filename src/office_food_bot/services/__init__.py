@@ -1,4 +1,5 @@
 from office_food_bot.services.balances import BalanceService
+from office_food_bot.services.business_calendar import BusinessCalendarService
 from office_food_bot.services.command_access import (
     CommandAccessDenialReason,
     CommandAccessResult,
@@ -8,6 +9,11 @@ from office_food_bot.services.container import BotServices
 from office_food_bot.services.debug import DebugService
 from office_food_bot.services.factory import build_services
 from office_food_bot.services.lunch import LunchService
+from office_food_bot.services.lunch_auto import (
+    LunchAutoChatService,
+    LunchPollPublisher,
+    LunchSchedulerService,
+)
 from office_food_bot.services.poll_tracking import (
     PollAction,
     PollActionRequest,
@@ -32,12 +38,16 @@ from office_food_bot.services.splitwise import (
 __all__ = [
     "ApprovalResult",
     "BalanceService",
+    "BusinessCalendarService",
     "BotServices",
     "CommandAccessDenialReason",
     "CommandAccessResult",
     "CommandAccessService",
     "DebugService",
     "LunchService",
+    "LunchAutoChatService",
+    "LunchPollPublisher",
+    "LunchSchedulerService",
     "PollAction",
     "PollActionRequest",
     "PollTrackingService",

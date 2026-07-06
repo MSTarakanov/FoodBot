@@ -11,12 +11,14 @@ from office_food_bot.runtime_guard import (
     ProductionTokenInDevelopmentError,
     ensure_safe_telegram_token_for_environment,
 )
+from office_food_bot.services import BotServices
 
 
 async def main() -> None:
     settings = load_settings()
     bot = Bot(token=settings.telegram_bot_token)
     database: Database | None = None
+    services: BotServices | None = None
     try:
         await ensure_safe_telegram_token_for_environment(settings, bot)
         database = Database(Path(settings.database_path))
@@ -24,8 +26,11 @@ async def main() -> None:
         services = create_services(database, settings)
         dispatcher = create_dispatcher(services)
         await setup_bot_commands(bot, services.command_access)
+        services.lunch_scheduler.start(bot)
         await dispatcher.start_polling(bot)
     finally:
+        if services is not None:
+            services.lunch_scheduler.shutdown()
         if database is not None:
             database.close()
         await bot.session.close()

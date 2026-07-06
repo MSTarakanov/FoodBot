@@ -37,6 +37,14 @@ CREATE TABLE IF NOT EXISTS telegram_debug_settings (
     enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS lunch_auto_chats (
+    chat_id INTEGER PRIMARY KEY,
+    title TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 SPLITWISE_USERS_SCHEMA_SQL = """

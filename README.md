@@ -30,8 +30,12 @@ Group chat commands:
 - `/eta <minutes|start-end>` - says when delivery is expected.
 - `/balance` - shows Splitwise balances.
 - `/lunch` - creates lunch polls.
+- `/lunch_auto_on` - admin-only: enables automatic lunch polls for the current group chat.
+- `/lunch_auto_off` - admin-only: disables automatic lunch polls for the current group chat.
+- `/lunch_auto_status` - admin-only: shows whether automatic lunch polls are enabled.
 
 Use `20` for an exact offset in minutes or `20-30` for a minute range.
+Automatic lunch polls are sent at 11:30 in `FOODBOT_TIMEZONE` on Serbian working days.
 
 Admin private commands:
 

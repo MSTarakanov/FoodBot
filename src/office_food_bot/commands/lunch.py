@@ -1,23 +1,20 @@
 from __future__ import annotations
 
+from aiogram import Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
-from office_food_bot.services.lunch import (
-    LUNCH_PLACE_OTHER_OPTION_INDEX,
-    LUNCH_PLACE_POLL_OPTIONS,
-    LUNCH_PLACE_POLL_QUESTION,
-    LUNCH_POLL_OPTIONS,
-    LUNCH_POLL_QUESTION,
-)
-from office_food_bot.services.poll_tracking import PollAction
+
+GROUP_CHAT_TYPES = frozenset({"group", "supergroup"})
+GROUP_ONLY_MESSAGE = "Команда доступна только в групповом чате."
 
 
 async def lunch_command(
     message: Message,
+    bot: Bot,
     messenger: BotMessenger,
     services: BotServices,
     state: FSMContext,
@@ -33,25 +30,52 @@ async def lunch_command(
         await messenger.reply(message, block_reason)
         return
 
-    await messenger.reply_poll(
-        message,
-        LUNCH_POLL_QUESTION,
-        LUNCH_POLL_OPTIONS,
-        is_anonymous=False,
-        allows_multiple_answers=False,
-        allow_adding_options=True,
-    )
-    place_poll_message = await messenger.reply_poll(
-        message,
-        LUNCH_PLACE_POLL_QUESTION,
-        LUNCH_PLACE_POLL_OPTIONS,
-        is_anonymous=False,
-        allows_multiple_answers=True,
-        allow_adding_options=True,
-    )
-    if place_poll_message.poll is not None:
-        services.poll_tracking.track_poll(
-            place_poll_message.poll.id,
-            message.chat.id,
-            {LUNCH_PLACE_OTHER_OPTION_INDEX: PollAction.LUNCH_OTHER_FOOD_POLL},
-        )
+    await services.lunch_publisher.publish(bot, message.chat.id)
+
+
+async def lunch_auto_on_command(
+    message: Message,
+    messenger: BotMessenger,
+    services: BotServices,
+    state: FSMContext,
+) -> None:
+    await state.clear()
+    if not _is_group_chat(message):
+        await messenger.reply(message, GROUP_ONLY_MESSAGE)
+        return
+
+    services.lunch_auto_chats.enable(message.chat.id, message.chat.title)
+    await messenger.reply(message, "Авто-ланч включен для этого чата.")
+
+
+async def lunch_auto_off_command(
+    message: Message,
+    messenger: BotMessenger,
+    services: BotServices,
+    state: FSMContext,
+) -> None:
+    await state.clear()
+    if not _is_group_chat(message):
+        await messenger.reply(message, GROUP_ONLY_MESSAGE)
+        return
+
+    services.lunch_auto_chats.disable(message.chat.id)
+    await messenger.reply(message, "Авто-ланч выключен для этого чата.")
+
+
+async def lunch_auto_status_command(
+    message: Message,
+    messenger: BotMessenger,
+    services: BotServices,
+    state: FSMContext,
+) -> None:
+    await state.clear()
+    if not _is_group_chat(message):
+        await messenger.reply(message, GROUP_ONLY_MESSAGE)
+        return
+
+    await messenger.reply(message, services.lunch_auto_chats.status_text(message.chat.id))
+
+
+def _is_group_chat(message: Message) -> bool:
+    return str(message.chat.type) in GROUP_CHAT_TYPES

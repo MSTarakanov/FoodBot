@@ -90,3 +90,10 @@ class ActiveSplitwiseUser:
     display_name: str
     splitwise_user_id: int
     email: str
+
+
+@dataclass(frozen=True)
+class LunchAutoChat:
+    chat_id: int
+    title: str | None
+    enabled: bool
