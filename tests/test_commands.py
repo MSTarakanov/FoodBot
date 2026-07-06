@@ -1515,7 +1515,9 @@ async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path)
 
     place_poll = session.sent_polls[1]
     assert place_poll.question == LUNCH_PLACE_POLL_QUESTION
+    assert place_poll.question == "Что едим / заказываем?"
     assert poll_option_texts(place_poll) == list(LUNCH_PLACE_POLL_OPTIONS)
+    assert "не знаю что хочу/хочу что-то другое" in poll_option_texts(place_poll)
     assert place_poll.is_anonymous is False
     assert place_poll.allows_multiple_answers is True
     assert place_poll.allow_adding_options is True
@@ -1611,6 +1613,7 @@ async def test_lunch_other_place_answer_creates_other_food_poll_once(
     assert len(session.sent_polls) == 1
     other_food_poll = session.sent_polls[0]
     assert other_food_poll.question == LUNCH_OTHER_FOOD_POLL_QUESTION
+    assert other_food_poll.question == "Закажем ..."
     assert poll_option_texts(other_food_poll) == list(LUNCH_OTHER_FOOD_POLL_OPTIONS)
     assert other_food_poll.is_anonymous is False
     assert other_food_poll.allows_multiple_answers is True

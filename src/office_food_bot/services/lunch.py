@@ -3,7 +3,7 @@ from __future__ import annotations
 from office_food_bot.models import UserStatus
 from office_food_bot.repositories import UserRepository
 
-LUNCH_PLACE_OTHER_OPTION = "что-то другое"
+LUNCH_PLACE_OTHER_OPTION = "не знаю что хочу/хочу что-то другое"
 LUNCH_POLL_QUESTION = "Обед в офисе сегодня"
 LUNCH_POLL_OPTIONS = (
     "са собом",
@@ -14,7 +14,7 @@ LUNCH_POLL_OPTIONS = (
     "не решил еще",
     "ахахахахаххаахаха",
 )
-LUNCH_PLACE_POLL_QUESTION = "Где едим / заказываем?"
+LUNCH_PLACE_POLL_QUESTION = "Что едим / заказываем?"
 LUNCH_PLACE_POLL_OPTIONS = (
     "30 этаж",
     "макдонелдс",
@@ -23,7 +23,7 @@ LUNCH_PLACE_POLL_OPTIONS = (
     "посмотреть результаты",
 )
 LUNCH_PLACE_OTHER_OPTION_INDEX = LUNCH_PLACE_POLL_OPTIONS.index(LUNCH_PLACE_OTHER_OPTION)
-LUNCH_OTHER_FOOD_POLL_QUESTION = "Что еще заказываем?"
+LUNCH_OTHER_FOOD_POLL_QUESTION = "Закажем ..."
 LUNCH_OTHER_FOOD_POLL_OPTIONS = (
     "другой бургер",
     "шаурма",
