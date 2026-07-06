@@ -154,14 +154,11 @@ prompt_yes_no() {
   local result_variable="$1"
   local label="$2"
   local default_answer="$3"
-  local suffix="[y/N]"
+  local suffix="[y/n]"
   local answer=""
 
-  if [[ "$default_answer" == "y" ]]; then
-    suffix="[Y/n]"
-  fi
-
-  read -r -p "$label $suffix " answer
+  printf "%s %s " "$label" "$suffix"
+  read -r answer
   answer="${answer:-$default_answer}"
 
   case "$answer" in
@@ -176,6 +173,26 @@ prompt_yes_no() {
       prompt_yes_no "$result_variable" "$label" "$default_answer"
       ;;
   esac
+}
+
+prompt_value_or_keep_current() {
+  local result_variable="$1"
+  local label="$2"
+  local current_value="$3"
+  local required="$4"
+  local keep_label="$5"
+
+  if [[ -n "$current_value" ]]; then
+    echo "$label is currently: $current_value"
+    local keep_current="y"
+    prompt_yes_no keep_current "$keep_label" "y"
+    if [[ "$keep_current" == "y" ]]; then
+      printf -v "$result_variable" "%s" "$current_value"
+      return
+    fi
+  fi
+
+  prompt_value "$result_variable" "$label" "" "$required" 0
 }
 
 prompt_choice() {
@@ -786,7 +803,12 @@ configure_env() {
 
   echo
   echo "TELEGRAM_BOT_USERNAME is used to build private-chat links like https://t.me/<username>."
-  prompt_value telegram_bot_username "TELEGRAM_BOT_USERNAME" "$current_telegram_bot_username" 1 0
+  prompt_value_or_keep_current \
+    telegram_bot_username \
+    "TELEGRAM_BOT_USERNAME" \
+    "$current_telegram_bot_username" \
+    1 \
+    "Use current TELEGRAM_BOT_USERNAME?"
   telegram_bot_username="$(normalize_telegram_bot_username "$telegram_bot_username")"
 
   if [[ -n "$current_admin_ids" ]]; then
@@ -800,7 +822,12 @@ configure_env() {
     echo "1. Open @userinfobot or @RawDataBot in Telegram."
     echo "2. Send /start."
     echo "3. Copy the numeric Id value."
-    prompt_value telegram_admin_ids "TELEGRAM_ADMIN_IDS" "$current_admin_ids" 1 0
+    prompt_value_or_keep_current \
+      telegram_admin_ids \
+      "TELEGRAM_ADMIN_IDS" \
+      "$current_admin_ids" \
+      1 \
+      "Use current TELEGRAM_ADMIN_IDS?"
     telegram_admin_ids="$(normalize_admin_ids "$telegram_admin_ids")"
   else
     telegram_admin_ids=""

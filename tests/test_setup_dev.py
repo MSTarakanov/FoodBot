@@ -83,6 +83,10 @@ def test_setup_dev_keeps_existing_values_on_empty_answers(tmp_path: Path) -> Non
     assert "existing-token" not in result.stdout
     assert "existing-token" not in result.stderr
     assert "Get the token from Telegram @BotFather" not in result.stdout
+    assert "Use current TELEGRAM_BOT_USERNAME? [y/n]" in result.stdout
+    assert "Use current TELEGRAM_ADMIN_IDS? [y/n]" in result.stdout
+    assert "[Y/n]" not in result.stdout
+    assert "[y/N]" not in result.stdout
 
 
 def test_setup_dev_reads_existing_env_with_export_spaces_and_quotes(tmp_path: Path) -> None:
@@ -116,6 +120,8 @@ def test_setup_dev_reads_existing_env_with_export_spaces_and_quotes(tmp_path: Pa
     assert "existing-token" not in result.stdout
     assert "existing-token" not in result.stderr
     assert "Get the token from Telegram @BotFather" not in result.stdout
+    assert "Use current TELEGRAM_BOT_USERNAME? [y/n]" in result.stdout
+    assert "Use current TELEGRAM_ADMIN_IDS? [y/n]" in result.stdout
 
 
 def test_setup_dev_replaces_token_and_clears_admin_ids(tmp_path: Path) -> None:
@@ -134,7 +140,7 @@ def test_setup_dev_replaces_token_and_clears_admin_ids(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    result = run_env_setup(tmp_path, "new-token\nnew_dev_bot\nn\nnew-splitwise-key\n")
+    result = run_env_setup(tmp_path, "new-token\nn\nnew_dev_bot\nn\nnew-splitwise-key\n")
 
     assert read_env(tmp_path) == {
         "FOODBOT_ENV": "development",
@@ -183,7 +189,7 @@ def test_setup_dev_keeps_existing_env_when_interrupted_before_replace(tmp_path: 
     result = subprocess.run(
         ["bash", str(SETUP_DEV), "--env-only", "--skip-token-check"],
         cwd=tmp_path,
-        input="new-token\nnew_dev_bot\nn\nnew-splitwise-key\n",
+        input="new-token\nn\nnew_dev_bot\nn\nnew-splitwise-key\n",
         text=True,
         capture_output=True,
         check=False,

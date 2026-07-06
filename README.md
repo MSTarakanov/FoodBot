@@ -23,10 +23,12 @@ Group chat commands:
 
 - `/help` - shows available group commands.
 - `/hi` - replies with a short greeting.
-- `/meta <minutes>` - says when a registered user will arrive.
-- `/eta <minutes>` - says when delivery is expected.
+- `/meta <minutes|start-end>` - says when a registered user will arrive.
+- `/eta <minutes|start-end>` - says when delivery is expected.
 - `/balance` - shows Splitwise balances.
 - `/lunch` - creates lunch polls.
+
+Use `20` for an exact offset in minutes or `20-30` for a minute range.
 
 Admin private commands:
 
