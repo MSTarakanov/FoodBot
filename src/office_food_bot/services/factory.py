@@ -5,7 +5,12 @@ from datetime import datetime
 
 from office_food_bot.database import Database
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.repositories import DebugRepository, LunchAutoChatRepository, UserRepository
+from office_food_bot.repositories import (
+    DebugRepository,
+    LunchAutoChatRepository,
+    UserRepository,
+    VacationRepository,
+)
 from office_food_bot.services.balances import BalanceService
 from office_food_bot.services.business_calendar import BusinessCalendarService
 from office_food_bot.services.command_access import CommandAccessService
@@ -25,6 +30,7 @@ from office_food_bot.services.splitwise import (
     SplitwiseGroupClient,
     SplitwiseService,
 )
+from office_food_bot.services.vacation import VacationService
 
 
 def build_services(
@@ -40,6 +46,7 @@ def build_services(
     users = UserRepository(database)
     debug_settings = DebugRepository(database)
     lunch_auto_chat_repository = LunchAutoChatRepository(database)
+    vacations = VacationRepository(database)
     client = splitwise_client
     if client is None and splitwise_api_key is not None:
         client = HttpSplitwiseClient(splitwise_api_key)
@@ -50,7 +57,14 @@ def build_services(
     business_calendar = BusinessCalendarService()
     poll_tracking = PollTrackingService()
     lunch_auto_chats = LunchAutoChatService(lunch_auto_chat_repository)
-    lunch_publisher = LunchPollPublisher(BotMessenger(), poll_tracking, users)
+    lunch_publisher = LunchPollPublisher(
+        BotMessenger(),
+        poll_tracking,
+        users,
+        vacations,
+        timezone_name,
+        clock,
+    )
     return BotServices(
         telegram_bot_username=telegram_bot_username,
         registration=registration,
@@ -60,6 +74,7 @@ def build_services(
         presence=PresenceService(users, timezone_name, clock),
         balances=BalanceService(users, splitwise),
         lunch=LunchService(users),
+        vacation=VacationService(users, vacations, timezone_name, clock),
         lunch_auto_chats=lunch_auto_chats,
         lunch_publisher=lunch_publisher,
         lunch_scheduler=LunchSchedulerService(

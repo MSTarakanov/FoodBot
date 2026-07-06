@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -39,7 +39,11 @@ from office_food_bot.commands.menu import setup_bot_commands
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
 from office_food_bot.models import SplitwiseBalance, SplitwiseMember, TelegramProfile, UserStatus
-from office_food_bot.repositories import LunchAutoChatRepository, UserRepository
+from office_food_bot.repositories import (
+    LunchAutoChatRepository,
+    UserRepository,
+    VacationRepository,
+)
 from office_food_bot.services import BotServices
 from office_food_bot.services.lunch import (
     LUNCH_OTHER_FOOD_POLL_OPTIONS,
@@ -50,6 +54,7 @@ from office_food_bot.services.lunch import (
     LUNCH_POLL_OPTIONS,
     LUNCH_POLL_QUESTION,
 )
+from office_food_bot.services.lunch_auto import LUNCH_ALL_ON_VACATION_TEXT
 from office_food_bot.services.splitwise import SplitwiseUnavailableError
 
 DEFAULT_ADMIN_IDS = frozenset({7})
@@ -86,6 +91,7 @@ GROUP_HELP_TEXT = (
     "/meta 25 или /meta 20-30 - сообщить, через сколько минут или в каком диапазоне придешь\n"
     "/eta 20 или /eta 20-30 - сообщить ожидаемое время доставки\n"
     "/balance - показать баланс Splitwise\n"
+    "/vacation 2 - отметить отпуск\n"
     "/lunch - создать опрос про обед"
 )
 ADMIN_GROUP_HELP_TEXT = (
@@ -612,6 +618,7 @@ async def test_setup_bot_commands_registers_telegram_menu() -> None:
         "meta",
         "eta",
         "balance",
+        "vacation",
         "lunch",
     ]
 
@@ -1692,6 +1699,49 @@ async def test_balance_returns_splitwise_balances_for_active_linked_users(
     ]
 
 
+async def test_vacation_sets_shows_and_clears_status_for_active_user(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/vacation 1", chat_type="group"))
+    await dispatcher.feed_update(bot, make_update("/vacation", chat_type="group"))
+    await dispatcher.feed_update(bot, make_update("/vacation 0", chat_type="group"))
+    await dispatcher.feed_update(bot, make_update("/vacation", chat_type="group"))
+
+    assert sent_texts(session) == [
+        "Максим в отпуске до 30.06.2026.",
+        "Максим в отпуске до 30.06.2026.",
+        "Максим больше не в отпуске.",
+        "Максим не в отпуске. Чтобы включить: /vacation 2 или /vacation 20.07",
+    ]
+
+
+async def test_vacation_rejects_invalid_argument(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/vacation nope", chat_type="group"))
+
+    assert sent_texts(session) == [
+        "Не понял дату. Напиши количество дней или дату: "
+        "/vacation 2, /vacation 20.07, /vacation 2026-07-20"
+    ]
+
+
 async def test_lunch_requires_registered_user(tmp_path: Path) -> None:
     database = make_database(tmp_path)
     session = RecordingSession()
@@ -1747,6 +1797,91 @@ async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path)
     assert place_poll.is_anonymous is False
     assert place_poll.allows_multiple_answers is True
     assert place_poll.allow_adding_options is True
+
+
+async def test_lunch_skips_vacation_users_in_announcement(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+    users = UserRepository(database)
+    vacations = VacationRepository(database)
+    max_user = users.create_pending_user(
+        TelegramProfile(
+            telegram_user_id=42,
+            username="misha",
+            first_name="Misha",
+            last_name=None,
+        ),
+        "Максим",
+    )
+    users.approve_by_telegram_id(42)
+    users.create_pending_user(
+        TelegramProfile(
+            telegram_user_id=43,
+            username="olya",
+            first_name="Olya",
+            last_name=None,
+        ),
+        "Оля",
+    )
+    users.approve_by_telegram_id(43)
+    vacations.set_until_date(max_user.id, date(2026, 6, 30))
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/lunch", user_id=43, username="olya", chat_type="group"),
+    )
+
+    assert sent_texts(session) == ["Время обедать! @olya"]
+    assert len(session.sent_polls) == 2
+
+
+async def test_lunch_skips_flow_when_all_active_users_are_on_vacation(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("/vacation 1", chat_type="group"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
+
+    assert sent_texts(session) == [LUNCH_ALL_ON_VACATION_TEXT]
+    assert session.sent_polls == []
+
+
+async def test_lunch_tags_user_after_vacation_expires(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(
+        database,
+        clock=lambda: datetime(2026, 7, 1, 12, 15, tzinfo=ZoneInfo("Europe/Belgrade")),
+    )
+    users = UserRepository(database)
+    user = users.create_pending_user(
+        TelegramProfile(
+            telegram_user_id=42,
+            username="misha",
+            first_name="Misha",
+            last_name=None,
+        ),
+        "Максим",
+    )
+    users.approve_by_telegram_id(42)
+    VacationRepository(database).set_until_date(user.id, date(2026, 6, 30))
+
+    await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
+
+    assert sent_texts(session) == ["Время обедать! @misha"]
+    assert len(session.sent_polls) == 2
 
 
 async def test_lunch_auto_commands_manage_current_group_chat(tmp_path: Path) -> None:
@@ -1883,6 +2018,33 @@ async def test_scheduled_lunch_publishes_to_enabled_chats_and_tracks_poll(
     )
     assert len(action_requests) == 1
     assert action_requests[0].chat_id == -100
+
+
+async def test_scheduled_lunch_skips_when_all_active_users_are_on_vacation(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    services.lunch_auto_chats.enable(-100, "Office")
+    users = UserRepository(database)
+    user = users.create_pending_user(
+        TelegramProfile(
+            telegram_user_id=42,
+            username="misha",
+            first_name="Misha",
+            last_name=None,
+        ),
+        "Максим",
+    )
+    users.approve_by_telegram_id(42)
+    VacationRepository(database).set_until_date(user.id, date(2026, 6, 30))
+
+    await services.lunch_scheduler.run_due_lunch(bot)
+
+    assert sent_texts(session) == []
+    assert session.sent_polls == []
 
 
 async def test_scheduled_lunch_skips_serbian_holiday(tmp_path: Path) -> None:

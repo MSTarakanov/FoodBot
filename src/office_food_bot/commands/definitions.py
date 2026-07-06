@@ -67,6 +67,12 @@ COMMANDS: tuple[CommandDefinition, ...] = (
         CommandScope.GROUP,
     ),
     CommandDefinition("balance", "показать баланс Splitwise", "/balance", CommandScope.ANY),
+    CommandDefinition(
+        "vacation",
+        "отметить отпуск",
+        "/vacation 2",
+        CommandScope.GROUP,
+    ),
     CommandDefinition("lunch", "создать опрос про обед", "/lunch", CommandScope.GROUP),
     CommandDefinition(
         "lunch_auto_on",

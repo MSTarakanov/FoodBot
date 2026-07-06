@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from office_food_bot.database import Database
@@ -9,6 +11,7 @@ from office_food_bot.repositories import (
     DebugRepository,
     LunchAutoChatRepository,
     UserRepository,
+    VacationRepository,
 )
 
 LEGACY_SCHEMA_SQL = SCHEMA_SQL.replace("email TEXT NOT NULL,", "display_name TEXT NOT NULL,")
@@ -306,6 +309,20 @@ def test_database_init_creates_lunch_auto_chats_table(tmp_path) -> None:
     assert columns == ["chat_id", "title", "enabled", "created_at", "updated_at"]
 
 
+def test_database_init_creates_user_vacations_table(tmp_path) -> None:
+    database = Database(tmp_path / "test.sqlite3")
+    database.init_schema()
+    try:
+        columns = [
+            str(row["name"])
+            for row in database.connection.execute("PRAGMA table_info(user_vacations)")
+        ]
+    finally:
+        database.close()
+
+    assert columns == ["user_id", "until_date", "updated_at"]
+
+
 def test_database_init_creates_users_status_check_with_abandoned(tmp_path) -> None:
     database = Database(tmp_path / "test.sqlite3")
     database.init_schema()
@@ -341,6 +358,27 @@ def test_lunch_auto_chat_repository_enables_disables_and_lists_chats(
     assert reenabled_chat.title == "Office 2"
     assert reenabled_chat.enabled
     assert [chat.chat_id for chat in chats.list_enabled()] == [-100]
+
+
+def test_vacation_repository_stores_updates_and_clears_vacation(
+    users: UserRepository,
+    database: Database,
+) -> None:
+    user = users.create_pending_user(make_profile(), "Максим")
+    vacations = VacationRepository(database)
+
+    vacations.set_until_date(user.id, date(2026, 7, 6))
+    vacations.set_until_date(user.id, date(2026, 7, 20))
+    vacation = vacations.get(user.id)
+
+    assert vacation is not None
+    assert vacation.until_date == date(2026, 7, 20)
+    assert vacations.active_user_ids(date(2026, 7, 20)) == frozenset({user.id})
+    assert vacations.active_user_ids(date(2026, 7, 21)) == frozenset()
+
+    vacations.clear(user.id)
+
+    assert vacations.get(user.id) is None
 
 
 def test_debug_repository_persists_debug_status(database: Database) -> None:

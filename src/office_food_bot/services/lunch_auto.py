@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from enum import StrEnum
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot
@@ -10,8 +11,12 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[impo
 from apscheduler.triggers.cron import CronTrigger  # type: ignore[import-untyped]
 
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.models import LunchAutoChat
-from office_food_bot.repositories import LunchAutoChatRepository, UserRepository
+from office_food_bot.models import LunchAutoChat, RegisteredUser
+from office_food_bot.repositories import (
+    LunchAutoChatRepository,
+    UserRepository,
+    VacationRepository,
+)
 from office_food_bot.services.business_calendar import BusinessCalendarService
 from office_food_bot.services.lunch import (
     LUNCH_PLACE_OTHER_OPTION_INDEX,
@@ -24,6 +29,12 @@ from office_food_bot.services.lunch import (
 from office_food_bot.services.poll_tracking import PollAction, PollTrackingService
 
 AUTO_LUNCH_JOB_ID = "auto_lunch"
+LUNCH_ALL_ON_VACATION_TEXT = "Сегодня все в отпуске, ланч не запускаю."
+
+
+class LunchPublishKind(StrEnum):
+    PUBLISHED = "published"
+    SKIPPED_ALL_ON_VACATION = "skipped_all_on_vacation"
 
 
 class LunchAutoChatService:
@@ -52,16 +63,26 @@ class LunchPollPublisher:
         messenger: BotMessenger,
         poll_tracking: PollTrackingService,
         users: UserRepository,
+        vacations: VacationRepository,
+        timezone_name: str,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._messenger = messenger
         self._poll_tracking = poll_tracking
         self._users = users
+        self._vacations = vacations
+        self._timezone = ZoneInfo(timezone_name)
+        self._clock = clock or (lambda: datetime.now(tz=UTC))
 
-    async def publish(self, bot: Bot, chat_id: int) -> None:
+    async def publish(self, bot: Bot, chat_id: int) -> LunchPublishKind:
+        active_users = self._active_users_available_for_lunch()
+        if not active_users:
+            return LunchPublishKind.SKIPPED_ALL_ON_VACATION
+
         await self._messenger.send(
             bot,
             chat_id,
-            lunch_announcement_text(self._users.list_active_users()),
+            lunch_announcement_text(active_users),
         )
         await self._messenger.send_poll(
             bot,
@@ -87,6 +108,16 @@ class LunchPollPublisher:
                 chat_id,
                 {LUNCH_PLACE_OTHER_OPTION_INDEX: PollAction.LUNCH_OTHER_FOOD_POLL},
             )
+        return LunchPublishKind.PUBLISHED
+
+    def _active_users_available_for_lunch(self) -> tuple[RegisteredUser, ...]:
+        today = self._clock().astimezone(self._timezone).date()
+        vacation_user_ids = self._vacations.active_user_ids(today)
+        return tuple(
+            user
+            for user in self._users.list_active_users()
+            if user.id not in vacation_user_ids
+        )
 
 
 class LunchSchedulerService:
