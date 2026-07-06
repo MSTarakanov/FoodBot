@@ -31,10 +31,11 @@ def create_services(
 
 
 def create_dispatcher(services: BotServices) -> Dispatcher:
+    messenger = BotMessenger()
     dispatcher = Dispatcher(
         storage=MemoryStorage(),
         services=services,
-        messenger=BotMessenger(),
+        messenger=messenger,
     )
-    dispatcher.include_router(create_command_router())
+    dispatcher.include_router(create_command_router(services, messenger))
     return dispatcher

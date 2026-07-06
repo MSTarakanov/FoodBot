@@ -12,6 +12,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import SendPoll, SetMyCommands, TelegramMethod
+from aiogram.methods.base import TelegramType
 from aiogram.methods.send_message import SendMessage
 from aiogram.types import (
     BotCommand,
@@ -104,9 +105,9 @@ class RecordingSession(BaseSession):
     async def make_request(
         self,
         bot: Bot,
-        method: TelegramMethod[object],
+        method: TelegramMethod[TelegramType],
         timeout: int | None = None,
-    ) -> object:
+    ) -> TelegramType:
         if isinstance(method, SendMessage):
             self.sent_messages.append(method)
             return _send_message_response(method, len(self.sent_messages) + len(self.sent_polls))

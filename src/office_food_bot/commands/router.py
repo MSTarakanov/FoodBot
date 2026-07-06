@@ -25,11 +25,13 @@ from office_food_bot.commands.register import (
 )
 from office_food_bot.commands.register_requests_list import register_requests_list_command
 from office_food_bot.commands.start import start_command
+from office_food_bot.messaging import BotMessenger
+from office_food_bot.services import BotServices
 
 
-def create_command_router() -> Router:
+def create_command_router(services: BotServices, messenger: BotMessenger) -> Router:
     router = Router(name="commands")
-    router.message.outer_middleware(CommandAccessMiddleware())
+    router.message.outer_middleware(CommandAccessMiddleware(services, messenger))
     router.message.register(cancel_registration_command, Command("cancel"))
     router.message.register(start_command, CommandStart())
     router.message.register(help_command, Command("help"))

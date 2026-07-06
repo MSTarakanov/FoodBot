@@ -21,25 +21,34 @@ class ParsedCommand:
     target_bot_username: str | None
 
 
+CommandMiddlewareData = dict[str, FSMContext]
+
+
+CommandHandler = Callable[
+    [TelegramObject, CommandMiddlewareData],
+    Awaitable[TelegramObject | None],
+]
+
+
 class CommandAccessMiddleware:
+    def __init__(self, services: BotServices, messenger: BotMessenger) -> None:
+        self._services = services
+        self._messenger = messenger
+
     async def __call__(
         self,
-        handler: Callable[[TelegramObject, dict[str, object]], Awaitable[object]],
+        handler: CommandHandler,
         event: TelegramObject,
-        data: dict[str, object],
-    ) -> object:
+        data: CommandMiddlewareData,
+    ) -> TelegramObject | None:
         if not isinstance(event, Message):
-            return await handler(event, data)
-
-        services = data.get("services")
-        if not isinstance(services, BotServices):
             return await handler(event, data)
 
         parsed_command = _parse_command(event.text)
         if parsed_command is None:
             return await handler(event, data)
 
-        if _is_for_another_bot(parsed_command, services.telegram_bot_username):
+        if _is_for_another_bot(parsed_command, self._services.telegram_bot_username):
             return None
 
         profile = telegram_profile_from_message(event)
@@ -47,7 +56,7 @@ class CommandAccessMiddleware:
         if profile is not None:
             telegram_user_id = profile.telegram_user_id
 
-        access = services.command_access.can_run(
+        access = self._services.command_access.can_run(
             parsed_command.name,
             str(event.chat.type),
             telegram_user_id,
@@ -56,7 +65,12 @@ class CommandAccessMiddleware:
             return await handler(event, data)
 
         await _clear_state(data)
-        await _reply_with_denial(event, data, access.status, services.telegram_bot_username)
+        await _reply_with_denial(
+            event,
+            self._messenger,
+            access.status,
+            self._services.telegram_bot_username,
+        )
         return None
 
 
@@ -90,25 +104,20 @@ def _is_for_another_bot(
     return parsed_command.target_bot_username.casefold() != bot_username.casefold()
 
 
-async def _clear_state(data: dict[str, object]) -> None:
+async def _clear_state(data: CommandMiddlewareData) -> None:
     state = data.get("state")
-    if isinstance(state, FSMContext):
+    if state is not None:
         await state.clear()
 
 
 async def _reply_with_denial(
     message: Message,
-    data: dict[str, object],
+    messenger: BotMessenger,
     status: CommandAccessStatus,
     bot_username: str,
 ) -> None:
     text = command_access_denial_text(status, bot_username)
-    messenger = data.get("messenger")
-    if isinstance(messenger, BotMessenger):
-        await messenger.reply(message, text)
-        return
-
-    await message.answer(text)
+    await messenger.reply(message, text)
 
 
 def command_access_denial_text(
