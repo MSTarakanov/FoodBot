@@ -79,8 +79,8 @@ GROUP_HELP_TEXT = (
     "Команды:\n"
     "/help - показать список команд\n"
     "/hi - проверить, что бот на месте\n"
-    "/meta 25 - сообщить, через сколько минут придешь\n"
-    "/eta 20 - сообщить ожидаемое время доставки\n"
+    "/meta 25 или /meta 20-30 - сообщить, через сколько минут или в каком диапазоне придешь\n"
+    "/eta 20 или /eta 20-30 - сообщить ожидаемое время доставки\n"
     "/balance - показать баланс Splitwise\n"
     "/lunch - создать опрос про обед"
 )
@@ -1195,6 +1195,21 @@ async def test_meta_uses_registered_display_name(tmp_path: Path) -> None:
     assert sent_texts(session) == ["Максим будет в 12:40"]
 
 
+async def test_meta_reports_arrival_time_range(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/meta 20-30", chat_type="group"))
+
+    assert sent_texts(session) == ["Максим будет с 12:35 до 12:45"]
+
+
 async def test_eta_reports_delivery_arrival_time(tmp_path: Path) -> None:
     database = make_database(tmp_path)
     session = RecordingSession()
@@ -1210,6 +1225,21 @@ async def test_eta_reports_delivery_arrival_time(tmp_path: Path) -> None:
     assert sent_texts(session) == ["Ожидаемое время прибытия доставки 12:35"]
 
 
+async def test_eta_reports_delivery_arrival_time_range(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/eta 20-30", chat_type="group"))
+
+    assert sent_texts(session) == ["Ожидаемое время прибытия доставки с 12:35 до 12:45"]
+
+
 async def test_eta_requires_minutes_argument(tmp_path: Path) -> None:
     database = make_database(tmp_path)
     session = RecordingSession()
@@ -1218,7 +1248,60 @@ async def test_eta_requires_minutes_argument(tmp_path: Path) -> None:
 
     await dispatcher.feed_update(bot, make_update("/eta", chat_type="group"))
 
-    assert sent_texts(session) == ["Напиши через сколько минут: /eta 20"]
+    assert sent_texts(session) == [
+        "Напиши через сколько минут или диапазон: /eta 20 или /eta 20-30"
+    ]
+
+
+async def test_eta_rejects_invalid_minutes_argument(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/eta abc", chat_type="group"))
+
+    assert sent_texts(session) == [
+        "Минуты должны быть числом или диапазоном: /eta 20 или /eta 20-30"
+    ]
+
+
+async def test_eta_rejects_too_large_minutes_argument(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/eta 9999999999", chat_type="group"))
+
+    assert sent_texts(session) == [
+        "Минуты должны быть от 0 до 527040 (366 дней): /eta 20 или /eta 20-30"
+    ]
+
+
+async def test_eta_rejects_negative_minutes_argument(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/eta -1", chat_type="group"))
+
+    assert sent_texts(session) == [
+        "Минуты должны быть от 0 до 527040 (366 дней): /eta 20 или /eta 20-30"
+    ]
 
 
 async def test_meta_requires_minutes_argument(tmp_path: Path) -> None:
@@ -1229,7 +1312,24 @@ async def test_meta_requires_minutes_argument(tmp_path: Path) -> None:
 
     await dispatcher.feed_update(bot, make_update("/meta", chat_type="group"))
 
-    assert sent_texts(session) == ["Напиши через сколько минут: /meta 25"]
+    assert sent_texts(session) == [
+        "Напиши через сколько минут или диапазон: /meta 25 или /meta 20-30"
+    ]
+
+
+async def test_meta_rejects_invalid_minutes_range(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/meta 30-20", chat_type="group"))
+
+    assert sent_texts(session) == ["Начало диапазона должно быть не больше конца: /meta 20-30"]
 
 
 async def test_registration_happy_path_allows_meta_after_approval(tmp_path: Path) -> None:

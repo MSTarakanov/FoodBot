@@ -49,11 +49,16 @@ COMMANDS: tuple[CommandDefinition, ...] = (
     ),
     CommandDefinition(
         "meta",
-        "сообщить, через сколько минут придешь",
-        "/meta 25",
+        "сообщить, через сколько минут или в каком диапазоне придешь",
+        "/meta 25 или /meta 20-30",
         CommandScope.GROUP,
     ),
-    CommandDefinition("eta", "сообщить ожидаемое время доставки", "/eta 20", CommandScope.GROUP),
+    CommandDefinition(
+        "eta",
+        "сообщить ожидаемое время доставки",
+        "/eta 20 или /eta 20-30",
+        CommandScope.GROUP,
+    ),
     CommandDefinition("balance", "показать баланс Splitwise", "/balance", CommandScope.ANY),
     CommandDefinition("lunch", "создать опрос про обед", "/lunch", CommandScope.GROUP),
 )
