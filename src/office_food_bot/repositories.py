@@ -8,7 +8,6 @@ from office_food_bot.database.debug_queries import (
     UPSERT_TELEGRAM_DEBUG_SQL,
 )
 from office_food_bot.database.user_queries import (
-    APPROVE_USER_BY_TELEGRAM_ID_SQL,
     COUNT_SPLITWISE_USERS_SQL,
     DELETE_SPLITWISE_USER_BY_USER_ID_SQL,
     GET_REGISTRATION_DETAILS_BY_TELEGRAM_ID_SQL,
@@ -21,6 +20,7 @@ from office_food_bot.database.user_queries import (
     LIST_PENDING_USERS_SQL,
     UPDATE_TELEGRAM_PROFILE_SQL,
     UPDATE_USER_REGISTRATION_BY_TELEGRAM_ID_SQL,
+    UPDATE_USER_STATUS_BY_TELEGRAM_ID_SQL,
 )
 from office_food_bot.models import (
     ActiveSplitwiseUser,
@@ -179,8 +179,24 @@ class UserRepository:
 
         with self._database.connection:
             self._database.connection.execute(
-                APPROVE_USER_BY_TELEGRAM_ID_SQL,
+                UPDATE_USER_STATUS_BY_TELEGRAM_ID_SQL,
                 (UserStatus.ACTIVE.value, telegram_user_id),
+            )
+        return self.get_by_telegram_id(telegram_user_id)
+
+    def abandon_by_telegram_id(self, telegram_user_id: int) -> RegisteredUser | None:
+        existing_user = self.get_by_telegram_id(telegram_user_id)
+        if existing_user is None:
+            return None
+
+        with self._database.connection:
+            self._database.connection.execute(
+                UPDATE_USER_STATUS_BY_TELEGRAM_ID_SQL,
+                (UserStatus.ABANDONED.value, telegram_user_id),
+            )
+            self._database.connection.execute(
+                DELETE_SPLITWISE_USER_BY_USER_ID_SQL,
+                (existing_user.id,),
             )
         return self.get_by_telegram_id(telegram_user_id)
 

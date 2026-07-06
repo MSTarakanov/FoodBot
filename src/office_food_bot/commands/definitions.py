@@ -25,6 +25,13 @@ COMMANDS: tuple[CommandDefinition, ...] = (
     CommandDefinition("help", "показать список команд", "/help", CommandScope.ANY),
     CommandDefinition("hi", "проверить, что бот на месте", "/hi", CommandScope.ANY),
     CommandDefinition("register", "пройти регистрацию", "/register", CommandScope.PRIVATE),
+    CommandDefinition(
+        "request_register",
+        "попросить админа зарегистрировать вас",
+        "/request_register",
+        CommandScope.PRIVATE,
+    ),
+    CommandDefinition("quit", "отрегистрироваться", "/quit", CommandScope.PRIVATE),
     CommandDefinition("cancel", "отменить текущий сценарий", "/cancel", CommandScope.PRIVATE),
     CommandDefinition(
         "approve",

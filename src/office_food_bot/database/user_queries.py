@@ -121,7 +121,7 @@ INSERT INTO splitwise_users (
 VALUES (?, ?, ?)
 """
 
-APPROVE_USER_BY_TELEGRAM_ID_SQL = """
+UPDATE_USER_STATUS_BY_TELEGRAM_ID_SQL = """
 UPDATE users
 SET status = ?,
     updated_at = CURRENT_TIMESTAMP

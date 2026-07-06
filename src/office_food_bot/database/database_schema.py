@@ -1,16 +1,20 @@
-SCHEMA_SQL = """
-PRAGMA foreign_keys = ON;
-
+USERS_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     display_name TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending'
-        CHECK (status IN ('pending', 'active', 'rejected', 'disabled')),
+        CHECK (status IN ('pending', 'active', 'rejected', 'disabled', 'abandoned')),
     role TEXT NOT NULL DEFAULT 'member'
         CHECK (role IN ('member', 'admin')),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+)
+"""
+
+SCHEMA_SQL = f"""
+PRAGMA foreign_keys = ON;
+
+{USERS_SCHEMA_SQL};
 
 CREATE TABLE IF NOT EXISTS telegram_accounts (
     telegram_user_id INTEGER PRIMARY KEY,

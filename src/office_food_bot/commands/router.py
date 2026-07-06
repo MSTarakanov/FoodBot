@@ -17,11 +17,13 @@ from office_food_bot.commands.register import (
     cancel_registration_command,
     confirm_reregistration_message,
     confirm_reregistration_unknown_message,
+    quit_command,
     register_command,
     register_name_message,
     register_splitwise_email_message,
     registration_waiting_for_name_unknown_message,
     registration_waiting_for_splitwise_unknown_message,
+    request_register_command,
 )
 from office_food_bot.commands.register_requests_list import register_requests_list_command
 from office_food_bot.commands.start import start_command
@@ -36,6 +38,8 @@ def create_command_router(services: BotServices, messenger: BotMessenger) -> Rou
     router.message.register(start_command, CommandStart())
     router.message.register(help_command, Command("help"))
     router.message.register(hi_command, Command("hi"))
+    router.message.register(request_register_command, Command("request_register"))
+    router.message.register(quit_command, Command("quit"))
     router.message.register(register_command, Command("register"))
     router.message.register(approve_command, Command("approve"))
     router.message.register(register_requests_list_command, Command("register_requests_list"))

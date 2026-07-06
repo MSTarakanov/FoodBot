@@ -60,6 +60,8 @@ PRIVATE_HELP_TEXT = (
     "/help - показать список команд\n"
     "/hi - проверить, что бот на месте\n"
     "/register - пройти регистрацию\n"
+    "/request_register - попросить админа зарегистрировать вас\n"
+    "/quit - отрегистрироваться\n"
     "/cancel - отменить текущий сценарий\n"
     "/balance - показать баланс Splitwise"
 )
@@ -69,6 +71,8 @@ ADMIN_PRIVATE_HELP_TEXT = (
     "/help - показать список команд\n"
     "/hi - проверить, что бот на месте\n"
     "/register - пройти регистрацию\n"
+    "/request_register - попросить админа зарегистрировать вас\n"
+    "/quit - отрегистрироваться\n"
     "/cancel - отменить текущий сценарий\n"
     "/approve 123456789 - подтвердить регистрацию\n"
     "/register_requests_list - показать заявки на регистрацию\n"
@@ -547,6 +551,8 @@ async def test_setup_bot_commands_registers_telegram_menu() -> None:
         "help",
         "hi",
         "register",
+        "request_register",
+        "quit",
         "cancel",
         "balance",
     ]
@@ -558,6 +564,8 @@ async def test_setup_bot_commands_registers_telegram_menu() -> None:
         "help",
         "hi",
         "register",
+        "request_register",
+        "quit",
         "cancel",
         "balance",
     ]
@@ -581,6 +589,8 @@ async def test_setup_bot_commands_registers_telegram_menu() -> None:
         "help",
         "hi",
         "register",
+        "request_register",
+        "quit",
         "cancel",
         "approve",
         "register_requests_list",
@@ -675,6 +685,190 @@ async def test_register_with_argument_starts_step_by_step_flow(tmp_path: Path) -
     ]
     assert keyboard_texts(session.sent_messages[0]) == [["Misha"]]
     assert UserRepository(database).get_by_telegram_id(42) is None
+
+
+async def test_request_register_notifies_admin_with_register_command(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update(
+            "/request_register",
+            user_id=42,
+            first_name="Misha",
+            last_name="Petrov",
+            username="misha",
+        ),
+    )
+
+    assert sent_texts(session) == [
+        "Запрос на регистрацию отправлен админам.",
+        "Запрос на регистрацию:\n"
+        "Telegram ID: 42\n"
+        "Username: @misha\n"
+        "Имя в Telegram: Misha Petrov\n"
+        "Начать регистрацию: /register 42",
+    ]
+    assert session.sent_messages[1].chat_id == 7
+    assert UserRepository(database).get_by_telegram_id(42) is None
+
+
+async def test_request_register_replies_when_user_is_already_pending(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/request_register"))
+
+    assert sent_texts(session) == [
+        "Заявка уже ждет аппрува. Если хотите отменить регистрацию, отправьте /quit."
+    ]
+
+
+async def test_request_register_replies_when_user_is_already_active(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/request_register"))
+
+    assert sent_texts(session) == [
+        "Вы уже зарегистрированы. Если хотите отрегистрироваться, отправьте /quit."
+    ]
+
+
+async def test_quit_unknown_user_replies_with_not_found(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/quit"))
+
+    assert sent_texts(session) == ["Я не нашел вашу регистрацию."]
+
+
+async def test_quit_marks_user_abandoned_and_removes_splitwise_link(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database, splitwise_members=(make_splitwise_member(),))
+
+    await submit_registration(dispatcher, bot, session, splitwise_answer="max@example.com")
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/quit"))
+
+    assert sent_texts(session) == [
+        "Вы отрегистрированы. Если захотите вернуться, отправьте /request_register."
+    ]
+    users = UserRepository(database)
+    user = users.get_by_telegram_id(42)
+    assert user is not None
+    assert user.status == UserStatus.ABANDONED
+    assert users.list_active_splitwise_users() == ()
+    details = users.get_registration_details_by_telegram_id(42)
+    assert details is not None
+    assert details.splitwise is None
+
+
+async def test_request_register_after_quit_notifies_admin_again(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/quit"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/request_register"))
+
+    assert sent_texts(session) == [
+        "Запрос на регистрацию отправлен админам.",
+        "Запрос на регистрацию:\n"
+        "Telegram ID: 42\n"
+        "Username: @misha\n"
+        "Имя в Telegram: Misha\n"
+        "Начать регистрацию: /register 42",
+    ]
+
+
+async def test_non_admin_cannot_register_another_user_by_id(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register 99"))
+
+    assert sent_texts(session) == ["Команда доступна только админам."]
+    assert UserRepository(database).get_by_telegram_id(99) is None
+
+
+async def test_admin_registers_another_user_by_id(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register 42", user_id=7, first_name="Admin"))
+
+    assert sent_texts(session) == [
+        "Регистрируем пользователя Telegram ID 42.\n\n"
+        "Напиши имя одним сообщением. Например: Максим\n"
+        "Чтобы выйти из регистрации, отправь /cancel или запусти другую команду."
+    ]
+    assert keyboard_texts(session.sent_messages[0]) == [["Telegram ID 42"]]
+
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Максим", user_id=7, first_name="Admin"))
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Пропустить", user_id=7, first_name="Admin"))
+
+    texts = sent_texts(session)
+    assert texts[0].startswith("Заявка на регистрацию отправлена. Жду аппрув.")
+    assert "Новая регистрация" in texts[1]
+    assert "Telegram ID: 42" in texts[1]
+    assert "Имя: Максим" in texts[1]
+    assert "Аппрув: /approve 42" in texts[1]
+
+    target_user = UserRepository(database).get_by_telegram_id(42)
+    admin_user = UserRepository(database).get_by_telegram_id(7)
+    assert target_user is not None
+    assert target_user.display_name == "Максим"
+    assert target_user.status == UserStatus.PENDING
+    assert admin_user is None
+
+
+async def test_admin_register_target_id_must_be_numeric(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register abc", user_id=7, first_name="Admin"))
+
+    assert sent_texts(session) == ["Telegram ID должен быть числом: /register 123456789"]
 
 
 async def test_register_flow_creates_pending_user_from_next_message(tmp_path: Path) -> None:

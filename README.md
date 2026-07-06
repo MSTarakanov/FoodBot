@@ -17,6 +17,9 @@ Private chat commands:
   existing pending request for the same Telegram user.
   Already approved users see their current data and choose whether to send a
   re-registration request back to the pending approval list.
+- `/request_register` - asks admins to start registration for the current Telegram user.
+- `/quit` - unregisters the current Telegram user. The row stays in the database with an
+  abandoned status, but the bot treats the user as not registered.
 - `/balance` - placeholder for the upcoming Splitwise balance view.
 
 Group chat commands:
@@ -33,6 +36,7 @@ Use `20` for an exact offset in minutes or `20-30` for a minute range.
 Admin private commands:
 
 - `/approve <telegram_user_id>` - approves a pending user.
+- `/register <telegram_user_id>` - starts guided registration for another Telegram user.
 - `/register_requests_list` - shows pending registration requests.
 - `/debug 1` and `/debug 0` - allow an admin to test group-only commands in private chat.
 
