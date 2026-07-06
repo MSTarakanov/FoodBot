@@ -71,6 +71,10 @@ it directly. If `.env` already has a token, setup shows the bot username and `ht
 link before asking whether to keep it.
 Setup refuses to save the production Telegram bot token for local development.
 
+If `./setup-dev` is run from a linked `git worktree`, it can reuse ignored local state from the
+main worktree: `.env` values, `.tools`, and the local SQLite database. This keeps feature worktrees
+on the same development bot and the same local registration/debug state.
+
 ## Configuration
 
 Committed defaults live in `.env.defaults`. Use it for shared non-secret values such as

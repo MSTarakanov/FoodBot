@@ -255,6 +255,142 @@ configure_python_environment() {
   "$UV_BIN" sync --extra dev
 }
 
+linked_worktree_source_root() {
+  if [[ ! -f "$REPO_ROOT/.git" ]]; then
+    return
+  fi
+
+  local common_git_dir=""
+  common_git_dir="$(
+    git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true
+  )"
+  if [[ -z "$common_git_dir" || "$(basename "$common_git_dir")" != ".git" ]]; then
+    return
+  fi
+
+  local source_root=""
+  source_root="$(dirname "$common_git_dir")"
+  if [[ "$source_root" == "$REPO_ROOT" || ! -d "$source_root" ]]; then
+    return
+  fi
+
+  printf "%s" "$source_root"
+}
+
+state_path_in_root() {
+  local root="$1"
+  local path="$2"
+
+  if [[ "$path" == /* ]]; then
+    printf "%s" "$path"
+  else
+    printf "%s/%s" "$root" "$path"
+  fi
+}
+
+copy_env_from_linked_worktree() {
+  local source_root="$1"
+  local source_env="$source_root/.env"
+  local target_env="$REPO_ROOT/.env"
+
+  if [[ "$RESET_ENV" -eq 1 || ! -f "$source_env" || -e "$target_env" || -L "$target_env" ]]; then
+    return
+  fi
+
+  cp "$source_env" "$target_env"
+  chmod 600 "$target_env"
+  echo "Imported local .env values from $source_root."
+}
+
+link_state_path() {
+  local source_path="$1"
+  local target_path="$2"
+  local label="$3"
+
+  if [[ ! -e "$source_path" || -e "$target_path" || -L "$target_path" ]]; then
+    return
+  fi
+
+  ln -s "$source_path" "$target_path"
+  echo "Linked $label -> $source_path"
+}
+
+link_database_from_linked_worktree() {
+  local source_root="$1"
+  local source_env="$source_root/.env"
+  local database_path=""
+
+  database_path="$(read_env_value DATABASE_PATH "$source_env" || true)"
+  database_path="${database_path:-$DEFAULT_DATABASE_PATH}"
+  if [[ "$database_path" == /* ]]; then
+    return
+  fi
+
+  local source_database=""
+  local target_database=""
+  source_database="$(state_path_in_root "$source_root" "$database_path")"
+  target_database="$(state_path_in_root "$REPO_ROOT" "$database_path")"
+
+  link_state_path "$source_database" "$target_database" "$database_path"
+}
+
+configure_linked_worktree_state() {
+  if [[ "$ENV_ONLY" -eq 1 ]]; then
+    return
+  fi
+
+  local source_root=""
+  source_root="$(linked_worktree_source_root || true)"
+  if [[ -z "$source_root" ]]; then
+    return
+  fi
+
+  local has_state=0
+  if [[ "$RESET_ENV" -eq 0 && -f "$source_root/.env" && ! -e "$REPO_ROOT/.env" && ! -L "$REPO_ROOT/.env" ]]; then
+    has_state=1
+  fi
+  if [[ -e "$source_root/.tools" && ! -e "$REPO_ROOT/.tools" && ! -L "$REPO_ROOT/.tools" ]]; then
+    has_state=1
+  fi
+
+  local source_database_path=""
+  source_database_path="$(read_env_value DATABASE_PATH "$source_root/.env" || true)"
+  source_database_path="${source_database_path:-$DEFAULT_DATABASE_PATH}"
+  if [[ "$source_database_path" != /* ]]; then
+    local source_database=""
+    local target_database=""
+    source_database="$(state_path_in_root "$source_root" "$source_database_path")"
+    target_database="$(state_path_in_root "$REPO_ROOT" "$source_database_path")"
+    if [[ -e "$source_database" && ! -e "$target_database" && ! -L "$target_database" ]]; then
+      has_state=1
+    fi
+  fi
+
+  if [[ "$has_state" -eq 0 ]]; then
+    return
+  fi
+
+  print_step "Linked worktree local state"
+  printf "%s\n" \
+    "This checkout is a linked git worktree." \
+    "Setup can reuse ignored local state from:" \
+    "  $source_root" \
+    "" \
+    "This helps feature worktrees use the same local bot token, uv/python cache," \
+    "and SQLite debug/registration state."
+
+  local reuse_state="y"
+  prompt_yes_no reuse_state "Reuse local state from that worktree?" "y"
+  if [[ "$reuse_state" != "y" ]]; then
+    echo "Keeping this worktree independent."
+    return
+  fi
+
+  copy_env_from_linked_worktree "$source_root"
+  link_state_path "$source_root/.tools" "$REPO_ROOT/.tools" ".tools"
+  link_database_from_linked_worktree "$source_root"
+}
+
 configure_git_identity() {
   print_step "Git identity"
 
@@ -858,6 +994,8 @@ configure_env() {
 
   echo ".env is configured for local development."
 }
+
+configure_linked_worktree_state
 
 if [[ "$SKIP_TOOLS" -eq 0 ]]; then
   configure_python_environment
