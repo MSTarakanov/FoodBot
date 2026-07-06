@@ -128,6 +128,18 @@ def test_list_pending_users_returns_only_pending_users(users: UserRepository) ->
     assert pending_users[0].display_name == "Оля"
 
 
+def test_list_active_users_returns_only_active_users(users: UserRepository) -> None:
+    users.create_pending_user(make_profile(telegram_user_id=42, username="misha"), "Максим")
+    users.create_pending_user(make_profile(telegram_user_id=43, username="olya"), "Оля")
+    users.create_pending_user(make_profile(telegram_user_id=44, username="anton"), "Антон")
+    users.approve_by_telegram_id(42)
+    users.approve_by_telegram_id(44)
+
+    active_users = users.list_active_users()
+
+    assert [user.username for user in active_users] == ["anton", "misha"]
+
+
 def test_count_splitwise_users_counts_linked_splitwise_users(
     database: Database,
     users: UserRepository,

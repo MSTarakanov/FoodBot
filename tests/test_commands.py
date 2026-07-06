@@ -12,7 +12,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
-from aiogram.methods import SendPoll, SetMyCommands, TelegramMethod
+from aiogram.methods import GetMe, SendPoll, SetMyCommands, TelegramMethod
 from aiogram.methods.base import TelegramType
 from aiogram.methods.send_message import SendMessage
 from aiogram.types import (
@@ -38,7 +38,7 @@ from office_food_bot.commands.errors import UNHANDLED_ERROR_REPLY_TEXT
 from office_food_bot.commands.menu import setup_bot_commands
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
-from office_food_bot.models import SplitwiseBalance, SplitwiseMember, UserStatus
+from office_food_bot.models import SplitwiseBalance, SplitwiseMember, TelegramProfile, UserStatus
 from office_food_bot.repositories import LunchAutoChatRepository, UserRepository
 from office_food_bot.services import BotServices
 from office_food_bot.services.lunch import (
@@ -88,6 +88,12 @@ GROUP_HELP_TEXT = (
     "/balance - показать баланс Splitwise\n"
     "/lunch - создать опрос про обед"
 )
+ADMIN_GROUP_HELP_TEXT = (
+    GROUP_HELP_TEXT
+    + "\n/lunch_auto_on - включить авто-ланч в этом чате"
+    + "\n/lunch_auto_off - выключить авто-ланч в этом чате"
+    + "\n/lunch_auto_status - показать статус авто-ланча"
+)
 
 
 @dataclass(frozen=True)
@@ -124,6 +130,13 @@ class RecordingSession(BaseSession):
                 raise AssertionError("Expected fake sendPoll response to include poll")
             self.sent_poll_ids.append(message.poll.id)
             return message
+        if isinstance(method, GetMe):
+            return User(
+                id=123456,
+                is_bot=True,
+                first_name="FoodBot",
+                username="foodbot_dev",
+            )
         if isinstance(method, SetMyCommands):
             self.set_command_requests.append(method)
             return True
@@ -492,6 +505,22 @@ async def test_help_shows_group_commands_in_group_chat(tmp_path: Path) -> None:
     await dispatcher.feed_update(bot, make_update("/help", chat_type="group"))
 
     assert sent_texts(session) == [GROUP_HELP_TEXT]
+
+
+async def test_help_shows_group_admin_commands_to_admins_in_group_chat(
+    tmp_path: Path,
+) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/help", user_id=7, first_name="Admin", chat_type="group"),
+    )
+
+    assert sent_texts(session) == [ADMIN_GROUP_HELP_TEXT]
 
 
 async def test_private_only_command_in_group_points_to_private_bot_link(
@@ -1702,7 +1731,7 @@ async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path)
 
     await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
 
-    assert sent_texts(session) == []
+    assert sent_texts(session) == ["Время обедать! @misha"]
     assert len(session.sent_polls) == 2
 
     lunch_poll = session.sent_polls[0]
@@ -1783,6 +1812,32 @@ async def test_lunch_auto_commands_manage_current_group_chat(tmp_path: Path) -> 
     assert not chat.enabled
 
 
+async def test_lunch_auto_command_addressed_to_this_bot_works_in_group(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update(
+            "/lunch_auto_on@foodbot_dev",
+            user_id=7,
+            first_name="Admin",
+            chat_type="group",
+            chat_id=-100,
+            chat_title="Office",
+        ),
+    )
+
+    assert sent_texts(session) == ["Авто-ланч включен для этого чата."]
+    chat = LunchAutoChatRepository(database).get(-100)
+    assert chat is not None
+    assert chat.enabled
+
+
 async def test_lunch_auto_commands_are_admin_only(tmp_path: Path) -> None:
     database = make_database(tmp_path)
     session = RecordingSession()
@@ -1803,9 +1858,21 @@ async def test_scheduled_lunch_publishes_to_enabled_chats_and_tracks_poll(
     bot = Bot(token="123456:test-token", session=session)
     services = make_test_services(database)
     services.lunch_auto_chats.enable(-100, "Office")
+    users = UserRepository(database)
+    users.create_pending_user(
+        TelegramProfile(
+            telegram_user_id=42,
+            username="misha",
+            first_name="Misha",
+            last_name=None,
+        ),
+        "Максим",
+    )
+    users.approve_by_telegram_id(42)
 
     await services.lunch_scheduler.run_due_lunch(bot)
 
+    assert sent_texts(session) == ["Время обедать! @misha"]
     assert len(session.sent_polls) == 2
     assert session.sent_polls[0].chat_id == -100
     assert session.sent_polls[0].question == LUNCH_POLL_QUESTION
@@ -1884,7 +1951,7 @@ async def test_admin_debug_allows_group_only_command_in_private_chat(
     session.clear_messages()
     await dispatcher.feed_update(bot, make_update("/lunch", user_id=7, first_name="Admin"))
 
-    assert sent_texts(session) == []
+    assert sent_texts(session) == ["Время обедать! @admin"]
     assert len(session.sent_polls) == 2
 
     session.clear_messages()

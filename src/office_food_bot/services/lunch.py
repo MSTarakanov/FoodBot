@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from office_food_bot.models import UserStatus
+from collections.abc import Sequence
+
+from office_food_bot.models import RegisteredUser, UserStatus
 from office_food_bot.repositories import UserRepository
 
 LUNCH_PLACE_OTHER_OPTION = "не знаю что хочу/хочу что-то другое"
+LUNCH_ANNOUNCEMENT_TEXT = "Время обедать!"
 LUNCH_POLL_QUESTION = "Обед в офисе сегодня"
 LUNCH_POLL_OPTIONS = (
     "са собом",
@@ -45,3 +48,14 @@ class LunchService:
         if user.status != UserStatus.ACTIVE:
             return "Регистрация сейчас неактивна."
         return None
+
+
+def lunch_announcement_text(active_users: Sequence[RegisteredUser]) -> str:
+    tags = tuple(
+        f"@{user.username}"
+        for user in active_users
+        if user.username is not None
+    )
+    if not tags:
+        return LUNCH_ANNOUNCEMENT_TEXT
+    return f"{LUNCH_ANNOUNCEMENT_TEXT} {' '.join(tags)}"

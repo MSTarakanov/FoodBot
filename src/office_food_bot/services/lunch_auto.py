@@ -11,7 +11,7 @@ from apscheduler.triggers.cron import CronTrigger  # type: ignore[import-untyped
 
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import LunchAutoChat
-from office_food_bot.repositories import LunchAutoChatRepository
+from office_food_bot.repositories import LunchAutoChatRepository, UserRepository
 from office_food_bot.services.business_calendar import BusinessCalendarService
 from office_food_bot.services.lunch import (
     LUNCH_PLACE_OTHER_OPTION_INDEX,
@@ -19,6 +19,7 @@ from office_food_bot.services.lunch import (
     LUNCH_PLACE_POLL_QUESTION,
     LUNCH_POLL_OPTIONS,
     LUNCH_POLL_QUESTION,
+    lunch_announcement_text,
 )
 from office_food_bot.services.poll_tracking import PollAction, PollTrackingService
 
@@ -50,11 +51,18 @@ class LunchPollPublisher:
         self,
         messenger: BotMessenger,
         poll_tracking: PollTrackingService,
+        users: UserRepository,
     ) -> None:
         self._messenger = messenger
         self._poll_tracking = poll_tracking
+        self._users = users
 
     async def publish(self, bot: Bot, chat_id: int) -> None:
+        await self._messenger.send(
+            bot,
+            chat_id,
+            lunch_announcement_text(self._users.list_active_users()),
+        )
         await self._messenger.send_poll(
             bot,
             chat_id,

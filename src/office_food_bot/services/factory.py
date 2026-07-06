@@ -50,7 +50,7 @@ def build_services(
     business_calendar = BusinessCalendarService()
     poll_tracking = PollTrackingService()
     lunch_auto_chats = LunchAutoChatService(lunch_auto_chat_repository)
-    lunch_publisher = LunchPollPublisher(BotMessenger(), poll_tracking)
+    lunch_publisher = LunchPollPublisher(BotMessenger(), poll_tracking, users)
     return BotServices(
         telegram_bot_username=telegram_bot_username,
         registration=registration,
