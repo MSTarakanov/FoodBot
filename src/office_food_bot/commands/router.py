@@ -9,7 +9,12 @@ from office_food_bot.commands.debug import debug_command
 from office_food_bot.commands.eta import eta_command
 from office_food_bot.commands.help import help_command
 from office_food_bot.commands.hi import hi_command
-from office_food_bot.commands.lunch import lunch_command
+from office_food_bot.commands.lunch import (
+    lunch_auto_off_command,
+    lunch_auto_on_command,
+    lunch_auto_status_command,
+    lunch_command,
+)
 from office_food_bot.commands.middleware import CommandAccessMiddleware
 from office_food_bot.commands.poll_tracking import poll_answer_handler
 from office_food_bot.commands.register import (
@@ -46,6 +51,9 @@ def create_command_router(services: BotServices, messenger: BotMessenger) -> Rou
     router.message.register(debug_command, Command("debug"))
     router.message.register(eta_command, Command("meta", "eta"))
     router.message.register(balance_command, Command("balance"))
+    router.message.register(lunch_auto_on_command, Command("lunch_auto_on"))
+    router.message.register(lunch_auto_off_command, Command("lunch_auto_off"))
+    router.message.register(lunch_auto_status_command, Command("lunch_auto_status"))
     router.message.register(lunch_command, Command("lunch"))
     router.poll_answer.register(poll_answer_handler)
     router.message.register(register_name_message, RegistrationFlow.waiting_for_name, F.text)
