@@ -70,12 +70,12 @@ class VacationService:
             return VACATION_DATE_FORMAT_ERROR_TEXT
 
         self._vacations.set_until_date(user.id, request.until_date)
-        return f"{user.display_name} в отпуске до {_format_date(request.until_date)}."
+        return _active_vacation_text(user.display_name, request.until_date)
 
     def _status_text(self, user: RegisteredUser, today: date) -> str:
         vacation = self._vacations.get(user.id)
         if vacation is not None and vacation.until_date >= today:
-            return f"{user.display_name} в отпуске до {_format_date(vacation.until_date)}."
+            return _active_vacation_text(user.display_name, vacation.until_date)
         return (
             f"{user.display_name} не в отпуске. "
             "Чтобы включить: /vacation 2 или /vacation 20.07"
@@ -153,3 +153,10 @@ def _days_until(until_date: date, today: date) -> int:
 
 def _format_date(day: date) -> str:
     return day.strftime("%d.%m.%Y")
+
+
+def _active_vacation_text(display_name: str, until_date: date) -> str:
+    return (
+        f"{display_name} в отпуске до {_format_date(until_date)}. "
+        "Чтобы выйти из отпуска: /vacation 0"
+    )

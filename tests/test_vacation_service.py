@@ -88,7 +88,9 @@ def test_vacation_day_count_one_sets_until_today(
     vacations = VacationRepository(database)
     service = make_vacation_service(users, vacations)
 
-    assert service.reply(42, "1") == "Максим в отпуске до 06.07.2026."
+    assert service.reply(42, "1") == (
+        "Максим в отпуске до 06.07.2026. Чтобы выйти из отпуска: /vacation 0"
+    )
     vacation = vacations.get(user.id)
 
     assert vacation is not None

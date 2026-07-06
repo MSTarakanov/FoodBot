@@ -1732,8 +1732,8 @@ async def test_vacation_sets_shows_and_clears_status_for_active_user(
     await dispatcher.feed_update(bot, make_update("/vacation", chat_type="group"))
 
     assert sent_texts(session) == [
-        "Максим в отпуске до 30.06.2026.",
-        "Максим в отпуске до 30.06.2026.",
+        "Максим в отпуске до 30.06.2026. Чтобы выйти из отпуска: /vacation 0",
+        "Максим в отпуске до 30.06.2026. Чтобы выйти из отпуска: /vacation 0",
         "Максим больше не в отпуске.",
         "Максим не в отпуске. Чтобы включить: /vacation 2 или /vacation 20.07",
     ]
