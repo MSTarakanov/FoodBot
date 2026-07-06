@@ -7,10 +7,7 @@ from aiogram.types import Message
 from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
-from office_food_bot.services.lunch_auto import (
-    LUNCH_ALL_ON_VACATION_TEXT,
-    LunchPublishKind,
-)
+from office_food_bot.services.lunch_auto import LunchPublishMode
 
 GROUP_CHAT_TYPES = frozenset({"group", "supergroup"})
 GROUP_ONLY_MESSAGE = "Команда доступна только в групповом чате."
@@ -34,9 +31,7 @@ async def lunch_command(
         await messenger.reply(message, block_reason)
         return
 
-    result = await services.lunch_publisher.publish(bot, message.chat.id)
-    if result == LunchPublishKind.SKIPPED_ALL_ON_VACATION:
-        await messenger.reply(message, LUNCH_ALL_ON_VACATION_TEXT)
+    await services.lunch_publisher.publish(bot, message.chat.id, LunchPublishMode.MANUAL)
 
 
 async def lunch_auto_on_command(

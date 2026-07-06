@@ -55,7 +55,6 @@ from office_food_bot.services.lunch import (
     LUNCH_POLL_OPTIONS,
     LUNCH_POLL_QUESTION,
 )
-from office_food_bot.services.lunch_auto import LUNCH_ALL_ON_VACATION_TEXT
 from office_food_bot.services.splitwise import SplitwiseUnavailableError
 
 DEFAULT_ADMIN_IDS = frozenset({7})
@@ -1853,7 +1852,7 @@ async def test_lunch_skips_vacation_users_in_announcement(tmp_path: Path) -> Non
     assert len(session.sent_polls) == 2
 
 
-async def test_lunch_skips_flow_when_all_active_users_are_on_vacation(
+async def test_manual_lunch_publishes_without_tags_when_all_active_users_are_on_vacation(
     tmp_path: Path,
 ) -> None:
     database = make_database(tmp_path)
@@ -1869,8 +1868,8 @@ async def test_lunch_skips_flow_when_all_active_users_are_on_vacation(
 
     await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
 
-    assert sent_texts(session) == [LUNCH_ALL_ON_VACATION_TEXT]
-    assert session.sent_polls == []
+    assert sent_texts(session) == ["Время обедать!"]
+    assert len(session.sent_polls) == 2
 
 
 async def test_lunch_tags_user_after_vacation_expires(tmp_path: Path) -> None:

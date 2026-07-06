@@ -29,7 +29,11 @@ from office_food_bot.services.lunch import (
 from office_food_bot.services.poll_tracking import PollAction, PollTrackingService
 
 AUTO_LUNCH_JOB_ID = "auto_lunch"
-LUNCH_ALL_ON_VACATION_TEXT = "Сегодня все в отпуске, ланч не запускаю."
+
+
+class LunchPublishMode(StrEnum):
+    MANUAL = "manual"
+    AUTOMATIC = "automatic"
 
 
 class LunchPublishKind(StrEnum):
@@ -74,9 +78,14 @@ class LunchPollPublisher:
         self._timezone = ZoneInfo(timezone_name)
         self._clock = clock or (lambda: datetime.now(tz=UTC))
 
-    async def publish(self, bot: Bot, chat_id: int) -> LunchPublishKind:
+    async def publish(
+        self,
+        bot: Bot,
+        chat_id: int,
+        mode: LunchPublishMode,
+    ) -> LunchPublishKind:
         active_users = self._active_users_available_for_lunch()
-        if not active_users:
+        if not active_users and mode == LunchPublishMode.AUTOMATIC:
             return LunchPublishKind.SKIPPED_ALL_ON_VACATION
 
         await self._messenger.send(
@@ -172,6 +181,10 @@ class LunchSchedulerService:
 
         for chat in self._auto_chats.list_enabled():
             try:
-                await self._publisher.publish(bot, chat.chat_id)
+                await self._publisher.publish(
+                    bot,
+                    chat.chat_id,
+                    LunchPublishMode.AUTOMATIC,
+                )
             except TelegramAPIError:
                 continue
