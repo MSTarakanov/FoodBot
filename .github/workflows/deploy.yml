@@ -98,16 +98,16 @@ jobs:
           )"
           telegram_bot_username="$(
             TELEGRAM_GET_ME_RESPONSE="$telegram_get_me_response" python3 <<'PY'
-import json
-import os
-import sys
+          import json
+          import os
+          import sys
 
-payload = json.loads(os.environ["TELEGRAM_GET_ME_RESPONSE"])
-username = payload.get("result", {}).get("username")
-if payload.get("ok") is not True or not isinstance(username, str) or not username:
-    sys.exit("Telegram getMe response did not include bot username")
-print(username)
-PY
+          payload = json.loads(os.environ["TELEGRAM_GET_ME_RESPONSE"])
+          username = payload.get("result", {}).get("username")
+          if payload.get("ok") is not True or not isinstance(username, str) or not username:
+              sys.exit("Telegram getMe response did not include bot username")
+          print(username)
+          PY
           )"
 
           umask 077
