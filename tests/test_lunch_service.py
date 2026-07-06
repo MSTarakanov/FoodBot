@@ -3,13 +3,16 @@ from __future__ import annotations
 from office_food_bot.database import Database
 from office_food_bot.models import TelegramProfile, UserStatus
 from office_food_bot.repositories import UserRepository
-from office_food_bot.services.lunch import LunchService
+from office_food_bot.services.lunch import LunchService, lunch_announcement_text
 
 
-def make_profile() -> TelegramProfile:
+def make_profile(
+    telegram_user_id: int = 42,
+    username: str | None = "misha",
+) -> TelegramProfile:
     return TelegramProfile(
-        telegram_user_id=42,
-        username="misha",
+        telegram_user_id=telegram_user_id,
+        username=username,
         first_name="Misha",
         last_name=None,
     )
@@ -45,3 +48,26 @@ def test_lunch_poll_allows_active_user(users: UserRepository) -> None:
     users.approve_by_telegram_id(42)
 
     assert LunchService(users).poll_block_reason(42) is None
+
+
+def test_lunch_announcement_text_tags_active_users_with_usernames(
+    users: UserRepository,
+) -> None:
+    users.create_pending_user(make_profile(username="misha"), "Максим")
+    users.approve_by_telegram_id(42)
+    users.create_pending_user(
+        make_profile(telegram_user_id=43, username=None),
+        "Без Username",
+    )
+    users.approve_by_telegram_id(43)
+
+    assert lunch_announcement_text(users.list_active_users()) == "Время обедать! @misha"
+
+
+def test_lunch_announcement_text_skips_users_without_username(
+    users: UserRepository,
+) -> None:
+    users.create_pending_user(make_profile(username=None), "Максим")
+    users.approve_by_telegram_id(42)
+
+    assert lunch_announcement_text(users.list_active_users()) == "Время обедать!"

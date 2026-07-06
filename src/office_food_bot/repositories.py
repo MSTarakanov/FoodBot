@@ -22,6 +22,7 @@ from office_food_bot.database.user_queries import (
     INSERT_TELEGRAM_ACCOUNT_SQL,
     INSERT_USER_SQL,
     LIST_ACTIVE_SPLITWISE_USERS_SQL,
+    LIST_ACTIVE_USERS_SQL,
     LIST_PENDING_REGISTRATIONS_SQL,
     LIST_PENDING_USERS_SQL,
     UPDATE_TELEGRAM_PROFILE_SQL,
@@ -59,6 +60,13 @@ class UserRepository:
         rows = self._database.connection.execute(
             LIST_PENDING_USERS_SQL,
             (UserStatus.PENDING.value,),
+        ).fetchall()
+        return tuple(_registered_user_from_row(row) for row in rows)
+
+    def list_active_users(self) -> tuple[RegisteredUser, ...]:
+        rows = self._database.connection.execute(
+            LIST_ACTIVE_USERS_SQL,
+            (UserStatus.ACTIVE.value,),
         ).fetchall()
         return tuple(_registered_user_from_row(row) for row in rows)
 
