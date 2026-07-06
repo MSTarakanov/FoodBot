@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from office_food_bot.commands.common import telegram_profile_from_message
+from office_food_bot.execution import CommandExecutionMode
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
 
@@ -30,7 +31,11 @@ async def lunch_command(
         await messenger.reply(message, block_reason)
         return
 
-    await services.lunch_publisher.publish(bot, message.chat.id)
+    await services.lunch_publisher.publish(
+        bot,
+        message.chat.id,
+        CommandExecutionMode.MANUAL,
+    )
 
 
 async def lunch_auto_on_command(

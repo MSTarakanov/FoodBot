@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 
@@ -97,3 +98,9 @@ class LunchAutoChat:
     chat_id: int
     title: str | None
     enabled: bool
+
+
+@dataclass(frozen=True)
+class UserVacation:
+    user_id: int
+    until_date: date

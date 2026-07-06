@@ -16,6 +16,7 @@ from office_food_bot.services.poll_tracking import PollTrackingService
 from office_food_bot.services.presence import PresenceService
 from office_food_bot.services.registration import RegistrationService
 from office_food_bot.services.splitwise import SplitwiseService
+from office_food_bot.services.vacation import VacationService
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,7 @@ class BotServices:
     presence: PresenceService
     balances: BalanceService
     lunch: LunchService
+    vacation: VacationService
     lunch_auto_chats: LunchAutoChatService
     lunch_publisher: LunchPollPublisher
     lunch_scheduler: LunchSchedulerService

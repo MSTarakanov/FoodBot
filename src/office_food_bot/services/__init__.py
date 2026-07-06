@@ -34,6 +34,7 @@ from office_food_bot.services.splitwise import (
     SplitwiseService,
     SplitwiseUnavailableError,
 )
+from office_food_bot.services.vacation import VacationService
 
 __all__ = [
     "ApprovalResult",
@@ -61,5 +62,6 @@ __all__ = [
     "SplitwiseLookupResult",
     "SplitwiseService",
     "SplitwiseUnavailableError",
+    "VacationService",
     "build_services",
 ]

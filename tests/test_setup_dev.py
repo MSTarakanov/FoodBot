@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import pty
+import select
 import subprocess
 from pathlib import Path
 
@@ -30,6 +33,74 @@ def read_env(tmp_path: Path) -> dict[str, str]:
     return values
 
 
+def clean_git_environment() -> dict[str, str]:
+    env = os.environ.copy()
+    for key in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX"):
+        env.pop(key, None)
+    return env
+
+
+def run_interactive_setup(
+    command: list[str],
+    cwd: Path,
+    user_input: str,
+) -> subprocess.CompletedProcess[str]:
+    master_fd, slave_fd = pty.openpty()
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        stdin=slave_fd,
+        stdout=slave_fd,
+        stderr=slave_fd,
+        close_fds=True,
+        env=clean_git_environment(),
+    )
+    os.close(slave_fd)
+    output_chunks: list[bytes] = []
+    try:
+        os.write(master_fd, user_input.encode())
+        while True:
+            ready_fds, _, _ = select.select([master_fd], [], [], 0.1)
+            if ready_fds:
+                try:
+                    chunk = os.read(master_fd, 4096)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                output_chunks.append(chunk)
+
+            if process.poll() is not None:
+                ready_fds, _, _ = select.select([master_fd], [], [], 0)
+                if not ready_fds:
+                    break
+
+        return_code = process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        raise
+    finally:
+        os.close(master_fd)
+
+    return subprocess.CompletedProcess(
+        command,
+        return_code,
+        stdout=b"".join(output_chunks).decode(errors="replace"),
+        stderr="",
+    )
+
+
+def run_git(cwd: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        text=True,
+        capture_output=True,
+        check=True,
+        env=clean_git_environment(),
+    )
+
+
 def test_setup_dev_creates_env_with_admin_id(tmp_path: Path) -> None:
     result = run_env_setup(
         tmp_path,
@@ -50,6 +121,77 @@ def test_setup_dev_creates_env_with_admin_id(tmp_path: Path) -> None:
     assert "123456:test-token" not in result.stderr
     assert "dev-splitwise-key" not in result.stdout
     assert "dev-splitwise-key" not in result.stderr
+
+
+def test_setup_dev_reuses_local_state_for_linked_worktree(tmp_path: Path) -> None:
+    main_worktree = tmp_path / "FoodBot"
+    main_worktree.mkdir()
+    (main_worktree / "scripts").mkdir()
+    setup_copy = main_worktree / "scripts" / "setup-dev"
+    setup_copy.write_text(SETUP_DEV.read_text(encoding="utf-8"), encoding="utf-8")
+    setup_copy.chmod(0o755)
+    (main_worktree / ".gitignore").write_text(
+        ".env\n.tools\n*.sqlite3\n",
+        encoding="utf-8",
+    )
+    (main_worktree / ".env.defaults").write_text(
+        "SPLITWISE_GROUP_ID=55\nPRODUCTION_TELEGRAM_BOT_ID=8490386710\n",
+        encoding="utf-8",
+    )
+
+    run_git(main_worktree, "init")
+    run_git(main_worktree, "config", "user.name", "Test User")
+    run_git(main_worktree, "config", "user.email", "test@example.com")
+    run_git(main_worktree, "add", "scripts/setup-dev", ".gitignore", ".env.defaults")
+    run_git(main_worktree, "commit", "-m", "init")
+
+    (main_worktree / ".env").write_text(
+        "\n".join(
+            [
+                "FOODBOT_ENV=development",
+                "TELEGRAM_BOT_TOKEN=123456:test-token",
+                "TELEGRAM_BOT_USERNAME=foodbot_dev",
+                "DATABASE_PATH=foodbot.local.sqlite3",
+                "TELEGRAM_ADMIN_IDS=42",
+                "FOODBOT_TIMEZONE=Europe/Belgrade",
+                "SPLITWISE_API_KEY=dev-splitwise-key",
+                "SPLITWISE_GROUP_ID=55",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (main_worktree / ".tools" / "bin").mkdir(parents=True)
+    (main_worktree / ".tools" / "bin" / "uv").write_text("", encoding="utf-8")
+    (main_worktree / "foodbot.local.sqlite3").write_text("db", encoding="utf-8")
+
+    linked_worktree = tmp_path / "FoodBot-feature"
+    run_git(main_worktree, "worktree", "add", "-b", "feature/test", str(linked_worktree))
+
+    result = run_interactive_setup(
+        [
+            "bash",
+            str(linked_worktree / "scripts" / "setup-dev"),
+            "--skip-tools",
+            "--skip-token-check",
+        ],
+        linked_worktree,
+        "\n\n\n\n\n\n\n\n",
+    )
+
+    assert result.returncode == 0
+    assert "Imported local .env values" in result.stdout
+    assert (linked_worktree / ".tools").is_symlink()
+    assert (linked_worktree / "foodbot.local.sqlite3").is_symlink()
+    assert read_env(linked_worktree) == {
+        "FOODBOT_ENV": "development",
+        "TELEGRAM_BOT_TOKEN": "123456:test-token",
+        "TELEGRAM_BOT_USERNAME": "foodbot_dev",
+        "DATABASE_PATH": "foodbot.local.sqlite3",
+        "TELEGRAM_ADMIN_IDS": "42",
+        "FOODBOT_TIMEZONE": "Europe/Belgrade",
+        "SPLITWISE_API_KEY": "dev-splitwise-key",
+        "SPLITWISE_GROUP_ID": "55",
+    }
 
 
 def test_setup_dev_keeps_existing_values_on_empty_answers(tmp_path: Path) -> None:

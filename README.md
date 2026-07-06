@@ -29,6 +29,8 @@ Group chat commands:
 - `/meta <minutes|start-end>` - says when a registered user will arrive.
 - `/eta <minutes|start-end>` - says when delivery is expected.
 - `/balance` - shows Splitwise balances.
+- `/vacation <days|date|0>` - marks the current user as on vacation until the end of the given
+  date, or disables vacation with `0`/`off`.
 - `/lunch` - creates lunch polls.
 - `/lunch_auto_on` - admin-only: enables automatic lunch polls for the current group chat.
 - `/lunch_auto_off` - admin-only: disables automatic lunch polls for the current group chat.
@@ -36,6 +38,8 @@ Group chat commands:
 
 Use `20` for an exact offset in minutes or `20-30` for a minute range.
 Automatic lunch polls are sent at 11:30 in `FOODBOT_TIMEZONE` on Serbian working days.
+Users with an active vacation are not tagged in lunch announcements. If all active users are on
+vacation, lunch polls are not sent.
 
 Admin private commands:
 
@@ -66,6 +70,10 @@ token verification is enabled, it detects the username with Telegram `getMe`, ot
 it directly. If `.env` already has a token, setup shows the bot username and `https://t.me/...`
 link before asking whether to keep it.
 Setup refuses to save the production Telegram bot token for local development.
+
+If `./setup-dev` is run from a linked `git worktree`, it can reuse ignored local state from the
+main worktree: `.env` values, `.tools`, and the local SQLite database. This keeps feature worktrees
+on the same development bot and the same local registration/debug state.
 
 ## Configuration
 

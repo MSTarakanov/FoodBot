@@ -32,6 +32,7 @@ from office_food_bot.commands.register import (
 )
 from office_food_bot.commands.register_requests_list import register_requests_list_command
 from office_food_bot.commands.start import start_command
+from office_food_bot.commands.vacation import vacation_command
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
 
@@ -51,6 +52,7 @@ def create_command_router(services: BotServices, messenger: BotMessenger) -> Rou
     router.message.register(debug_command, Command("debug"))
     router.message.register(eta_command, Command("meta", "eta"))
     router.message.register(balance_command, Command("balance"))
+    router.message.register(vacation_command, Command("vacation"))
     router.message.register(lunch_auto_on_command, Command("lunch_auto_on"))
     router.message.register(lunch_auto_off_command, Command("lunch_auto_off"))
     router.message.register(lunch_auto_status_command, Command("lunch_auto_status"))
