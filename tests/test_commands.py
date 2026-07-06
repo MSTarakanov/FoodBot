@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -489,6 +490,21 @@ async def test_commands_reply_with_expected_text(
     request = session.sent_messages[0]
     assert request.chat_id == 42
     assert request.text == expected_text
+
+
+async def test_hi_logs_bot_identity(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+    caplog.set_level(logging.WARNING, logger="office_food_bot.commands.hi")
+
+    await dispatcher.feed_update(bot, make_update("/hi"))
+
+    assert "/hi handled by @foodbot_dev: chat_id=42, telegram_user_id=42" in caplog.text
 
 
 async def test_help_shows_admin_commands_to_admins(tmp_path: Path) -> None:
