@@ -8,11 +8,16 @@ from aiogram.types import Message, TelegramObject
 
 from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.services import BotServices, CommandAccessStatus
+from office_food_bot.services import BotServices, CommandAccessDenialReason
 
 PRIVATE_ONLY_MESSAGE = "Команда доступна только в личке: https://t.me/{bot_username}"
 GROUP_ONLY_MESSAGE = "Команда доступна только в групповом чате."
 ADMIN_ONLY_MESSAGE = "Команда доступна только админам."
+DENIAL_MESSAGE_TEMPLATES = {
+    CommandAccessDenialReason.PRIVATE_ONLY: PRIVATE_ONLY_MESSAGE,
+    CommandAccessDenialReason.GROUP_ONLY: GROUP_ONLY_MESSAGE,
+    CommandAccessDenialReason.ADMIN_ONLY: ADMIN_ONLY_MESSAGE,
+}
 
 
 @dataclass(frozen=True)
@@ -61,14 +66,15 @@ class CommandAccessMiddleware:
             str(event.chat.type),
             telegram_user_id,
         )
-        if access.allowed:
+        denial_reason = access.denial_reason
+        if denial_reason is None:
             return await handler(event, data)
 
         await _clear_state(data)
         await _reply_with_denial(
             event,
             self._messenger,
-            access.status,
+            denial_reason,
             self._services.telegram_bot_username,
         )
         return None
@@ -113,23 +119,15 @@ async def _clear_state(data: CommandMiddlewareData) -> None:
 async def _reply_with_denial(
     message: Message,
     messenger: BotMessenger,
-    status: CommandAccessStatus,
+    reason: CommandAccessDenialReason,
     bot_username: str,
 ) -> None:
-    text = command_access_denial_text(status, bot_username)
+    text = command_access_denial_text(reason, bot_username)
     await messenger.reply(message, text)
 
 
 def command_access_denial_text(
-    status: CommandAccessStatus,
+    reason: CommandAccessDenialReason,
     bot_username: str,
 ) -> str:
-    if status == CommandAccessStatus.PRIVATE_ONLY:
-        return PRIVATE_ONLY_MESSAGE.format(bot_username=bot_username)
-    if status == CommandAccessStatus.GROUP_ONLY:
-        return GROUP_ONLY_MESSAGE
-    if status == CommandAccessStatus.ADMIN_ONLY:
-        return ADMIN_ONLY_MESSAGE
-
-    msg = f"Cannot build denial text for command access status {status.value}"
-    raise RuntimeError(msg)
+    return DENIAL_MESSAGE_TEMPLATES[reason].format(bot_username=bot_username)

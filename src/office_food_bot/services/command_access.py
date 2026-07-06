@@ -16,8 +16,7 @@ PRIVATE_CHAT_TYPE = "private"
 GROUP_CHAT_TYPES = frozenset({"group", "supergroup"})
 
 
-class CommandAccessStatus(StrEnum):
-    ALLOWED = "allowed"
+class CommandAccessDenialReason(StrEnum):
     PRIVATE_ONLY = "private_only"
     GROUP_ONLY = "group_only"
     ADMIN_ONLY = "admin_only"
@@ -25,11 +24,11 @@ class CommandAccessStatus(StrEnum):
 
 @dataclass(frozen=True)
 class CommandAccessResult:
-    status: CommandAccessStatus
+    denial_reason: CommandAccessDenialReason | None = None
 
     @property
     def allowed(self) -> bool:
-        return self.status == CommandAccessStatus.ALLOWED
+        return self.denial_reason is None
 
 
 class CommandAccessService:
@@ -52,16 +51,16 @@ class CommandAccessService:
             return _allowed()
 
         if definition.scope == CommandScope.PRIVATE and chat_type != PRIVATE_CHAT_TYPE:
-            return CommandAccessResult(CommandAccessStatus.PRIVATE_ONLY)
+            return _denied(CommandAccessDenialReason.PRIVATE_ONLY)
 
         if (
             definition.scope == CommandScope.GROUP
             and not self._can_run_group_command_in_chat(chat_type, telegram_user_id)
         ):
-            return CommandAccessResult(CommandAccessStatus.GROUP_ONLY)
+            return _denied(CommandAccessDenialReason.GROUP_ONLY)
 
         if definition.admin_only and not self.is_admin(telegram_user_id):
-            return CommandAccessResult(CommandAccessStatus.ADMIN_ONLY)
+            return _denied(CommandAccessDenialReason.ADMIN_ONLY)
 
         return _allowed()
 
@@ -104,4 +103,8 @@ class CommandAccessService:
 
 
 def _allowed() -> CommandAccessResult:
-    return CommandAccessResult(CommandAccessStatus.ALLOWED)
+    return CommandAccessResult()
+
+
+def _denied(reason: CommandAccessDenialReason) -> CommandAccessResult:
+    return CommandAccessResult(reason)
