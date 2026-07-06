@@ -34,11 +34,12 @@ class CommandAccess(Protocol):
         telegram_user_id: int | None,
     ) -> tuple[CommandDefinition, ...]: ...
 
+    def admin_chat_ids_for_menu(self) -> tuple[int, ...]: ...
+
 
 async def setup_bot_commands(
     bot: BotCommandClient,
     access: CommandAccess,
-    admin_ids: Iterable[int],
 ) -> None:
     await bot.set_my_commands(
         _bot_commands(access.visible_commands(PRIVATE_CHAT_TYPE, None)),
@@ -53,7 +54,7 @@ async def setup_bot_commands(
         scope=BotCommandScopeAllGroupChats(),
     )
 
-    for admin_id in sorted(admin_ids):
+    for admin_id in access.admin_chat_ids_for_menu():
         await setup_private_admin_commands(bot, access, admin_id)
 
 

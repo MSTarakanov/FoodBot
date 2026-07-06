@@ -15,10 +15,6 @@ from office_food_bot.services.registration import RegistrationService
 PRIVATE_CHAT_TYPE = "private"
 GROUP_CHAT_TYPES = frozenset({"group", "supergroup"})
 
-PRIVATE_ONLY_MESSAGE = "Команда доступна только в личке."
-GROUP_ONLY_MESSAGE = "Команда доступна только в групповом чате."
-ADMIN_ONLY_MESSAGE = "Команда доступна только админам."
-
 
 class CommandAccessStatus(StrEnum):
     ALLOWED = "allowed"
@@ -30,7 +26,6 @@ class CommandAccessStatus(StrEnum):
 @dataclass(frozen=True)
 class CommandAccessResult:
     status: CommandAccessStatus
-    message: str | None = None
 
     @property
     def allowed(self) -> bool:
@@ -57,25 +52,16 @@ class CommandAccessService:
             return _allowed()
 
         if definition.scope == CommandScope.PRIVATE and chat_type != PRIVATE_CHAT_TYPE:
-            return CommandAccessResult(
-                CommandAccessStatus.PRIVATE_ONLY,
-                PRIVATE_ONLY_MESSAGE,
-            )
+            return CommandAccessResult(CommandAccessStatus.PRIVATE_ONLY)
 
         if (
             definition.scope == CommandScope.GROUP
             and not self._can_run_group_command_in_chat(chat_type, telegram_user_id)
         ):
-            return CommandAccessResult(
-                CommandAccessStatus.GROUP_ONLY,
-                GROUP_ONLY_MESSAGE,
-            )
+            return CommandAccessResult(CommandAccessStatus.GROUP_ONLY)
 
         if definition.admin_only and not self.is_admin(telegram_user_id):
-            return CommandAccessResult(
-                CommandAccessStatus.ADMIN_ONLY,
-                ADMIN_ONLY_MESSAGE,
-            )
+            return CommandAccessResult(CommandAccessStatus.ADMIN_ONLY)
 
         return _allowed()
 
@@ -89,6 +75,9 @@ class CommandAccessService:
             for definition in COMMANDS
             if self.can_run(definition.name, chat_type, telegram_user_id).allowed
         )
+
+    def admin_chat_ids_for_menu(self) -> tuple[int, ...]:
+        return tuple(sorted(self._registration.admin_ids))
 
     def is_admin(self, telegram_user_id: int | None) -> bool:
         if telegram_user_id is None:

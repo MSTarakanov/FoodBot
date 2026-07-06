@@ -19,6 +19,7 @@ class RuntimeEnvironment(StrEnum):
 class Settings:
     environment: RuntimeEnvironment
     telegram_bot_token: str
+    telegram_bot_username: str
     database_path: str
     telegram_admin_ids: frozenset[int]
     timezone: str
@@ -33,6 +34,9 @@ def load_settings() -> Settings:
     return Settings(
         environment=_parse_environment(_required_env_value(env, "FOODBOT_ENV")),
         telegram_bot_token=_required_env_value(env, "TELEGRAM_BOT_TOKEN"),
+        telegram_bot_username=_parse_telegram_bot_username(
+            _required_env_value(env, "TELEGRAM_BOT_USERNAME")
+        ),
         database_path=_required_env_value(env, "DATABASE_PATH"),
         telegram_admin_ids=_parse_admin_ids(
             _required_env_value(env, "TELEGRAM_ADMIN_IDS", allow_empty=True)
@@ -100,6 +104,17 @@ def _parse_environment(raw_environment: str) -> RuntimeEnvironment:
     except ValueError as error:
         msg = "FOODBOT_ENV must be either development or production"
         raise RuntimeError(msg) from error
+
+
+def _parse_telegram_bot_username(raw_username: str) -> str:
+    username = raw_username.strip().removeprefix("@")
+    if not username:
+        msg = "TELEGRAM_BOT_USERNAME environment variable is required"
+        raise RuntimeError(msg)
+    if not username.replace("_", "").isalnum():
+        msg = "TELEGRAM_BOT_USERNAME must contain only letters, digits, and underscores"
+        raise RuntimeError(msg)
+    return username
 
 
 def _parse_admin_ids(raw_admin_ids: str) -> frozenset[int]:

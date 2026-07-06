@@ -27,6 +27,7 @@ jobs:
           VPS_SSH_KEY: ${{ secrets.FOODBOT_VPS_SSH_KEY }}
           VPS_KNOWN_HOSTS: ${{ secrets.FOODBOT_VPS_KNOWN_HOSTS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_USERNAME: ${{ vars.TELEGRAM_BOT_USERNAME }}
           TELEGRAM_ADMIN_IDS: ${{ secrets.TELEGRAM_ADMIN_IDS }}
           SPLITWISE_API_KEY: ${{ secrets.SPLITWISE_API_KEY }}
           SPLITWISE_GROUP_ID: ${{ vars.SPLITWISE_GROUP_ID }}
@@ -52,6 +53,11 @@ jobs:
 
           if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
             echo "::error::TELEGRAM_BOT_TOKEN is not set."
+            missing=1
+          fi
+
+          if [ -z "${TELEGRAM_BOT_USERNAME:-}" ]; then
+            echo "::error::TELEGRAM_BOT_USERNAME repository variable is not set."
             missing=1
           fi
 
@@ -86,6 +92,7 @@ jobs:
       - name: Prepare production environment
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_USERNAME: ${{ vars.TELEGRAM_BOT_USERNAME }}
           TELEGRAM_ADMIN_IDS: ${{ secrets.TELEGRAM_ADMIN_IDS }}
           SPLITWISE_API_KEY: ${{ secrets.SPLITWISE_API_KEY }}
           SPLITWISE_GROUP_ID: ${{ vars.SPLITWISE_GROUP_ID }}
@@ -97,6 +104,7 @@ jobs:
           {
             printf 'FOODBOT_ENV=%s\n' "production"
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
+            printf 'TELEGRAM_BOT_USERNAME=%s\n' "$TELEGRAM_BOT_USERNAME"
             printf 'DATABASE_PATH=%s\n' "/opt/foodbot/foodbot.sqlite3"
             printf 'TELEGRAM_ADMIN_IDS=%s\n' "$TELEGRAM_ADMIN_IDS"
             printf 'FOODBOT_TIMEZONE=%s\n' "Europe/Belgrade"

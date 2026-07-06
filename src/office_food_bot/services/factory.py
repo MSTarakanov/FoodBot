@@ -22,6 +22,7 @@ from office_food_bot.services.splitwise import (
 
 def build_services(
     database: Database,
+    telegram_bot_username: str,
     admin_ids: frozenset[int],
     timezone_name: str,
     splitwise_api_key: str | None,
@@ -39,6 +40,7 @@ def build_services(
     registration = RegistrationService(users, admin_ids)
     debug = DebugService(debug_settings)
     return BotServices(
+        telegram_bot_username=telegram_bot_username,
         registration=registration,
         debug=debug,
         command_access=CommandAccessService(registration, debug),

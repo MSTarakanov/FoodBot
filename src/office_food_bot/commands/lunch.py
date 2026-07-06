@@ -3,7 +3,6 @@ from __future__ import annotations
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from office_food_bot.commands.access import ensure_command_allowed
 from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
@@ -23,9 +22,6 @@ async def lunch_command(
     services: BotServices,
     state: FSMContext,
 ) -> None:
-    if not await ensure_command_allowed(message, "lunch", messenger, services, state):
-        return
-
     await state.clear()
     profile = telegram_profile_from_message(message)
     if profile is None:

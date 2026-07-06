@@ -1,8 +1,5 @@
 from office_food_bot.services.balances import BalanceService
 from office_food_bot.services.command_access import (
-    ADMIN_ONLY_MESSAGE,
-    GROUP_ONLY_MESSAGE,
-    PRIVATE_ONLY_MESSAGE,
     CommandAccessResult,
     CommandAccessService,
     CommandAccessStatus,
@@ -40,14 +37,11 @@ __all__ = [
     "CommandAccessService",
     "CommandAccessStatus",
     "DebugService",
-    "ADMIN_ONLY_MESSAGE",
-    "GROUP_ONLY_MESSAGE",
     "LunchService",
     "PollAction",
     "PollActionRequest",
     "PollTrackingService",
     "PresenceService",
-    "PRIVATE_ONLY_MESSAGE",
     "RegistrationResult",
     "RegistrationService",
     "SplitwiseGroupClient",

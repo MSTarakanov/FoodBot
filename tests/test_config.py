@@ -11,6 +11,7 @@ from office_food_bot.config import RuntimeEnvironment, load_settings
 def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in (
         "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_BOT_USERNAME",
         "DATABASE_PATH",
         "TELEGRAM_ADMIN_IDS",
         "FOODBOT_TIMEZONE",
@@ -31,6 +32,7 @@ def test_load_settings_uses_defaults_and_local_overrides(
         "\n".join(
             [
                 "DATABASE_PATH=default.sqlite3",
+                "TELEGRAM_BOT_USERNAME=default_bot",
                 "TELEGRAM_ADMIN_IDS=1,2",
                 "FOODBOT_TIMEZONE=UTC",
                 "SPLITWISE_GROUP_ID=1001",
@@ -44,6 +46,7 @@ def test_load_settings_uses_defaults_and_local_overrides(
         "\n".join(
             [
                 "TELEGRAM_BOT_TOKEN=123456:test-token",
+                "TELEGRAM_BOT_USERNAME=@local_dev_bot",
                 "TELEGRAM_ADMIN_IDS=3",
                 "SPLITWISE_API_KEY=splitwise-dev-key",
             ]
@@ -55,6 +58,7 @@ def test_load_settings_uses_defaults_and_local_overrides(
 
     assert settings.environment == RuntimeEnvironment.DEVELOPMENT
     assert settings.telegram_bot_token == "123456:test-token"
+    assert settings.telegram_bot_username == "local_dev_bot"
     assert settings.database_path == "default.sqlite3"
     assert settings.telegram_admin_ids == frozenset({3})
     assert settings.timezone == "UTC"
@@ -72,6 +76,7 @@ def test_environment_variables_have_highest_priority(
         "\n".join(
             [
                 "TELEGRAM_BOT_TOKEN=from-defaults",
+                "TELEGRAM_BOT_USERNAME=default_bot",
                 "DATABASE_PATH=default.sqlite3",
                 "TELEGRAM_ADMIN_IDS=1",
                 "FOODBOT_TIMEZONE=UTC",
@@ -84,6 +89,7 @@ def test_environment_variables_have_highest_priority(
     )
     (tmp_path / ".env").write_text("TELEGRAM_BOT_TOKEN=from-local\n")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "from-process")
+    monkeypatch.setenv("TELEGRAM_BOT_USERNAME", "process_bot")
     monkeypatch.setenv("DATABASE_PATH", "process.sqlite3")
     monkeypatch.setenv("SPLITWISE_GROUP_ID", "2002")
     monkeypatch.setenv("FOODBOT_ENV", "production")
@@ -92,6 +98,7 @@ def test_environment_variables_have_highest_priority(
 
     assert settings.environment == RuntimeEnvironment.PRODUCTION
     assert settings.telegram_bot_token == "from-process"
+    assert settings.telegram_bot_username == "process_bot"
     assert settings.database_path == "process.sqlite3"
     assert settings.telegram_admin_ids == frozenset({1})
     assert settings.timezone == "UTC"
@@ -107,6 +114,7 @@ def test_load_settings_fails_when_required_config_is_missing(
         "\n".join(
             [
                 "TELEGRAM_BOT_TOKEN=123456:test-token",
+                "TELEGRAM_BOT_USERNAME=dev_bot",
                 "TELEGRAM_ADMIN_IDS=",
                 "FOODBOT_TIMEZONE=UTC",
                 "FOODBOT_ENV=development",
@@ -128,6 +136,7 @@ def test_load_settings_rejects_invalid_splitwise_group_id(
         "\n".join(
             [
                 "TELEGRAM_BOT_TOKEN=123456:test-token",
+                "TELEGRAM_BOT_USERNAME=dev_bot",
                 "DATABASE_PATH=foodbot.sqlite3",
                 "TELEGRAM_ADMIN_IDS=",
                 "FOODBOT_TIMEZONE=UTC",
@@ -151,6 +160,7 @@ def test_load_settings_rejects_invalid_environment(
         "\n".join(
             [
                 "TELEGRAM_BOT_TOKEN=123456:test-token",
+                "TELEGRAM_BOT_USERNAME=dev_bot",
                 "DATABASE_PATH=foodbot.sqlite3",
                 "TELEGRAM_ADMIN_IDS=",
                 "FOODBOT_TIMEZONE=UTC",

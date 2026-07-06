@@ -5,7 +5,6 @@ from aiogram.filters.command import CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from office_food_bot.commands.access import ensure_command_allowed
 from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import ApprovalKind
@@ -20,9 +19,6 @@ async def approve_command(
     services: BotServices,
     state: FSMContext,
 ) -> None:
-    if not await ensure_command_allowed(message, "approve", messenger, services, state):
-        return
-
     await state.clear()
     approver = telegram_profile_from_message(message)
     if approver is None:

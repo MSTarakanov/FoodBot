@@ -31,8 +31,8 @@ from aiogram.types import (
 )
 
 from office_food_bot.app import create_dispatcher, create_services
-from office_food_bot.commands import setup_bot_commands
 from office_food_bot.commands.definitions import COMMANDS, START_TEXT
+from office_food_bot.commands.menu import setup_bot_commands
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
 from office_food_bot.models import SplitwiseBalance, SplitwiseMember, UserStatus
@@ -326,6 +326,7 @@ def make_test_services(
     settings = Settings(
         environment=RuntimeEnvironment.DEVELOPMENT,
         telegram_bot_token="123456:test-token",
+        telegram_bot_username="foodbot_dev",
         database_path=database.path,
         telegram_admin_ids=admin_ids,
         timezone="Europe/Belgrade",
@@ -481,13 +482,41 @@ async def test_help_shows_group_commands_in_group_chat(tmp_path: Path) -> None:
     assert sent_texts(session) == [GROUP_HELP_TEXT]
 
 
+async def test_private_only_command_in_group_points_to_private_bot_link(
+    tmp_path: Path,
+) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register", chat_type="group"))
+
+    assert sent_texts(session) == [
+        "Команда доступна только в личке: https://t.me/foodbot_dev"
+    ]
+    assert UserRepository(database).get_by_telegram_id(42) is None
+
+
+async def test_command_addressed_to_another_bot_is_ignored(tmp_path: Path) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register@another_bot", chat_type="group"))
+
+    assert sent_texts(session) == []
+    assert UserRepository(database).get_by_telegram_id(42) is None
+
+
 async def test_setup_bot_commands_registers_telegram_menu() -> None:
     database = Database(Path(":memory:"))
     database.init_schema()
     bot = RecordingCommandMenuClient()
     services = make_test_services(database)
 
-    await setup_bot_commands(bot, services.command_access, DEFAULT_ADMIN_IDS)
+    await setup_bot_commands(bot, services.command_access)
 
     assert len(bot.command_menus) == 4
 
@@ -549,7 +578,7 @@ async def test_setup_bot_commands_uses_debug_menu_for_admin_chat() -> None:
     services = make_test_services(database)
     services.debug.set_enabled(7, True)
 
-    await setup_bot_commands(bot, services.command_access, DEFAULT_ADMIN_IDS)
+    await setup_bot_commands(bot, services.command_access)
 
     admin_menu = bot.command_menus[3]
     assert admin_menu.scope_name == "chat"
@@ -567,7 +596,7 @@ async def test_setup_bot_commands_ignores_missing_admin_chat() -> None:
     bot = AdminChatNotFoundCommandMenuClient()
     services = make_test_services(database)
 
-    await setup_bot_commands(bot, services.command_access, DEFAULT_ADMIN_IDS)
+    await setup_bot_commands(bot, services.command_access)
 
     assert len(bot.command_menus) == 3
     assert [menu.scope_name for menu in bot.command_menus] == [

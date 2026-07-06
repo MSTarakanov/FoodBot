@@ -535,6 +535,25 @@ normalize_admin_ids() {
   printf "%s" "$raw_ids"
 }
 
+normalize_telegram_bot_username() {
+  local raw_username="$1"
+  raw_username="${raw_username#"${raw_username%%[![:space:]]*}"}"
+  raw_username="${raw_username%"${raw_username##*[![:space:]]}"}"
+  raw_username="${raw_username#@}"
+
+  if [[ -z "$raw_username" ]]; then
+    echo "TELEGRAM_BOT_USERNAME is required." >&2
+    exit 1
+  fi
+
+  if [[ ! "$raw_username" =~ ^[A-Za-z0-9_]+$ ]]; then
+    echo "TELEGRAM_BOT_USERNAME must contain only letters, digits, and underscores." >&2
+    exit 1
+  fi
+
+  printf "%s" "$raw_username"
+}
+
 telegram_token_has_valid_shape() {
   local token="$1"
   [[ "$token" =~ ^[0-9]+:[A-Za-z0-9_-]{30,}$ ]]
@@ -724,10 +743,12 @@ configure_env() {
 
   local env_file=".env"
   local current_token=""
+  local current_telegram_bot_username=""
   local current_admin_ids=""
   local current_splitwise_api_key=""
   local current_splitwise_group_id=""
   local telegram_bot_token=""
+  local telegram_bot_username=""
   local telegram_admin_ids=""
   local splitwise_api_key=""
   local splitwise_group_id=""
@@ -739,6 +760,7 @@ configure_env() {
     echo "Resetting local .env values."
   else
     current_token="$(read_env_value TELEGRAM_BOT_TOKEN "$env_file" || true)"
+    current_telegram_bot_username="$(read_env_value TELEGRAM_BOT_USERNAME "$env_file" || true)"
     current_admin_ids="$(read_env_value TELEGRAM_ADMIN_IDS "$env_file" || true)"
     current_splitwise_api_key="$(read_env_value SPLITWISE_API_KEY "$env_file" || true)"
     current_splitwise_group_id="$(read_env_value SPLITWISE_GROUP_ID "$env_file" || true)"
@@ -752,6 +774,20 @@ configure_env() {
   echo "production long polling is running."
   echo
   prompt_telegram_bot_token telegram_bot_token "$current_token"
+
+  if [[ "$SKIP_TOKEN_CHECK" -eq 0 ]]; then
+    local detected_bot_username=""
+    detected_bot_username="$(telegram_bot_username_from_token "$telegram_bot_token" || true)"
+    if [[ -n "$detected_bot_username" ]]; then
+      current_telegram_bot_username="$detected_bot_username"
+      echo "Telegram bot username: @$current_telegram_bot_username"
+    fi
+  fi
+
+  echo
+  echo "TELEGRAM_BOT_USERNAME is used to build private-chat links like https://t.me/<username>."
+  prompt_value telegram_bot_username "TELEGRAM_BOT_USERNAME" "$current_telegram_bot_username" 1 0
+  telegram_bot_username="$(normalize_telegram_bot_username "$telegram_bot_username")"
 
   if [[ -n "$current_admin_ids" ]]; then
     make_admin_default="y"
@@ -782,6 +818,7 @@ configure_env() {
   {
     echo "FOODBOT_ENV=development"
     echo "TELEGRAM_BOT_TOKEN=$telegram_bot_token"
+    echo "TELEGRAM_BOT_USERNAME=$telegram_bot_username"
     echo "DATABASE_PATH=$DEFAULT_DATABASE_PATH"
     echo "TELEGRAM_ADMIN_IDS=$telegram_admin_ids"
     echo "FOODBOT_TIMEZONE=$DEFAULT_TIMEZONE"

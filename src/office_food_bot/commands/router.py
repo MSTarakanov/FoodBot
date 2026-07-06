@@ -10,6 +10,7 @@ from office_food_bot.commands.eta import eta_command
 from office_food_bot.commands.help import help_command
 from office_food_bot.commands.hi import hi_command
 from office_food_bot.commands.lunch import lunch_command
+from office_food_bot.commands.middleware import CommandAccessMiddleware
 from office_food_bot.commands.poll_tracking import poll_answer_handler
 from office_food_bot.commands.register import (
     RegistrationFlow,
@@ -28,6 +29,7 @@ from office_food_bot.commands.start import start_command
 
 def create_command_router() -> Router:
     router = Router(name="commands")
+    router.message.outer_middleware(CommandAccessMiddleware())
     router.message.register(cancel_registration_command, Command("cancel"))
     router.message.register(start_command, CommandStart())
     router.message.register(help_command, Command("help"))

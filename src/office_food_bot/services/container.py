@@ -14,6 +14,7 @@ from office_food_bot.services.splitwise import SplitwiseService
 
 @dataclass(frozen=True)
 class BotServices:
+    telegram_bot_username: str
     registration: RegistrationService
     debug: DebugService
     command_access: CommandAccessService

@@ -4,7 +4,7 @@ from datetime import datetime
 from aiogram import Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from office_food_bot.commands import create_command_router
+from office_food_bot.commands.router import create_command_router
 from office_food_bot.config import Settings
 from office_food_bot.database import Database
 from office_food_bot.messaging import BotMessenger
@@ -20,6 +20,7 @@ def create_services(
 ) -> BotServices:
     return build_services(
         database,
+        settings.telegram_bot_username,
         settings.telegram_admin_ids,
         settings.timezone,
         settings.splitwise_api_key,

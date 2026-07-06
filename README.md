@@ -7,7 +7,7 @@ Pre-alpha Telegram bot for office food coordination.
 The bot registers a Telegram slash menu on startup, so available commands are shown when a user
 types `/` in Telegram. `/help` returns the same command set in chat.
 
-Regular users see:
+Private chat commands:
 
 - `/start` - introduces the bot.
 - `/help` - shows available commands.
@@ -17,16 +17,26 @@ Regular users see:
   existing pending request for the same Telegram user.
   Already approved users see their current data and choose whether to send a
   re-registration request back to the pending approval list.
-- `/meta <minutes>` - says when a registered user will arrive.
 - `/balance` - placeholder for the upcoming Splitwise balance view.
 
-Admins also see:
+Group chat commands:
+
+- `/help` - shows available group commands.
+- `/hi` - replies with a short greeting.
+- `/meta <minutes>` - says when a registered user will arrive.
+- `/eta <minutes>` - says when delivery is expected.
+- `/balance` - shows Splitwise balances.
+- `/lunch` - creates lunch polls.
+
+Admin private commands:
 
 - `/approve <telegram_user_id>` - approves a pending user.
 - `/register_requests_list` - shows pending registration requests.
+- `/debug 1` and `/debug 0` - allow an admin to test group-only commands in private chat.
 
-Admin command visibility is based on `TELEGRAM_ADMIN_IDS`. The `/approve` handler is protected too,
-so non-admin users cannot approve registrations even if they type the command manually.
+Command visibility and execution use the same access layer. Admin command visibility is based on
+`TELEGRAM_ADMIN_IDS`. If a private-only command is typed in a group, the bot replies with a link to
+its private chat, built from `TELEGRAM_BOT_USERNAME`.
 
 ## Local Run
 
@@ -41,23 +51,25 @@ or `.env`.
 
 Use a personal development Telegram bot token in `.env`. This file is local-only and is ignored by
 git. Setup prints where to get the token in `@BotFather`, rejects placeholder-looking values, and
-verifies the token with Telegram before saving it. If `.env` already has a token, setup shows the
-bot username and `https://t.me/...` link before asking whether to keep it.
+verifies the token with Telegram before saving it. Setup also writes `TELEGRAM_BOT_USERNAME`; when
+token verification is enabled, it detects the username with Telegram `getMe`, otherwise it asks for
+it directly. If `.env` already has a token, setup shows the bot username and `https://t.me/...`
+link before asking whether to keep it.
 Setup refuses to save the production Telegram bot token for local development.
 
 ## Configuration
 
 Committed defaults live in `.env.defaults`. Use it for shared non-secret values such as
 `FOODBOT_ENV`, `DATABASE_PATH`, `FOODBOT_TIMEZONE`, `SPLITWISE_GROUP_ID`, and
-`PRODUCTION_TELEGRAM_BOT_ID`. It also keeps `TELEGRAM_ADMIN_IDS` as an empty required key; real
-admin ids live in local `.env` files or GitHub Secrets.
+`PRODUCTION_TELEGRAM_BOT_ID`. It also keeps `TELEGRAM_BOT_USERNAME` and `TELEGRAM_ADMIN_IDS` as
+empty required keys; real values live in local `.env` files or GitHub Actions configuration.
 
 The bot requires those keys to exist; keep shared defaults in `.env.defaults` instead of relying
 on hidden Python fallback values.
 
 Local overrides live in `.env`. `./setup-dev` creates or rewrites it interactively. Use `.env` for
-secrets such as `TELEGRAM_BOT_TOKEN` and `SPLITWISE_API_KEY`, and to override
-`TELEGRAM_ADMIN_IDS` or `SPLITWISE_GROUP_ID` while debugging locally.
+secrets such as `TELEGRAM_BOT_TOKEN` and `SPLITWISE_API_KEY`, and to set or override
+`TELEGRAM_BOT_USERNAME`, `TELEGRAM_ADMIN_IDS`, or `SPLITWISE_GROUP_ID` while debugging locally.
 Local `.env` uses `FOODBOT_ENV=development`; production deploy writes `FOODBOT_ENV=production`.
 When running in development, the bot validates its token before polling and refuses to start if it
 points at `PRODUCTION_TELEGRAM_BOT_ID`.
@@ -118,9 +130,10 @@ git remote add upstream git@github.com:MSTarakanov/FoodBot.git
 ./setup-dev
 ```
 
-Create a personal development bot via `@BotFather`; setup asks for its token and writes it to
-`.env`. If you want admin commands in your dev bot, setup also prints how to get your Telegram user
-id from `@userinfobot` or `@RawDataBot` and writes it to `TELEGRAM_ADMIN_IDS`.
+Create a personal development bot via `@BotFather`; setup asks for its token and writes the token
+and bot username to `.env`. If token verification is available, setup detects the username from the
+Telegram API. If you want admin commands in your dev bot, setup also prints how to get your Telegram
+user id from `@userinfobot` or `@RawDataBot` and writes it to `TELEGRAM_ADMIN_IDS`.
 `SPLITWISE_API_KEY` is required for local development. Each developer should create their own
 Splitwise API key for their local clone. Do not share another developer's key: the key acts on
 behalf of the Splitwise account that created it.
@@ -172,6 +185,9 @@ ed25519 key and print its public key for GitHub, continue without SSH, or stop s
 3. Keep database access inside repositories and business rules inside services.
 4. Register the handler in `src/office_food_bot/commands/router.py`.
 5. Add the slash-command metadata in `src/office_food_bot/commands/definitions.py`.
+   Choose the command scope there: `private`, `group`, or `any`, and set `admin_only=True` when
+   needed. The command access middleware will enforce the same rules that `/help` and the Telegram
+   command menu show.
 6. Use aiogram FSM states for multi-step flows. Ordinary text remains inside the
    active state until it validates; slash commands clear the active flow and run
    their own handler.
@@ -227,6 +243,8 @@ Repository secrets:
 
 Repository variables:
 
+- `TELEGRAM_BOT_USERNAME` - production Telegram bot username without `@`; used for private-chat
+  links in group replies.
 - `SPLITWISE_GROUP_ID` - optional override for the office Splitwise group id. If it is not set,
   deployment reads the value from `.env.defaults`.
 

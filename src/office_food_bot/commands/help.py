@@ -3,7 +3,6 @@ from __future__ import annotations
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from office_food_bot.commands.access import ensure_command_allowed
 from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.commands.definitions import help_text
 from office_food_bot.messaging import BotMessenger
@@ -16,9 +15,6 @@ async def help_command(
     services: BotServices,
     state: FSMContext,
 ) -> None:
-    if not await ensure_command_allowed(message, "help", messenger, services, state):
-        return
-
     await state.clear()
     profile = telegram_profile_from_message(message)
     telegram_user_id = None
