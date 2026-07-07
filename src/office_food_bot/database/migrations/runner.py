@@ -48,7 +48,11 @@ class MigrationRunner:
 
     def migrate(self) -> int:
         current_version = self.current_version()
-        self._ensure_database_is_not_newer(current_version)
+        latest_known_version = self._latest_known_version()
+        self._ensure_database_is_not_newer(current_version, latest_known_version)
+        if current_version == latest_known_version:
+            return current_version
+
         for migration in self._migrations:
             if migration.version <= current_version:
                 continue
@@ -75,8 +79,11 @@ class MigrationRunner:
         msg = f"Migration {migration.version}_{migration.name} left broken foreign keys"
         raise RuntimeError(msg)
 
-    def _ensure_database_is_not_newer(self, current_version: int) -> None:
-        latest_known_version = self._latest_known_version()
+    def _ensure_database_is_not_newer(
+        self,
+        current_version: int,
+        latest_known_version: int,
+    ) -> None:
         if current_version <= latest_known_version:
             return
 
