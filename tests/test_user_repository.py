@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import date
 
 import pytest
@@ -357,6 +358,64 @@ def test_database_init_creates_users_status_check_with_abandoned(tmp_path) -> No
 
     assert row is not None
     assert "CHECK (status" in str(row["sql"])
+    assert "'abandoned'" in str(row["sql"])
+
+
+def test_database_init_migrates_legacy_users_status_check(tmp_path) -> None:
+    database_path = tmp_path / "test.sqlite3"
+    legacy_connection = sqlite3.connect(database_path)
+    try:
+        legacy_connection.executescript(
+            """
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                display_name TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'active', 'rejected', 'disabled')),
+                role TEXT NOT NULL DEFAULT 'member'
+                    CHECK (role IN ('member', 'admin')),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE telegram_accounts (
+                telegram_user_id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                username TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            INSERT INTO users (id, display_name, status, role)
+            VALUES (1, 'Максим', 'active', 'member');
+
+            INSERT INTO telegram_accounts (
+                telegram_user_id,
+                user_id,
+                username,
+                first_name,
+                last_name
+            )
+            VALUES (42, 1, 'misha', 'Misha', NULL);
+            """,
+        )
+    finally:
+        legacy_connection.close()
+
+    database = Database(database_path)
+    database.init_schema()
+    try:
+        user = UserRepository(database).abandon_by_telegram_id(42)
+        row = database.connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'",
+        ).fetchone()
+    finally:
+        database.close()
+
+    assert user is not None
+    assert user.status == UserStatus.ABANDONED
+    assert row is not None
     assert "'abandoned'" in str(row["sql"])
 
 
