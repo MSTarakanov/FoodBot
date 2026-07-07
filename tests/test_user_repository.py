@@ -313,7 +313,7 @@ def test_database_init_records_schema_migrations(tmp_path) -> None:
 def test_database_migrations_are_loaded_from_files() -> None:
     assert [(migration.version, migration.name) for migration in load_migrations()] == [
         (1, "initial"),
-        (2, "recreate_empty_legacy_splitwise_users"),
+        (2, "replace_legacy_splitwise_users"),
         (3, "allow_abandoned_user_status"),
     ]
 
@@ -561,7 +561,7 @@ def test_telegram_seen_repository_lists_only_unregistered_accounts(
     assert {account.telegram_user_id for account in unregistered_accounts} == {43, 44}
 
 
-def test_database_init_recreates_empty_legacy_splitwise_users_table(tmp_path) -> None:
+def test_database_init_replaces_empty_legacy_splitwise_users_table(tmp_path) -> None:
     database = Database(tmp_path / "test.sqlite3")
     with database.connection:
         database.connection.executescript(LEGACY_SCHEMA_SQL)
@@ -580,7 +580,7 @@ def test_database_init_recreates_empty_legacy_splitwise_users_table(tmp_path) ->
     assert columns == ["splitwise_user_id", "user_id", "email", "updated_at"]
 
 
-def test_database_init_rejects_non_empty_legacy_splitwise_users_table(tmp_path) -> None:
+def test_database_init_replaces_non_empty_legacy_splitwise_users_table(tmp_path) -> None:
     database = Database(tmp_path / "test.sqlite3")
     with database.connection:
         database.connection.executescript(LEGACY_SCHEMA_SQL)
@@ -601,8 +601,23 @@ def test_database_init_rejects_non_empty_legacy_splitwise_users_table(tmp_path) 
     database.close()
 
     database = Database(tmp_path / "test.sqlite3")
+    database.init_schema()
     try:
-        with pytest.raises(RuntimeError, match="splitwise_users has legacy rows"):
-            database.init_schema()
+        row = database.connection.execute(
+            """
+            SELECT splitwise_user_id, user_id, email
+            FROM splitwise_users
+            """,
+        ).fetchone()
+        columns = [
+            str(row["name"])
+            for row in database.connection.execute("PRAGMA table_info(splitwise_users)")
+        ]
     finally:
         database.close()
+
+    assert columns == ["splitwise_user_id", "user_id", "email", "updated_at"]
+    assert row is not None
+    assert int(row["splitwise_user_id"]) == 1001
+    assert int(row["user_id"]) == 1
+    assert row["email"] == ""
