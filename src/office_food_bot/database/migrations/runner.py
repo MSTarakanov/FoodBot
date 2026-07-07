@@ -4,73 +4,27 @@ import re
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
-from importlib import import_module
 from pathlib import Path
-from typing import Protocol
-
-
-class MigrationStep(Protocol):
-    def __call__(self, connection: sqlite3.Connection) -> None: ...
 
 
 @dataclass(frozen=True)
 class Migration:
     version: int
     name: str
-    migrate: MigrationStep
-
-
-@dataclass(frozen=True)
-class SqlMigrationStep:
     path: Path
 
-    def __call__(self, connection: sqlite3.Connection) -> None:
+    def migrate(self, connection: sqlite3.Connection) -> None:
         with connection:
             connection.executescript(self.path.read_text())
 
 
-@dataclass(frozen=True)
-class PythonMigrationStep:
-    module_name: str
-
-    def __call__(self, connection: sqlite3.Connection) -> None:
-        module = import_module(self.module_name)
-        migrate = getattr(module, "migrate", None)
-        if not callable(migrate):
-            msg = f"Python migration {self.module_name} must define migrate(connection)"
-            raise RuntimeError(msg)
-        migrate(connection)
-
-
 MIGRATION_FILENAME_PATTERN = re.compile(
-    r"^(?P<version>\d{4})_(?P<name>[a-z0-9_]+)\.(?P<kind>sql|py)$"
+    r"^(?P<version>\d{4})_(?P<name>[a-z0-9_]+)\.sql$"
 )
-MIGRATIONS_PACKAGE = "office_food_bot.database.migrations"
 MIGRATIONS_PATH = Path(__file__).parent
 
-SCHEMA_MIGRATIONS_SQL = """
-CREATE TABLE IF NOT EXISTS schema_migrations (
-    version INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-)
-"""
+CURRENT_SCHEMA_VERSION_SQL = "PRAGMA user_version"
 
-LIST_APPLIED_MIGRATIONS_SQL = """
-SELECT version
-FROM schema_migrations
-ORDER BY version
-"""
-
-INSERT_SCHEMA_MIGRATION_SQL = """
-INSERT INTO schema_migrations (version, name)
-VALUES (?, ?)
-"""
-
-CURRENT_SCHEMA_VERSION_SQL = """
-SELECT COALESCE(MAX(version), 0)
-FROM schema_migrations
-"""
 
 def load_migrations() -> tuple[Migration, ...]:
     migrations = tuple(
@@ -93,38 +47,25 @@ class MigrationRunner:
         _validate_migrations(self._migrations)
 
     def migrate(self) -> int:
-        self._ensure_schema_migrations_table()
-        applied_versions = self._applied_versions()
-        self._ensure_no_unknown_migrations(applied_versions)
+        current_version = self.current_version()
+        self._ensure_database_is_not_newer(current_version)
         for migration in self._migrations:
-            if migration.version in applied_versions:
+            if migration.version <= current_version:
                 continue
             migration.migrate(self._connection)
             self._ensure_foreign_keys_ok(migration)
-            self._record_migration(migration)
+            self._set_current_version(migration.version)
         return self.current_version()
 
     def current_version(self) -> int:
-        self._ensure_schema_migrations_table()
         row = self._connection.execute(CURRENT_SCHEMA_VERSION_SQL).fetchone()
         if row is None:
             return 0
         return int(row[0])
 
-    def _ensure_schema_migrations_table(self) -> None:
+    def _set_current_version(self, version: int) -> None:
         with self._connection:
-            self._connection.execute(SCHEMA_MIGRATIONS_SQL)
-
-    def _applied_versions(self) -> frozenset[int]:
-        rows = self._connection.execute(LIST_APPLIED_MIGRATIONS_SQL).fetchall()
-        return frozenset(int(row["version"]) for row in rows)
-
-    def _record_migration(self, migration: Migration) -> None:
-        with self._connection:
-            self._connection.execute(
-                INSERT_SCHEMA_MIGRATION_SQL,
-                (migration.version, migration.name),
-            )
+            self._connection.execute(f"PRAGMA user_version = {version}")
 
     def _ensure_foreign_keys_ok(self, migration: Migration) -> None:
         broken_references = self._connection.execute("PRAGMA foreign_key_check").fetchall()
@@ -134,24 +75,25 @@ class MigrationRunner:
         msg = f"Migration {migration.version}_{migration.name} left broken foreign keys"
         raise RuntimeError(msg)
 
-    def _ensure_no_unknown_migrations(self, applied_versions: frozenset[int]) -> None:
-        known_versions = frozenset(migration.version for migration in self._migrations)
-        unknown_versions = sorted(applied_versions - known_versions)
-        if not unknown_versions:
+    def _ensure_database_is_not_newer(self, current_version: int) -> None:
+        latest_known_version = self._latest_known_version()
+        if current_version <= latest_known_version:
             return
 
-        versions = ", ".join(str(version) for version in unknown_versions)
-        msg = f"Database schema has migrations newer than this code: {versions}"
+        msg = f"Database schema version {current_version} is newer than this code"
         raise RuntimeError(msg)
+
+    def _latest_known_version(self) -> int:
+        if not self._migrations:
+            return 0
+        return self._migrations[-1].version
 
 
 def _validate_migrations(migrations: tuple[Migration, ...]) -> None:
-    previous_version = 0
-    for migration in migrations:
-        if migration.version <= previous_version:
-            msg = "Database migrations must be ordered by unique increasing versions"
+    for expected_version, migration in enumerate(migrations, start=1):
+        if migration.version != expected_version:
+            msg = "Database migrations must start at 1 and be contiguous"
             raise RuntimeError(msg)
-        previous_version = migration.version
 
 
 def _is_migration_file(path: Path) -> bool:
@@ -166,7 +108,4 @@ def _migration_from_path(path: Path) -> Migration:
 
     version = int(match.group("version"))
     name = match.group("name")
-    kind = match.group("kind")
-    if kind == "sql":
-        return Migration(version, name, SqlMigrationStep(path))
-    return Migration(version, name, PythonMigrationStep(f"{MIGRATIONS_PACKAGE}.{path.stem}"))
+    return Migration(version, name, path)

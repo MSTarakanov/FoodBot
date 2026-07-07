@@ -321,32 +321,28 @@ def test_database_init_creates_nullable_splitwise_email(tmp_path) -> None:
     assert notnull_by_column["email"] == 0
 
 
-def test_database_init_records_schema_migrations(tmp_path) -> None:
+def test_database_init_updates_user_version(tmp_path) -> None:
     migrations = load_migrations()
     database = Database(tmp_path / "test.sqlite3")
     database.init_schema()
     database.init_schema()
     try:
-        columns = [
-            str(row["name"])
-            for row in database.connection.execute("PRAGMA table_info(schema_migrations)")
-        ]
-        rows = database.connection.execute(
+        user_version_row = database.connection.execute("PRAGMA user_version").fetchone()
+        schema_migrations_table = database.connection.execute(
             """
-            SELECT version, name
-            FROM schema_migrations
-            ORDER BY version
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'schema_migrations'
             """,
-        ).fetchall()
+        ).fetchone()
         schema_version = database.schema_version()
     finally:
         database.close()
 
-    assert columns == ["version", "name", "applied_at"]
-    assert [(int(row["version"]), str(row["name"])) for row in rows] == [
-        (migration.version, migration.name) for migration in migrations
-    ]
+    assert user_version_row is not None
+    assert int(user_version_row[0]) == migrations[-1].version
     assert schema_version == migrations[-1].version
+    assert schema_migrations_table is None
 
 
 def test_database_migrations_are_loaded_from_files() -> None:
@@ -362,17 +358,14 @@ def test_database_migrations_are_loaded_from_files() -> None:
     ]
 
 
-def test_database_init_rejects_unknown_schema_migration(tmp_path) -> None:
+def test_database_init_rejects_newer_user_version(tmp_path) -> None:
     database = Database(tmp_path / "test.sqlite3")
     database.init_schema()
     with database.connection:
-        database.connection.execute(
-            "INSERT INTO schema_migrations (version, name) VALUES (?, ?)",
-            (999, "future_migration"),
-        )
+        database.connection.execute("PRAGMA user_version = 999")
 
     try:
-        with pytest.raises(RuntimeError, match="migrations newer than this code: 999"):
+        with pytest.raises(RuntimeError, match="Database schema version 999"):
             database.init_schema()
     finally:
         database.close()
@@ -665,4 +658,3 @@ def test_database_init_replaces_non_empty_legacy_splitwise_users_table(tmp_path)
     assert int(row["splitwise_user_id"]) == 1001
     assert int(row["user_id"]) == 1
     assert row["email"] is None
-
