@@ -79,7 +79,7 @@ class SplitwiseMember:
 @dataclass(frozen=True)
 class SplitwiseConnection:
     splitwise_user_id: int
-    email: str
+    email: str | None
 
 
 @dataclass(frozen=True)
@@ -98,7 +98,7 @@ class PendingRegistration:
 class ActiveSplitwiseUser:
     display_name: str
     splitwise_user_id: int
-    email: str
+    email: str | None
 
 
 @dataclass(frozen=True)

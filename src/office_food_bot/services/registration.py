@@ -263,8 +263,14 @@ def _same_splitwise_connection(
         return first is None and second is None
     return (
         first.splitwise_user_id == second.splitwise_user_id
-        and first.email.casefold() == second.email.casefold()
+        and _optional_email_key(first.email) == _optional_email_key(second.email)
     )
+
+
+def _optional_email_key(email: str | None) -> str | None:
+    if email is None:
+        return None
+    return email.casefold()
 
 
 def _splitwise_connection_from_member(

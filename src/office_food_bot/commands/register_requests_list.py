@@ -80,6 +80,8 @@ def _telegram_username_text(user: RegisteredUser) -> str:
 def _splitwise_text(splitwise: SplitwiseConnection | None) -> str:
     if splitwise is None:
         return "Splitwise: не указан"
+    if splitwise.email is None:
+        return f"Splitwise: email не указан (ID {splitwise.splitwise_user_id})"
     return f"Splitwise: {splitwise.email} (ID {splitwise.splitwise_user_id})"
 
 

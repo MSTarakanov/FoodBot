@@ -444,7 +444,7 @@ def _active_splitwise_user_from_row(row: sqlite3.Row) -> ActiveSplitwiseUser:
     return ActiveSplitwiseUser(
         display_name=str(row["display_name"]),
         splitwise_user_id=int(row["splitwise_user_id"]),
-        email=str(row["splitwise_email"]),
+        email=_optional_str(row["splitwise_email"]),
     )
 
 
@@ -468,7 +468,7 @@ def _splitwise_connection_from_row(row: sqlite3.Row) -> SplitwiseConnection | No
         return None
     return SplitwiseConnection(
         splitwise_user_id=int(row["splitwise_user_id"]),
-        email=str(row["splitwise_email"]),
+        email=_optional_str(row["splitwise_email"]),
     )
 
 

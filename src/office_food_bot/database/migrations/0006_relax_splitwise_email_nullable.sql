@@ -16,7 +16,7 @@ INSERT INTO splitwise_users_new (
 SELECT
     splitwise_user_id,
     user_id,
-    NULL,
+    email,
     updated_at
 FROM splitwise_users;
 

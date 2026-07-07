@@ -6,7 +6,6 @@ from datetime import date
 import pytest
 
 from office_food_bot.database import Database
-from office_food_bot.database.database_schema import SCHEMA_SQL
 from office_food_bot.database.migrations import load_migrations
 from office_food_bot.models import SplitwiseMember, TelegramProfile, UserRole, UserStatus
 from office_food_bot.repositories import (
@@ -17,7 +16,81 @@ from office_food_bot.repositories import (
     VacationRepository,
 )
 
-LEGACY_SCHEMA_SQL = SCHEMA_SQL.replace("email TEXT NOT NULL,", "display_name TEXT NOT NULL,")
+LEGACY_SCHEMA_SQL = """
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    display_name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'active', 'rejected', 'disabled')),
+    role TEXT NOT NULL DEFAULT 'member'
+        CHECK (role IN ('member', 'admin')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS telegram_accounts (
+    telegram_user_id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    username TEXT,
+    first_name TEXT,
+    last_name TEXT,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS splitwise_users (
+    splitwise_user_id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    display_name TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+PRE_MIGRATION_MAIN_SCHEMA_SQL = """
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    display_name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'active', 'rejected', 'disabled', 'abandoned')),
+    role TEXT NOT NULL DEFAULT 'member'
+        CHECK (role IN ('member', 'admin')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS telegram_accounts (
+    telegram_user_id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    username TEXT,
+    first_name TEXT,
+    last_name TEXT,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS splitwise_users (
+    splitwise_user_id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS telegram_debug_settings (
+    telegram_user_id INTEGER PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS lunch_auto_chats (
+    chat_id INTEGER PRIMARY KEY,
+    title TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+"""
 
 
 def make_profile(
@@ -282,6 +355,18 @@ def test_database_init_creates_clean_splitwise_users_schema(tmp_path) -> None:
     assert columns == ["splitwise_user_id", "user_id", "email", "updated_at"]
 
 
+def test_database_init_creates_nullable_splitwise_email(tmp_path) -> None:
+    database = Database(tmp_path / "test.sqlite3")
+    database.init_schema()
+    try:
+        column_rows = database.connection.execute("PRAGMA table_info(splitwise_users)").fetchall()
+    finally:
+        database.close()
+
+    notnull_by_column = {str(row["name"]): int(row["notnull"]) for row in column_rows}
+    assert notnull_by_column["email"] == 0
+
+
 def test_database_init_records_schema_migrations(tmp_path) -> None:
     migrations = load_migrations()
     database = Database(tmp_path / "test.sqlite3")
@@ -315,6 +400,11 @@ def test_database_migrations_are_loaded_from_files() -> None:
         (1, "initial"),
         (2, "replace_legacy_splitwise_users"),
         (3, "allow_abandoned_user_status"),
+        (4, "add_telegram_debug_settings"),
+        (5, "add_lunch_auto_chats"),
+        (6, "relax_splitwise_email_nullable"),
+        (7, "add_user_vacations"),
+        (8, "add_telegram_seen_accounts"),
     ]
 
 
@@ -620,4 +710,72 @@ def test_database_init_replaces_non_empty_legacy_splitwise_users_table(tmp_path)
     assert row is not None
     assert int(row["splitwise_user_id"]) == 1001
     assert int(row["user_id"]) == 1
-    assert row["email"] == ""
+    assert row["email"] is None
+
+
+def test_database_init_bootstraps_pre_migration_main_schema(tmp_path) -> None:
+    database_path = tmp_path / "test.sqlite3"
+    pre_migration_connection = sqlite3.connect(database_path)
+    try:
+        pre_migration_connection.executescript(PRE_MIGRATION_MAIN_SCHEMA_SQL)
+        pre_migration_connection.execute(
+            """
+            INSERT INTO users (id, display_name, status, role)
+            VALUES (?, ?, ?, ?)
+            """,
+            (1, "Максим", UserStatus.ACTIVE.value, UserRole.MEMBER.value),
+        )
+        pre_migration_connection.execute(
+            """
+            INSERT INTO splitwise_users (splitwise_user_id, user_id, email)
+            VALUES (?, ?, ?)
+            """,
+            (1001, 1, "max@example.com"),
+        )
+        pre_migration_connection.commit()
+    finally:
+        pre_migration_connection.close()
+
+    migrations = load_migrations()
+    database = Database(database_path)
+    database.init_schema()
+    try:
+        migration_rows = database.connection.execute(
+            """
+            SELECT version, name
+            FROM schema_migrations
+            ORDER BY version
+            """,
+        ).fetchall()
+        splitwise_row = database.connection.execute(
+            """
+            SELECT splitwise_user_id, user_id, email
+            FROM splitwise_users
+            """,
+        ).fetchone()
+        splitwise_columns = database.connection.execute(
+            "PRAGMA table_info(splitwise_users)"
+        ).fetchall()
+        vacation_table = database.connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'user_vacations'"
+        ).fetchone()
+        seen_table = database.connection.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'telegram_seen_accounts'
+            """,
+        ).fetchone()
+    finally:
+        database.close()
+
+    assert [(int(row["version"]), str(row["name"])) for row in migration_rows] == [
+        (migration.version, migration.name) for migration in migrations
+    ]
+    assert splitwise_row is not None
+    assert int(splitwise_row["splitwise_user_id"]) == 1001
+    assert int(splitwise_row["user_id"]) == 1
+    assert splitwise_row["email"] == "max@example.com"
+    assert {str(row["name"]): int(row["notnull"]) for row in splitwise_columns}["email"] == 0
+    assert vacation_table is not None
+    assert seen_table is not None
