@@ -109,6 +109,32 @@ Local setup keeps downloaded tooling inside the clone: `uv` in `.tools/bin`, uv 
 those local paths are used consistently.
 For example, `./run office-food-bot` is the project-local equivalent of `uv run office-food-bot`.
 
+## Database Migrations
+
+SQLite schema changes are applied through versioned migration files in
+`src/office_food_bot/database/migrations/`. Migration files are SQL-only and must be named with a
+contiguous numeric prefix, for example `0001_initial.sql`, `0002_add_example_table.sql`, and so on.
+
+The current schema version is stored inside the SQLite database with `PRAGMA user_version`. A new
+database starts at version `0`; on startup the runner applies every migration with a version greater
+than the current one, checks foreign keys, and then updates `user_version` to the migration version.
+If the database version is newer than the code knows about, startup fails instead of running with an
+unknown schema.
+
+You can inspect the local database version with:
+
+```bash
+sqlite3 foodbot.sqlite3 "PRAGMA user_version;"
+```
+
+When changing the schema:
+
+1. Add the next numbered file, for example `0004_add_example_table.sql`.
+2. Keep migration versions contiguous; do not rename or renumber already-merged migrations.
+3. Add repository/schema tests for both fresh databases and any legacy shape being migrated.
+4. Preserve existing data explicitly when rebuilding a table.
+5. Run `scripts/check`.
+
 ## Checks
 
 ```bash

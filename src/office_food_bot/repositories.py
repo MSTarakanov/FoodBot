@@ -14,6 +14,11 @@ from office_food_bot.database.lunch_auto_chat_queries import (
     LIST_ENABLED_LUNCH_AUTO_CHATS_SQL,
     UPSERT_LUNCH_AUTO_CHAT_SQL,
 )
+from office_food_bot.database.telegram_seen_queries import (
+    GET_TELEGRAM_SEEN_ACCOUNT_SQL,
+    LIST_UNREGISTERED_TELEGRAM_SEEN_ACCOUNTS_SQL,
+    UPSERT_TELEGRAM_SEEN_ACCOUNT_SQL,
+)
 from office_food_bot.database.user_queries import (
     COUNT_SPLITWISE_USERS_SQL,
     DELETE_SPLITWISE_USER_BY_USER_ID_SQL,
@@ -42,6 +47,7 @@ from office_food_bot.models import (
     PendingRegistration,
     RegisteredUser,
     RegistrationDetails,
+    SeenTelegramAccount,
     SplitwiseConnection,
     SplitwiseMember,
     TelegramProfile,
@@ -49,6 +55,39 @@ from office_food_bot.models import (
     UserStatus,
     UserVacation,
 )
+
+
+class TelegramSeenRepository:
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    def remember(self, profile: TelegramProfile) -> None:
+        with self._database.connection:
+            self._database.connection.execute(
+                UPSERT_TELEGRAM_SEEN_ACCOUNT_SQL,
+                (
+                    profile.telegram_user_id,
+                    profile.username,
+                    profile.first_name,
+                    profile.last_name,
+                ),
+            )
+
+    def get(self, telegram_user_id: int) -> SeenTelegramAccount | None:
+        row = self._database.connection.execute(
+            GET_TELEGRAM_SEEN_ACCOUNT_SQL,
+            (telegram_user_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return _seen_telegram_account_from_row(row)
+
+    def list_unregistered(self, limit: int) -> tuple[SeenTelegramAccount, ...]:
+        rows = self._database.connection.execute(
+            LIST_UNREGISTERED_TELEGRAM_SEEN_ACCOUNTS_SQL,
+            (UserStatus.ABANDONED.value, limit),
+        ).fetchall()
+        return tuple(_seen_telegram_account_from_row(row) for row in rows)
 
 
 class UserRepository:
@@ -378,6 +417,15 @@ def _registered_user_from_row(row: sqlite3.Row) -> RegisteredUser:
     )
 
 
+def _seen_telegram_account_from_row(row: sqlite3.Row) -> SeenTelegramAccount:
+    return SeenTelegramAccount(
+        telegram_user_id=int(row["telegram_user_id"]),
+        username=_optional_str(row["username"]),
+        first_name=str(row["first_name"]),
+        last_name=_optional_str(row["last_name"]),
+    )
+
+
 def _pending_registration_from_row(row: sqlite3.Row) -> PendingRegistration:
     return PendingRegistration(
         user=_registered_user_from_row(row),
@@ -396,7 +444,7 @@ def _active_splitwise_user_from_row(row: sqlite3.Row) -> ActiveSplitwiseUser:
     return ActiveSplitwiseUser(
         display_name=str(row["display_name"]),
         splitwise_user_id=int(row["splitwise_user_id"]),
-        email=str(row["splitwise_email"]),
+        email=_optional_str(row["splitwise_email"]),
     )
 
 
@@ -420,7 +468,7 @@ def _splitwise_connection_from_row(row: sqlite3.Row) -> SplitwiseConnection | No
         return None
     return SplitwiseConnection(
         splitwise_user_id=int(row["splitwise_user_id"]),
-        email=str(row["splitwise_email"]),
+        email=_optional_str(row["splitwise_email"]),
     )
 
 

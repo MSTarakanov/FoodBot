@@ -16,12 +16,14 @@ from office_food_bot.services.poll_tracking import PollTrackingService
 from office_food_bot.services.presence import PresenceService
 from office_food_bot.services.registration import RegistrationService
 from office_food_bot.services.splitwise import SplitwiseService
+from office_food_bot.services.telegram_interactions import TelegramInteractionService
 from office_food_bot.services.vacation import VacationService
 
 
 @dataclass(frozen=True)
 class BotServices:
     telegram_bot_username: str
+    telegram_interactions: TelegramInteractionService
     registration: RegistrationService
     debug: DebugService
     command_access: CommandAccessService

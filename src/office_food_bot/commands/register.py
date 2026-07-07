@@ -697,6 +697,8 @@ def _splitwise_connection_admin_text(splitwise: SplitwiseConnection | None) -> s
 def _splitwise_value_text(splitwise: SplitwiseConnection | None) -> str:
     if splitwise is None:
         return "не указан"
+    if splitwise.email is None:
+        return f"email не указан (ID {splitwise.splitwise_user_id})"
     return f"{splitwise.email} (ID {splitwise.splitwise_user_id})"
 
 
@@ -796,8 +798,14 @@ def _same_splitwise_connection(
         return first is None and second is None
     return (
         first.splitwise_user_id == second.splitwise_user_id
-        and first.email.casefold() == second.email.casefold()
+        and _optional_email_key(first.email) == _optional_email_key(second.email)
     )
+
+
+def _optional_email_key(email: str | None) -> str | None:
+    if email is None:
+        return None
+    return email.casefold()
 
 
 def _splitwise_connection_from_member(
@@ -869,7 +877,9 @@ def _splitwise_connection_from_state_data(
 ) -> SplitwiseConnection | None:
     raw_user_id = data.get("previous_splitwise_user_id")
     raw_email = data.get("previous_splitwise_email")
-    if not isinstance(raw_user_id, int) or not isinstance(raw_email, str):
+    if not isinstance(raw_user_id, int):
+        return None
+    if raw_email is not None and not isinstance(raw_email, str):
         return None
 
     return SplitwiseConnection(

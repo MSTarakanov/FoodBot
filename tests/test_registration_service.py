@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from office_food_bot.database import Database
 from office_food_bot.models import (
     ApprovalKind,
     RegistrationKind,
@@ -7,7 +8,7 @@ from office_food_bot.models import (
     TelegramProfile,
     UserStatus,
 )
-from office_food_bot.repositories import UserRepository
+from office_food_bot.repositories import TelegramSeenRepository, UserRepository
 from office_food_bot.services.registration import RegistrationService
 
 DEFAULT_ADMIN_IDS = frozenset({7})
@@ -28,10 +29,14 @@ def make_profile(
 
 
 def make_service(
-    users: UserRepository,
+    database: Database,
     admin_ids: frozenset[int] = DEFAULT_ADMIN_IDS,
 ) -> RegistrationService:
-    return RegistrationService(users, admin_ids)
+    return RegistrationService(
+        UserRepository(database),
+        TelegramSeenRepository(database),
+        admin_ids,
+    )
 
 
 def make_splitwise_member(
@@ -46,8 +51,11 @@ def make_splitwise_member(
     )
 
 
-def test_register_new_user_returns_created_pending_user(users: UserRepository) -> None:
-    service = make_service(users)
+def test_register_new_user_returns_created_pending_user(
+    database: Database,
+    users: UserRepository,
+) -> None:
+    service = make_service(database)
 
     result = service.register(make_profile(), "  Максим   Т.  ", None)
 
@@ -57,9 +65,10 @@ def test_register_new_user_returns_created_pending_user(users: UserRepository) -
 
 
 def test_register_blank_name_falls_back_to_telegram_first_name(
+    database: Database,
     users: UserRepository,
 ) -> None:
-    service = make_service(users)
+    service = make_service(database)
 
     result = service.register(make_profile(first_name="Mikhail"), "   ", None)
 
@@ -68,9 +77,10 @@ def test_register_blank_name_falls_back_to_telegram_first_name(
 
 
 def test_register_blank_name_falls_back_to_telegram_full_name(
+    database: Database,
     users: UserRepository,
 ) -> None:
-    service = make_service(users)
+    service = make_service(database)
 
     result = service.register(
         make_profile(first_name="Mikhail", last_name="Tarakanov"),
@@ -82,8 +92,11 @@ def test_register_blank_name_falls_back_to_telegram_full_name(
     assert result.user.display_name == "Mikhail Tarakanov"
 
 
-def test_register_truncates_long_display_name(users: UserRepository) -> None:
-    service = make_service(users)
+def test_register_truncates_long_display_name(
+    database: Database,
+    users: UserRepository,
+) -> None:
+    service = make_service(database)
 
     result = service.register(make_profile(), "М" * 80, None)
 
@@ -92,9 +105,10 @@ def test_register_truncates_long_display_name(users: UserRepository) -> None:
 
 
 def test_register_existing_pending_user_updates_request_and_refreshes_telegram_profile(
+    database: Database,
     users: UserRepository,
 ) -> None:
-    service = make_service(users)
+    service = make_service(database)
     service.register(make_profile(username="old", first_name="Old"), "Максим", None)
 
     result = service.register(
@@ -117,9 +131,10 @@ def test_register_existing_pending_user_updates_request_and_refreshes_telegram_p
 
 
 def test_register_existing_pending_user_with_same_data_is_noop_but_refreshes_profile(
+    database: Database,
     users: UserRepository,
 ) -> None:
-    service = make_service(users)
+    service = make_service(database)
     splitwise_member = make_splitwise_member()
     service.register(make_profile(username="old", first_name="Old"), "Максим", splitwise_member)
 
@@ -142,9 +157,10 @@ def test_register_existing_pending_user_with_same_data_is_noop_but_refreshes_pro
 
 
 def test_register_existing_active_user_returns_already_active(
+    database: Database,
     users: UserRepository,
 ) -> None:
-    service = make_service(users)
+    service = make_service(database)
     service.register(make_profile(), "Максим", None)
     service.approve(7, 42)
 
@@ -157,9 +173,10 @@ def test_register_existing_active_user_returns_already_active(
 
 
 def test_register_existing_abandoned_user_creates_new_pending_request(
+    database: Database,
     users: UserRepository,
 ) -> None:
-    service = make_service(users)
+    service = make_service(database)
     service.register(make_profile(), "Максим", None)
     assert service.quit_registration(42)
 
@@ -172,9 +189,10 @@ def test_register_existing_abandoned_user_creates_new_pending_request(
 
 
 def test_re_register_existing_active_user_updates_display_name_and_profile(
+    database: Database,
     users: UserRepository,
 ) -> None:
-    service = make_service(users)
+    service = make_service(database)
     service.register(make_profile(username="old", first_name="Old"), "Максим", None)
     service.approve(7, 42)
 
@@ -191,8 +209,8 @@ def test_re_register_existing_active_user_updates_display_name_and_profile(
     assert user.last_name == "Name"
 
 
-def test_approve_forbids_non_admin(users: UserRepository) -> None:
-    service = make_service(users)
+def test_approve_forbids_non_admin(database: Database, users: UserRepository) -> None:
+    service = make_service(database)
     service.register(make_profile(), "Максим", None)
 
     result = service.approve(99, 42)
@@ -205,9 +223,10 @@ def test_approve_forbids_non_admin(users: UserRepository) -> None:
 
 
 def test_request_registration_block_reason_depends_on_status(
+    database: Database,
     users: UserRepository,
 ) -> None:
-    service = make_service(users)
+    service = make_service(database)
 
     assert service.request_registration_block_reason(42) is None
 
@@ -226,9 +245,10 @@ def test_request_registration_block_reason_depends_on_status(
 
 
 def test_quit_registration_returns_false_for_unknown_or_abandoned_user(
+    database: Database,
     users: UserRepository,
 ) -> None:
-    service = make_service(users)
+    service = make_service(database)
 
     assert not service.quit_registration(42)
 
@@ -237,8 +257,8 @@ def test_quit_registration_returns_false_for_unknown_or_abandoned_user(
     assert not service.quit_registration(42)
 
 
-def test_approve_returns_not_found_for_unknown_target(users: UserRepository) -> None:
-    service = make_service(users)
+def test_approve_returns_not_found_for_unknown_target(database: Database) -> None:
+    service = make_service(database)
 
     result = service.approve(7, 404)
 
@@ -246,8 +266,11 @@ def test_approve_returns_not_found_for_unknown_target(users: UserRepository) -> 
     assert result.user is None
 
 
-def test_approve_activates_pending_user(users: UserRepository) -> None:
-    service = make_service(users)
+def test_approve_activates_pending_user(
+    database: Database,
+    users: UserRepository,
+) -> None:
+    service = make_service(database)
     service.register(make_profile(), "Максим", None)
 
     result = service.approve(7, 42)
@@ -257,12 +280,49 @@ def test_approve_activates_pending_user(users: UserRepository) -> None:
     assert result.user.status == UserStatus.ACTIVE
 
 
-def test_list_pending_requests_is_admin_only(users: UserRepository) -> None:
-    service = make_service(users)
+def test_list_pending_requests_is_admin_only(
+    database: Database,
+    users: UserRepository,
+) -> None:
+    service = make_service(database)
     service.register(make_profile(), "Максим", None)
 
     assert service.list_pending_requests(99) == ()
     assert [
         registration.user.telegram_user_id
         for registration in service.list_pending_requests(7)
+    ] == [42]
+
+
+def test_registration_profile_for_telegram_id_uses_seen_account(
+    database: Database,
+) -> None:
+    TelegramSeenRepository(database).remember(
+        make_profile(
+            telegram_user_id=42,
+            username="misha",
+            first_name="Misha",
+            last_name="Petrov",
+        )
+    )
+    service = make_service(database)
+
+    profile = service.registration_profile_for_telegram_id(42)
+
+    assert profile == TelegramProfile(
+        telegram_user_id=42,
+        username="misha",
+        first_name="Misha",
+        last_name="Petrov",
+    )
+
+
+def test_list_unregistered_seen_accounts_is_admin_only(database: Database) -> None:
+    TelegramSeenRepository(database).remember(make_profile())
+    service = make_service(database)
+
+    assert service.list_unregistered_seen_accounts(99) == ()
+    assert [
+        account.telegram_user_id
+        for account in service.list_unregistered_seen_accounts(7)
     ] == [42]
