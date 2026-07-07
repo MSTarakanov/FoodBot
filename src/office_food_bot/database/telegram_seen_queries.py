@@ -32,7 +32,10 @@ SELECT
 FROM telegram_seen_accounts
 LEFT JOIN telegram_accounts
     ON telegram_accounts.telegram_user_id = telegram_seen_accounts.telegram_user_id
+LEFT JOIN users
+    ON users.id = telegram_accounts.user_id
 WHERE telegram_accounts.telegram_user_id IS NULL
+    OR users.status = ?
 ORDER BY telegram_seen_accounts.last_seen_at DESC, telegram_seen_accounts.telegram_user_id
 LIMIT ?
 """

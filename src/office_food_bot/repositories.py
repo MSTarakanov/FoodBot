@@ -85,7 +85,7 @@ class TelegramSeenRepository:
     def list_unregistered(self, limit: int) -> tuple[SeenTelegramAccount, ...]:
         rows = self._database.connection.execute(
             LIST_UNREGISTERED_TELEGRAM_SEEN_ACCOUNTS_SQL,
-            (limit,),
+            (UserStatus.ABANDONED.value, limit),
         ).fetchall()
         return tuple(_seen_telegram_account_from_row(row) for row in rows)
 

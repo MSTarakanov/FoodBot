@@ -498,11 +498,14 @@ def test_telegram_seen_repository_lists_only_unregistered_accounts(
     seen_accounts = TelegramSeenRepository(database)
     seen_accounts.remember(make_profile(telegram_user_id=42, username="misha"))
     seen_accounts.remember(make_profile(telegram_user_id=43, username="olya"))
+    seen_accounts.remember(make_profile(telegram_user_id=44, username="old"))
     users.create_pending_user(make_profile(telegram_user_id=42, username="misha"), "Максим")
+    users.create_pending_user(make_profile(telegram_user_id=44, username="old"), "Олег")
+    users.abandon_by_telegram_id(44)
 
     unregistered_accounts = seen_accounts.list_unregistered(limit=10)
 
-    assert [account.telegram_user_id for account in unregistered_accounts] == [43]
+    assert {account.telegram_user_id for account in unregistered_accounts} == {43, 44}
 
 
 def test_database_init_recreates_empty_legacy_splitwise_users_table(tmp_path) -> None:

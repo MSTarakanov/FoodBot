@@ -782,7 +782,7 @@ async def test_request_register_notifies_admin_with_register_command(tmp_path: P
     assert UserRepository(database).get_by_telegram_id(42) is None
 
 
-async def test_admin_register_without_args_lists_seen_unregistered_users(
+async def test_admin_register_requests_list_shows_seen_unregistered_users(
     tmp_path: Path,
 ) -> None:
     database = make_database(tmp_path)
@@ -802,14 +802,16 @@ async def test_admin_register_without_args_lists_seen_unregistered_users(
     )
     session.clear_messages()
 
-    await dispatcher.feed_update(bot, make_update("/register", user_id=7, first_name="Admin"))
+    await dispatcher.feed_update(
+        bot,
+        make_update("/register_requests_list", user_id=7, first_name="Admin"),
+    )
 
     assert sent_texts(session) == [
-        "Я видел таких незарегистрированных пользователей:\n"
+        "Заявок на регистрацию нет.\n"
         "\n"
-        "Misha Petrov (@misha)\n"
-        "Telegram ID: 42\n"
-        "Начать регистрацию: /register 42"
+        "Видел незарегистрированных пользователей:\n"
+        "1. Misha Petrov (@misha) - Telegram ID 42 - /register 42"
     ]
 
 
@@ -907,6 +909,44 @@ async def test_request_register_after_quit_notifies_admin_again(tmp_path: Path) 
         "Username: @misha\n"
         "Имя в Telegram: Misha\n"
         "Начать регистрацию: /register 42",
+    ]
+
+
+async def test_hi_after_quit_adds_abandoned_user_to_register_requests_list(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    await dispatcher.feed_update(bot, make_update("/quit"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(
+        bot,
+        make_update(
+            "/hi",
+            user_id=42,
+            first_name="Misha",
+            last_name="Petrov",
+            username="misha",
+        ),
+    )
+    session.clear_messages()
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/register_requests_list", user_id=7, first_name="Admin"),
+    )
+
+    assert sent_texts(session) == [
+        "Заявок на регистрацию нет.\n"
+        "\n"
+        "Видел незарегистрированных пользователей:\n"
+        "1. Misha Petrov (@misha) - Telegram ID 42 - /register 42"
     ]
 
 
