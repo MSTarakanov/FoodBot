@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from pathlib import Path
 
 from aiogram import Bot
@@ -12,6 +13,10 @@ from office_food_bot.runtime_guard import (
     ensure_safe_telegram_token_for_environment,
 )
 from office_food_bot.services import BotServices
+
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+
+logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
@@ -27,6 +32,13 @@ async def main() -> None:
         dispatcher = create_dispatcher(services)
         await setup_bot_commands(bot, services.command_access)
         services.lunch_scheduler.start(bot)
+        logger.info(
+            "Bot started: username=@%s, environment=%s, database=%s, timezone=%s",
+            settings.telegram_bot_username,
+            settings.environment.value,
+            settings.database_path,
+            settings.timezone,
+        )
         await dispatcher.start_polling(bot)
     finally:
         if services is not None:
@@ -37,6 +49,7 @@ async def main() -> None:
 
 
 def run() -> None:
+    logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
     try:
         asyncio.run(main())
     except ProductionTokenInDevelopmentError as error:
