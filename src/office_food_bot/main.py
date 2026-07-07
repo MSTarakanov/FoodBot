@@ -33,10 +33,12 @@ async def main() -> None:
         await setup_bot_commands(bot, services.command_access)
         services.lunch_scheduler.start(bot)
         logger.info(
-            "Bot started: username=@%s, environment=%s, database=%s, timezone=%s",
+            "Bot started: username=@%s, environment=%s, database=%s, "
+            "schema_version=%s, timezone=%s",
             settings.telegram_bot_username,
             settings.environment.value,
             settings.database_path,
+            database.schema_version(),
             settings.timezone,
         )
         await dispatcher.start_polling(bot)

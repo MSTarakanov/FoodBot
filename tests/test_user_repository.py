@@ -7,6 +7,7 @@ import pytest
 
 from office_food_bot.database import Database
 from office_food_bot.database.database_schema import SCHEMA_SQL
+from office_food_bot.database.migrations import MIGRATIONS
 from office_food_bot.models import SplitwiseMember, TelegramProfile, UserRole, UserStatus
 from office_food_bot.repositories import (
     DebugRepository,
@@ -279,6 +280,49 @@ def test_database_init_creates_clean_splitwise_users_schema(tmp_path) -> None:
         database.close()
 
     assert columns == ["splitwise_user_id", "user_id", "email", "updated_at"]
+
+
+def test_database_init_records_schema_migrations(tmp_path) -> None:
+    database = Database(tmp_path / "test.sqlite3")
+    database.init_schema()
+    database.init_schema()
+    try:
+        columns = [
+            str(row["name"])
+            for row in database.connection.execute("PRAGMA table_info(schema_migrations)")
+        ]
+        rows = database.connection.execute(
+            """
+            SELECT version, name
+            FROM schema_migrations
+            ORDER BY version
+            """,
+        ).fetchall()
+        schema_version = database.schema_version()
+    finally:
+        database.close()
+
+    assert columns == ["version", "name", "applied_at"]
+    assert [(int(row["version"]), str(row["name"])) for row in rows] == [
+        (migration.version, migration.name) for migration in MIGRATIONS
+    ]
+    assert schema_version == MIGRATIONS[-1].version
+
+
+def test_database_init_rejects_unknown_schema_migration(tmp_path) -> None:
+    database = Database(tmp_path / "test.sqlite3")
+    database.init_schema()
+    with database.connection:
+        database.connection.execute(
+            "INSERT INTO schema_migrations (version, name) VALUES (?, ?)",
+            (999, "future_migration"),
+        )
+
+    try:
+        with pytest.raises(RuntimeError, match="migrations newer than this code: 999"):
+            database.init_schema()
+    finally:
+        database.close()
 
 
 def test_database_init_creates_telegram_debug_settings_table(tmp_path) -> None:

@@ -109,6 +109,19 @@ Local setup keeps downloaded tooling inside the clone: `uv` in `.tools/bin`, uv 
 those local paths are used consistently.
 For example, `./run office-food-bot` is the project-local equivalent of `uv run office-food-bot`.
 
+## Database Migrations
+
+SQLite schema changes are applied through versioned migrations in
+`src/office_food_bot/database/migrations/versions.py`. Applied versions are recorded in the
+`schema_migrations` table, so each migration runs once per database.
+
+When changing the schema:
+
+1. Add a new `Migration(...)` entry with the next integer version.
+2. Keep the migration idempotent where practical and preserve existing data.
+3. Add repository/schema tests for both fresh databases and any legacy shape being migrated.
+4. Run `scripts/check`.
+
 ## Checks
 
 ```bash
