@@ -13,6 +13,10 @@ class MigrationStep(Protocol):
     def __call__(self, connection: sqlite3.Connection) -> None: ...
 
 
+class SchemaReflectionCheck(Protocol):
+    def __call__(self) -> bool: ...
+
+
 @dataclass(frozen=True)
 class Migration:
     version: int
@@ -154,8 +158,12 @@ class MigrationRunner:
     def _record_reflected_pre_migration_versions(self) -> None:
         # Existing databases created before schema_migrations need a one-time baseline.
         reflected_migrations = []
-        for migration in self._migrations:
-            if not self._migration_is_reflected_in_current_schema(migration):
+        for migration, schema_check in zip(
+            self._migrations,
+            self._schema_reflection_checks(),
+            strict=False,
+        ):
+            if not schema_check():
                 break
             reflected_migrations.append(migration)
 
@@ -169,24 +177,17 @@ class MigrationRunner:
                     (migration.version, migration.name),
                 )
 
-    def _migration_is_reflected_in_current_schema(self, migration: Migration) -> bool:
-        if migration.version == 1:
-            return self._has_initial_schema()
-        if migration.version == 2:
-            return self._has_splitwise_email_schema()
-        if migration.version == 3:
-            return self._users_status_allows_abandoned()
-        if migration.version == 4:
-            return self._table_exists("telegram_debug_settings")
-        if migration.version == 5:
-            return self._table_exists("lunch_auto_chats")
-        if migration.version == 6:
-            return self._splitwise_email_is_nullable()
-        if migration.version == 7:
-            return self._table_exists("user_vacations")
-        if migration.version == 8:
-            return self._table_exists("telegram_seen_accounts")
-        return False
+    def _schema_reflection_checks(self) -> tuple[SchemaReflectionCheck, ...]:
+        return (
+            self._has_initial_schema,
+            self._has_splitwise_email_schema,
+            self._users_status_allows_abandoned,
+            self._has_telegram_debug_settings,
+            self._has_lunch_auto_chats,
+            self._splitwise_email_is_nullable,
+            self._has_user_vacations,
+            self._has_telegram_seen_accounts,
+        )
 
     def _has_initial_schema(self) -> bool:
         return (
@@ -209,6 +210,18 @@ class MigrationRunner:
             if str(row["name"]) == "email":
                 return int(row["notnull"]) == 0
         return False
+
+    def _has_telegram_debug_settings(self) -> bool:
+        return self._table_exists("telegram_debug_settings")
+
+    def _has_lunch_auto_chats(self) -> bool:
+        return self._table_exists("lunch_auto_chats")
+
+    def _has_user_vacations(self) -> bool:
+        return self._table_exists("user_vacations")
+
+    def _has_telegram_seen_accounts(self) -> bool:
+        return self._table_exists("telegram_seen_accounts")
 
     def _table_exists(self, table_name: str) -> bool:
         return self._connection.execute(TABLE_EXISTS_SQL, (table_name,)).fetchone() is not None
