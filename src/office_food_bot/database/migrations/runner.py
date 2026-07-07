@@ -13,10 +13,6 @@ class MigrationStep(Protocol):
     def __call__(self, connection: sqlite3.Connection) -> None: ...
 
 
-class SchemaReflectionCheck(Protocol):
-    def __call__(self) -> bool: ...
-
-
 @dataclass(frozen=True)
 class Migration:
     version: int
@@ -76,25 +72,6 @@ SELECT COALESCE(MAX(version), 0)
 FROM schema_migrations
 """
 
-SCHEMA_MIGRATIONS_EXISTS_SQL = """
-SELECT 1
-FROM sqlite_master
-WHERE type = 'table' AND name = 'schema_migrations'
-"""
-
-TABLE_EXISTS_SQL = """
-SELECT 1
-FROM sqlite_master
-WHERE type = 'table' AND name = ?
-"""
-
-USERS_TABLE_SQL = """
-SELECT sql
-FROM sqlite_master
-WHERE type = 'table' AND name = 'users'
-"""
-
-
 def load_migrations() -> tuple[Migration, ...]:
     migrations = tuple(
         _migration_from_path(path)
@@ -116,10 +93,7 @@ class MigrationRunner:
         _validate_migrations(self._migrations)
 
     def migrate(self) -> int:
-        schema_migrations_existed = self._schema_migrations_table_exists()
         self._ensure_schema_migrations_table()
-        if not schema_migrations_existed:
-            self._record_reflected_pre_migration_versions()
         applied_versions = self._applied_versions()
         self._ensure_no_unknown_migrations(applied_versions)
         for migration in self._migrations:
@@ -141,9 +115,6 @@ class MigrationRunner:
         with self._connection:
             self._connection.execute(SCHEMA_MIGRATIONS_SQL)
 
-    def _schema_migrations_table_exists(self) -> bool:
-        return self._connection.execute(SCHEMA_MIGRATIONS_EXISTS_SQL).fetchone() is not None
-
     def _applied_versions(self) -> frozenset[int]:
         rows = self._connection.execute(LIST_APPLIED_MIGRATIONS_SQL).fetchall()
         return frozenset(int(row["version"]) for row in rows)
@@ -154,87 +125,6 @@ class MigrationRunner:
                 INSERT_SCHEMA_MIGRATION_SQL,
                 (migration.version, migration.name),
             )
-
-    def _record_reflected_pre_migration_versions(self) -> None:
-        # Existing databases created before schema_migrations need a one-time baseline.
-        reflected_migrations = []
-        for migration, schema_check in zip(
-            self._migrations,
-            self._schema_reflection_checks(),
-            strict=False,
-        ):
-            if not schema_check():
-                break
-            reflected_migrations.append(migration)
-
-        if not reflected_migrations:
-            return
-
-        with self._connection:
-            for migration in reflected_migrations:
-                self._connection.execute(
-                    INSERT_SCHEMA_MIGRATION_SQL,
-                    (migration.version, migration.name),
-                )
-
-    def _schema_reflection_checks(self) -> tuple[SchemaReflectionCheck, ...]:
-        return (
-            self._has_initial_schema,
-            self._has_splitwise_email_schema,
-            self._users_status_allows_abandoned,
-            self._has_telegram_debug_settings,
-            self._has_lunch_auto_chats,
-            self._splitwise_email_is_nullable,
-            self._has_user_vacations,
-            self._has_telegram_seen_accounts,
-        )
-
-    def _has_initial_schema(self) -> bool:
-        return (
-            self._table_exists("users")
-            and self._table_exists("telegram_accounts")
-            and self._table_exists("splitwise_users")
-        )
-
-    def _has_splitwise_email_schema(self) -> bool:
-        splitwise_columns = self._column_names("splitwise_users")
-        return "email" in splitwise_columns and "display_name" not in splitwise_columns
-
-    def _users_status_allows_abandoned(self) -> bool:
-        users_sql = self._users_table_sql()
-        return users_sql is not None and "'abandoned'" in users_sql
-
-    def _splitwise_email_is_nullable(self) -> bool:
-        rows = self._connection.execute("PRAGMA table_info(splitwise_users)").fetchall()
-        for row in rows:
-            if str(row["name"]) == "email":
-                return int(row["notnull"]) == 0
-        return False
-
-    def _has_telegram_debug_settings(self) -> bool:
-        return self._table_exists("telegram_debug_settings")
-
-    def _has_lunch_auto_chats(self) -> bool:
-        return self._table_exists("lunch_auto_chats")
-
-    def _has_user_vacations(self) -> bool:
-        return self._table_exists("user_vacations")
-
-    def _has_telegram_seen_accounts(self) -> bool:
-        return self._table_exists("telegram_seen_accounts")
-
-    def _table_exists(self, table_name: str) -> bool:
-        return self._connection.execute(TABLE_EXISTS_SQL, (table_name,)).fetchone() is not None
-
-    def _users_table_sql(self) -> str | None:
-        row = self._connection.execute(USERS_TABLE_SQL).fetchone()
-        if row is None:
-            return None
-        return str(row["sql"])
-
-    def _column_names(self, table_name: str) -> frozenset[str]:
-        rows = self._connection.execute(f"PRAGMA table_info({table_name})").fetchall()
-        return frozenset(str(row["name"]) for row in rows)
 
     def _ensure_foreign_keys_ok(self, migration: Migration) -> None:
         broken_references = self._connection.execute("PRAGMA foreign_key_check").fetchall()
