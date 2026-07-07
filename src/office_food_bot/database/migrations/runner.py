@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
+from importlib import import_module
+from pathlib import Path
 from typing import Protocol
 
 
@@ -16,6 +19,34 @@ class Migration:
     name: str
     migrate: MigrationStep
 
+
+@dataclass(frozen=True)
+class SqlMigrationStep:
+    path: Path
+
+    def __call__(self, connection: sqlite3.Connection) -> None:
+        with connection:
+            connection.executescript(self.path.read_text())
+
+
+@dataclass(frozen=True)
+class PythonMigrationStep:
+    module_name: str
+
+    def __call__(self, connection: sqlite3.Connection) -> None:
+        module = import_module(self.module_name)
+        migrate = getattr(module, "migrate", None)
+        if not callable(migrate):
+            msg = f"Python migration {self.module_name} must define migrate(connection)"
+            raise RuntimeError(msg)
+        migrate(connection)
+
+
+MIGRATION_FILENAME_PATTERN = re.compile(
+    r"^(?P<version>\d{4})_(?P<name>[a-z0-9_]+)\.(?P<kind>sql|py)$"
+)
+MIGRATIONS_PACKAGE = "office_food_bot.database.migrations"
+MIGRATIONS_PATH = Path(__file__).parent
 
 SCHEMA_MIGRATIONS_SQL = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -40,6 +71,16 @@ CURRENT_SCHEMA_VERSION_SQL = """
 SELECT COALESCE(MAX(version), 0)
 FROM schema_migrations
 """
+
+
+def load_migrations() -> tuple[Migration, ...]:
+    migrations = tuple(
+        _migration_from_path(path)
+        for path in sorted(MIGRATIONS_PATH.iterdir())
+        if _is_migration_file(path)
+    )
+    _validate_migrations(migrations)
+    return migrations
 
 
 class MigrationRunner:
@@ -103,3 +144,21 @@ def _validate_migrations(migrations: tuple[Migration, ...]) -> None:
             msg = "Database migrations must be ordered by unique increasing versions"
             raise RuntimeError(msg)
         previous_version = migration.version
+
+
+def _is_migration_file(path: Path) -> bool:
+    return path.is_file() and MIGRATION_FILENAME_PATTERN.fullmatch(path.name) is not None
+
+
+def _migration_from_path(path: Path) -> Migration:
+    match = MIGRATION_FILENAME_PATTERN.fullmatch(path.name)
+    if match is None:
+        msg = f"Invalid migration filename: {path.name}"
+        raise RuntimeError(msg)
+
+    version = int(match.group("version"))
+    name = match.group("name")
+    kind = match.group("kind")
+    if kind == "sql":
+        return Migration(version, name, SqlMigrationStep(path))
+    return Migration(version, name, PythonMigrationStep(f"{MIGRATIONS_PACKAGE}.{path.stem}"))

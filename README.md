@@ -111,13 +111,15 @@ For example, `./run office-food-bot` is the project-local equivalent of `uv run 
 
 ## Database Migrations
 
-SQLite schema changes are applied through versioned migrations in
-`src/office_food_bot/database/migrations/versions.py`. Applied versions are recorded in the
-`schema_migrations` table, so each migration runs once per database.
+SQLite schema changes are applied through versioned migration files in
+`src/office_food_bot/database/migrations/`. Applied versions are recorded in the
+`schema_migrations` table, so each migration runs once per database. Use `.sql` files for ordinary
+schema changes and `.py` files when a migration needs checks, branching, or data-preserving table
+rebuilds.
 
 When changing the schema:
 
-1. Add a new `Migration(...)` entry with the next integer version.
+1. Add the next numbered file, for example `0004_add_example_table.sql`.
 2. Keep the migration idempotent where practical and preserve existing data.
 3. Add repository/schema tests for both fresh databases and any legacy shape being migrated.
 4. Run `scripts/check`.

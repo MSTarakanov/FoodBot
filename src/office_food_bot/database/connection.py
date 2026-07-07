@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from office_food_bot.database.migrations import MIGRATIONS, MigrationRunner
+from office_food_bot.database.migrations import MigrationRunner, load_migrations
 
 
 class Database:
@@ -20,10 +20,10 @@ class Database:
         return self._connection
 
     def init_schema(self) -> None:
-        MigrationRunner(self._connection, MIGRATIONS).migrate()
+        MigrationRunner(self._connection, load_migrations()).migrate()
 
     def schema_version(self) -> int:
-        return MigrationRunner(self._connection, MIGRATIONS).current_version()
+        return MigrationRunner(self._connection, load_migrations()).current_version()
 
     def close(self) -> None:
         self._connection.close()

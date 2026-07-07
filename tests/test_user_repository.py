@@ -7,7 +7,7 @@ import pytest
 
 from office_food_bot.database import Database
 from office_food_bot.database.database_schema import SCHEMA_SQL
-from office_food_bot.database.migrations import MIGRATIONS
+from office_food_bot.database.migrations import load_migrations
 from office_food_bot.models import SplitwiseMember, TelegramProfile, UserRole, UserStatus
 from office_food_bot.repositories import (
     DebugRepository,
@@ -283,6 +283,7 @@ def test_database_init_creates_clean_splitwise_users_schema(tmp_path) -> None:
 
 
 def test_database_init_records_schema_migrations(tmp_path) -> None:
+    migrations = load_migrations()
     database = Database(tmp_path / "test.sqlite3")
     database.init_schema()
     database.init_schema()
@@ -304,9 +305,17 @@ def test_database_init_records_schema_migrations(tmp_path) -> None:
 
     assert columns == ["version", "name", "applied_at"]
     assert [(int(row["version"]), str(row["name"])) for row in rows] == [
-        (migration.version, migration.name) for migration in MIGRATIONS
+        (migration.version, migration.name) for migration in migrations
     ]
-    assert schema_version == MIGRATIONS[-1].version
+    assert schema_version == migrations[-1].version
+
+
+def test_database_migrations_are_loaded_from_files() -> None:
+    assert [(migration.version, migration.name) for migration in load_migrations()] == [
+        (1, "initial"),
+        (2, "recreate_empty_legacy_splitwise_users"),
+        (3, "allow_abandoned_user_status"),
+    ]
 
 
 def test_database_init_rejects_unknown_schema_migration(tmp_path) -> None:
