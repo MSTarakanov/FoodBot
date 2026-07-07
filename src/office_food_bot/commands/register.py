@@ -14,6 +14,7 @@ from office_food_bot.models import (
     RegisteredUser,
     RegistrationDetails,
     RegistrationKind,
+    SeenTelegramAccount,
     SplitwiseConnection,
     SplitwiseMember,
     TelegramProfile,
@@ -157,6 +158,14 @@ async def register_command(
             f"{NAME_PROMPT_TEXT}",
         )
         return
+
+    if services.registration.can_approve(profile.telegram_user_id):
+        seen_accounts = services.registration.list_unregistered_seen_accounts(
+            profile.telegram_user_id,
+        )
+        if seen_accounts:
+            await messenger.reply(message, _seen_accounts_registration_text(seen_accounts))
+            return
 
     await state.set_state(RegistrationFlow.waiting_for_name)
     await _save_registration_target(state, profile)
@@ -660,6 +669,40 @@ def _registration_request_admin_text(profile: TelegramProfile) -> str:
         f"Имя в Telegram: {_profile_display_name_text(profile)}\n"
         f"Начать регистрацию: /register {profile.telegram_user_id}"
     )
+
+
+def _seen_accounts_registration_text(seen_accounts: tuple[SeenTelegramAccount, ...]) -> str:
+    lines = ["Я видел таких незарегистрированных пользователей:"]
+    for seen_account in seen_accounts:
+        lines.extend(
+            (
+                "",
+                _seen_account_display_text(seen_account),
+                f"Telegram ID: {seen_account.telegram_user_id}",
+                f"Начать регистрацию: /register {seen_account.telegram_user_id}",
+            )
+        )
+    return "\n".join(lines)
+
+
+def _seen_account_display_text(seen_account: SeenTelegramAccount) -> str:
+    display_name = _profile_display_name_text(
+        TelegramProfile(
+            telegram_user_id=seen_account.telegram_user_id,
+            username=seen_account.username,
+            first_name=seen_account.first_name,
+            last_name=seen_account.last_name,
+        )
+    )
+    username = _profile_username_text(
+        TelegramProfile(
+            telegram_user_id=seen_account.telegram_user_id,
+            username=seen_account.username,
+            first_name=seen_account.first_name,
+            last_name=seen_account.last_name,
+        )
+    )
+    return f"{display_name} ({username})"
 
 
 def _profile_username_text(profile: TelegramProfile) -> str:

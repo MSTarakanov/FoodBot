@@ -42,6 +42,14 @@ class TelegramProfile:
 
 
 @dataclass(frozen=True)
+class SeenTelegramAccount:
+    telegram_user_id: int
+    username: str | None
+    first_name: str
+    last_name: str | None
+
+
+@dataclass(frozen=True)
 class RegisteredUser:
     id: int
     telegram_user_id: int

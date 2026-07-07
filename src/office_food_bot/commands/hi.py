@@ -5,6 +5,7 @@ import logging
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
 
@@ -18,6 +19,9 @@ async def hi_command(
     state: FSMContext,
 ) -> None:
     await state.clear()
+    profile = telegram_profile_from_message(message)
+    if profile is not None:
+        services.telegram_interactions.remember(profile)
     logger.warning(
         "/hi handled by @%s: chat_id=%s, telegram_user_id=%s",
         services.telegram_bot_username,

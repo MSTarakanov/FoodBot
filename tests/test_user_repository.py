@@ -10,6 +10,7 @@ from office_food_bot.models import SplitwiseMember, TelegramProfile, UserRole, U
 from office_food_bot.repositories import (
     DebugRepository,
     LunchAutoChatRepository,
+    TelegramSeenRepository,
     UserRepository,
     VacationRepository,
 )
@@ -295,6 +296,27 @@ def test_database_init_creates_telegram_debug_settings_table(tmp_path) -> None:
     assert columns == ["telegram_user_id", "enabled", "updated_at"]
 
 
+def test_database_init_creates_telegram_seen_accounts_table(tmp_path) -> None:
+    database = Database(tmp_path / "test.sqlite3")
+    database.init_schema()
+    try:
+        columns = [
+            str(row["name"])
+            for row in database.connection.execute("PRAGMA table_info(telegram_seen_accounts)")
+        ]
+    finally:
+        database.close()
+
+    assert columns == [
+        "telegram_user_id",
+        "username",
+        "first_name",
+        "last_name",
+        "first_seen_at",
+        "last_seen_at",
+    ]
+
+
 def test_database_init_creates_lunch_auto_chats_table(tmp_path) -> None:
     database = Database(tmp_path / "test.sqlite3")
     database.init_schema()
@@ -391,6 +413,37 @@ def test_debug_repository_persists_debug_status(database: Database) -> None:
 
     debug.set_enabled(7, False)
     assert not DebugRepository(database).is_enabled(7)
+
+
+def test_telegram_seen_repository_stores_and_updates_profile(database: Database) -> None:
+    seen_accounts = TelegramSeenRepository(database)
+
+    seen_accounts.remember(make_profile(username="old", first_name="Old"))
+    seen_accounts.remember(
+        make_profile(username="new", first_name="New", last_name="Name"),
+    )
+
+    seen_account = seen_accounts.get(42)
+
+    assert seen_account is not None
+    assert seen_account.telegram_user_id == 42
+    assert seen_account.username == "new"
+    assert seen_account.first_name == "New"
+    assert seen_account.last_name == "Name"
+
+
+def test_telegram_seen_repository_lists_only_unregistered_accounts(
+    database: Database,
+    users: UserRepository,
+) -> None:
+    seen_accounts = TelegramSeenRepository(database)
+    seen_accounts.remember(make_profile(telegram_user_id=42, username="misha"))
+    seen_accounts.remember(make_profile(telegram_user_id=43, username="olya"))
+    users.create_pending_user(make_profile(telegram_user_id=42, username="misha"), "Максим")
+
+    unregistered_accounts = seen_accounts.list_unregistered(limit=10)
+
+    assert [account.telegram_user_id for account in unregistered_accounts] == [43]
 
 
 def test_database_init_recreates_empty_legacy_splitwise_users_table(tmp_path) -> None:
