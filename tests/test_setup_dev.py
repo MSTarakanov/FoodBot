@@ -583,7 +583,7 @@ def test_setup_dev_detects_bot_username_from_verified_token(tmp_path: Path) -> N
     result = subprocess.run(
         ["bash", str(SETUP_DEV), "--env-only"],
         cwd=tmp_path,
-        input="123456789:abcdefghijklmnopqrstuvwxyzABCDE\n\nn\ndev-splitwise-key\n",
+        input="123456789:abcdefghijklmnopqrstuvwxyzABCDE\nn\ndev-splitwise-key\n",
         text=True,
         capture_output=True,
         check=True,
@@ -601,8 +601,67 @@ def test_setup_dev_detects_bot_username_from_verified_token(tmp_path: Path) -> N
         "SPLITWISE_GROUP_ID": "",
     }
     assert "Telegram bot username: @foodbot_dev" in result.stdout
+    assert "Use current TELEGRAM_BOT_USERNAME? [y/n]" not in result.stdout
     assert "123456789:abcdefghijklmnopqrstuvwxyzABCDE" not in result.stdout
     assert "dev-splitwise-key" not in result.stdout
+
+
+def test_setup_dev_uses_current_verified_bot_username_without_prompt(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".env").write_text(
+        "\n".join(
+            [
+                "TELEGRAM_BOT_TOKEN=123456789:abcdefghijklmnopqrstuvwxyzABCDE",
+                "TELEGRAM_BOT_USERNAME=stale_dev_bot",
+                "DATABASE_PATH=old.sqlite3",
+                "TELEGRAM_ADMIN_IDS=",
+                "FOODBOT_TIMEZONE=UTC",
+                "SPLITWISE_API_KEY=existing-splitwise-key",
+                "SPLITWISE_GROUP_ID=1001",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    fake_curl = fake_bin / "curl"
+    fake_curl.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' "
+        "'{\"ok\":true,\"result\":{\"id\":123456789,\"username\":\"dev_jos_jedan_bot\"}}'\n",
+        encoding="utf-8",
+    )
+    fake_curl.chmod(0o755)
+
+    result = subprocess.run(
+        ["bash", str(SETUP_DEV), "--env-only"],
+        cwd=tmp_path,
+        input="y\nn\n\n",
+        text=True,
+        capture_output=True,
+        check=True,
+        env={"PATH": f"{fake_bin}:/usr/bin:/bin:/usr/sbin:/sbin"},
+    )
+
+    assert read_env(tmp_path) == {
+        "FOODBOT_ENV": "development",
+        "TELEGRAM_BOT_TOKEN": "123456789:abcdefghijklmnopqrstuvwxyzABCDE",
+        "TELEGRAM_BOT_USERNAME": "dev_jos_jedan_bot",
+        "DATABASE_PATH": "foodbot.local.sqlite3",
+        "TELEGRAM_ADMIN_IDS": "",
+        "FOODBOT_TIMEZONE": "Europe/Belgrade",
+        "SPLITWISE_API_KEY": "existing-splitwise-key",
+        "SPLITWISE_GROUP_ID": "1001",
+    }
+    assert "Current TELEGRAM_BOT_TOKEN belongs to @dev_jos_jedan_bot." in result.stdout
+    assert "Bot link: https://t.me/dev_jos_jedan_bot" in result.stdout
+    assert "Use this Telegram bot for local development? [y/n]" in result.stdout
+    assert "Telegram bot username: @dev_jos_jedan_bot" in result.stdout
+    assert "Use current TELEGRAM_BOT_USERNAME? [y/n]" not in result.stdout
+    assert "stale_dev_bot" not in result.stdout
+    assert "123456789:abcdefghijklmnopqrstuvwxyzABCDE" not in result.stdout
+    assert "existing-splitwise-key" not in result.stdout
 
 
 def test_setup_dev_rejects_production_telegram_bot_token(tmp_path: Path) -> None:
