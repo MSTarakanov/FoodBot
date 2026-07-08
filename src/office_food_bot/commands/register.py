@@ -92,14 +92,14 @@ async def request_register_command(
         await messenger.reply(message, "Не вижу твой Telegram user id.")
         return
 
-    services.telegram_interactions.remember(profile)
-
     block_reason = services.registration.request_registration_block_reason(
         profile.telegram_user_id,
     )
     if block_reason is not None:
         await messenger.reply(message, block_reason)
         return
+
+    services.registration.request_registration(profile)
 
     await messenger.reply(message, REQUEST_REGISTER_REPLY_TEXT)
     for admin_id in services.registration.admin_ids:

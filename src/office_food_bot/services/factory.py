@@ -8,6 +8,7 @@ from office_food_bot.messaging import BotMessenger
 from office_food_bot.repositories import (
     DebugRepository,
     LunchAutoChatRepository,
+    RegistrationRequestRepository,
     TelegramAccountRepository,
     UserRepository,
     VacationRepository,
@@ -47,6 +48,7 @@ def build_services(
 ) -> BotServices:
     users = UserRepository(database)
     telegram_accounts = TelegramAccountRepository(database)
+    registration_requests = RegistrationRequestRepository(database)
     debug_settings = DebugRepository(database)
     lunch_auto_chat_repository = LunchAutoChatRepository(database)
     vacations = VacationRepository(database)
@@ -55,7 +57,12 @@ def build_services(
         client = HttpSplitwiseClient(splitwise_api_key)
 
     splitwise = SplitwiseService(client, splitwise_group_id)
-    registration = RegistrationService(users, telegram_accounts, admin_ids)
+    registration = RegistrationService(
+        users,
+        telegram_accounts,
+        registration_requests,
+        admin_ids,
+    )
     debug = DebugService(debug_settings)
     business_calendar = BusinessCalendarService()
     poll_tracking = PollTrackingService()

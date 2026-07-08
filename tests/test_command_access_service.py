@@ -5,7 +5,12 @@ from office_food_bot.commands.middleware import (
     command_access_denial_text,
 )
 from office_food_bot.database import Database
-from office_food_bot.repositories import DebugRepository, TelegramAccountRepository, UserRepository
+from office_food_bot.repositories import (
+    DebugRepository,
+    RegistrationRequestRepository,
+    TelegramAccountRepository,
+    UserRepository,
+)
 from office_food_bot.services.command_access import (
     CommandAccessDenialReason,
     CommandAccessService,
@@ -18,6 +23,7 @@ def make_access_service(database: Database) -> CommandAccessService:
     registration = RegistrationService(
         UserRepository(database),
         TelegramAccountRepository(database),
+        RegistrationRequestRepository(database),
         frozenset({7}),
     )
     debug = DebugService(DebugRepository(database))

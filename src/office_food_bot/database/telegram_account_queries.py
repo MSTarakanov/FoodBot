@@ -24,7 +24,7 @@ FROM telegram_accounts
 WHERE telegram_user_id = ?
 """
 
-LIST_UNREGISTERED_TELEGRAM_ACCOUNTS_SQL = """
+LIST_SEEN_TELEGRAM_ACCOUNTS_SQL = """
 SELECT
     telegram_accounts.telegram_user_id,
     telegram_accounts.username,
@@ -33,8 +33,13 @@ SELECT
 FROM telegram_accounts
 LEFT JOIN users
     ON users.id = telegram_accounts.user_id
-WHERE telegram_accounts.user_id IS NULL
-    OR users.status = ?
+LEFT JOIN registration_requests
+    ON registration_requests.telegram_user_id = telegram_accounts.telegram_user_id
+WHERE registration_requests.telegram_user_id IS NULL
+    AND (
+        telegram_accounts.user_id IS NULL
+        OR users.status = ?
+    )
 ORDER BY telegram_accounts.last_seen_at DESC, telegram_accounts.telegram_user_id
 LIMIT ?
 """

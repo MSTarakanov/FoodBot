@@ -14,9 +14,14 @@ from office_food_bot.database.lunch_auto_chat_queries import (
     LIST_ENABLED_LUNCH_AUTO_CHATS_SQL,
     UPSERT_LUNCH_AUTO_CHAT_SQL,
 )
+from office_food_bot.database.registration_request_queries import (
+    DELETE_REGISTRATION_REQUEST_SQL,
+    LIST_REQUESTED_REGISTRATION_ACCOUNTS_SQL,
+    UPSERT_REGISTRATION_REQUEST_SQL,
+)
 from office_food_bot.database.telegram_account_queries import (
     GET_TELEGRAM_ACCOUNT_SQL,
-    LIST_UNREGISTERED_TELEGRAM_ACCOUNTS_SQL,
+    LIST_SEEN_TELEGRAM_ACCOUNTS_SQL,
     UPSERT_TELEGRAM_ACCOUNT_PROFILE_SQL,
 )
 from office_food_bot.database.user_queries import (
@@ -82,9 +87,35 @@ class TelegramAccountRepository:
             return None
         return _known_telegram_account_from_row(row)
 
-    def list_unregistered(self, limit: int) -> tuple[KnownTelegramAccount, ...]:
+    def list_seen(self, limit: int) -> tuple[KnownTelegramAccount, ...]:
         rows = self._database.connection.execute(
-            LIST_UNREGISTERED_TELEGRAM_ACCOUNTS_SQL,
+            LIST_SEEN_TELEGRAM_ACCOUNTS_SQL,
+            (UserStatus.ABANDONED.value, limit),
+        ).fetchall()
+        return tuple(_known_telegram_account_from_row(row) for row in rows)
+
+
+class RegistrationRequestRepository:
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    def request(self, telegram_user_id: int) -> None:
+        with self._database.connection:
+            self._database.connection.execute(
+                UPSERT_REGISTRATION_REQUEST_SQL,
+                (telegram_user_id,),
+            )
+
+    def clear(self, telegram_user_id: int) -> None:
+        with self._database.connection:
+            self._database.connection.execute(
+                DELETE_REGISTRATION_REQUEST_SQL,
+                (telegram_user_id,),
+            )
+
+    def list_requested(self, limit: int) -> tuple[KnownTelegramAccount, ...]:
+        rows = self._database.connection.execute(
+            LIST_REQUESTED_REGISTRATION_ACCOUNTS_SQL,
             (UserStatus.ABANDONED.value, limit),
         ).fetchall()
         return tuple(_known_telegram_account_from_row(row) for row in rows)

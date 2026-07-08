@@ -8,7 +8,11 @@ from office_food_bot.models import (
     TelegramProfile,
     UserStatus,
 )
-from office_food_bot.repositories import TelegramAccountRepository, UserRepository
+from office_food_bot.repositories import (
+    RegistrationRequestRepository,
+    TelegramAccountRepository,
+    UserRepository,
+)
 from office_food_bot.services.registration import RegistrationService
 
 DEFAULT_ADMIN_IDS = frozenset({7})
@@ -35,6 +39,7 @@ def make_service(
     return RegistrationService(
         UserRepository(database),
         TelegramAccountRepository(database),
+        RegistrationRequestRepository(database),
         admin_ids,
     )
 
@@ -317,12 +322,33 @@ def test_registration_profile_for_telegram_id_uses_known_telegram_account(
     )
 
 
-def test_list_unregistered_telegram_accounts_is_admin_only(database: Database) -> None:
+def test_list_requested_telegram_accounts_is_admin_only(database: Database) -> None:
+    TelegramAccountRepository(database).remember(make_profile())
+    service = make_service(database)
+    service.request_registration(make_profile())
+
+    assert service.list_requested_telegram_accounts(99) == ()
+    assert [
+        account.telegram_user_id
+        for account in service.list_requested_telegram_accounts(7)
+    ] == [42]
+
+
+def test_list_seen_telegram_accounts_is_admin_only(database: Database) -> None:
     TelegramAccountRepository(database).remember(make_profile())
     service = make_service(database)
 
-    assert service.list_unregistered_telegram_accounts(99) == ()
+    assert service.list_seen_telegram_accounts(99) == ()
     assert [
         account.telegram_user_id
-        for account in service.list_unregistered_telegram_accounts(7)
+        for account in service.list_seen_telegram_accounts(7)
     ] == [42]
+
+
+def test_register_clears_registration_request(database: Database) -> None:
+    service = make_service(database)
+    service.request_registration(make_profile())
+
+    service.register(make_profile(), "Максим", None)
+
+    assert service.list_requested_telegram_accounts(7) == ()

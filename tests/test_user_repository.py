@@ -11,6 +11,7 @@ from office_food_bot.models import SplitwiseMember, TelegramProfile, UserRole, U
 from office_food_bot.repositories import (
     DebugRepository,
     LunchAutoChatRepository,
+    RegistrationRequestRepository,
     TelegramAccountRepository,
     UserRepository,
     VacationRepository,
@@ -115,7 +116,7 @@ def test_create_pending_user_links_known_telegram_account(
 
     assert user.telegram_user_id == 42
     assert users.get_by_telegram_id(42) is not None
-    assert telegram_accounts.list_unregistered(limit=10) == ()
+    assert telegram_accounts.list_seen(limit=10) == ()
 
 
 def test_approve_by_telegram_id_activates_user(users: UserRepository) -> None:
@@ -370,6 +371,7 @@ def test_database_migrations_are_loaded_from_files() -> None:
         (7, "add_user_vacations"),
         (8, "add_telegram_seen_accounts"),
         (9, "merge_seen_accounts_into_telegram_accounts"),
+        (10, "add_registration_requests"),
     ]
 
 
@@ -431,6 +433,20 @@ def test_database_init_creates_known_telegram_accounts_table(tmp_path) -> None:
         "updated_at",
     ]
     assert seen_table is None
+
+
+def test_database_init_creates_registration_requests_table(tmp_path) -> None:
+    database = Database(tmp_path / "test.sqlite3")
+    database.init_schema()
+    try:
+        columns = [
+            str(row["name"])
+            for row in database.connection.execute("PRAGMA table_info(registration_requests)")
+        ]
+    finally:
+        database.close()
+
+    assert columns == ["telegram_user_id", "requested_at", "updated_at"]
 
 
 def test_database_init_merges_seen_accounts_into_telegram_accounts(tmp_path) -> None:
@@ -533,7 +549,7 @@ def test_database_init_merges_seen_accounts_into_telegram_accounts(tmp_path) -> 
     finally:
         database.close()
 
-    assert schema_version == 9
+    assert schema_version == 10
     assert seen_table is None
     assert linked_row is not None
     assert int(linked_row["user_id"]) == 1
@@ -721,21 +737,57 @@ def test_telegram_account_repository_stores_and_updates_profile(database: Databa
     assert telegram_account.last_name == "Name"
 
 
-def test_telegram_account_repository_lists_only_unregistered_accounts(
+def test_telegram_account_repository_lists_only_seen_accounts(
     database: Database,
     users: UserRepository,
 ) -> None:
     telegram_accounts = TelegramAccountRepository(database)
+    registration_requests = RegistrationRequestRepository(database)
     telegram_accounts.remember(make_profile(telegram_user_id=42, username="misha"))
     telegram_accounts.remember(make_profile(telegram_user_id=43, username="olya"))
     telegram_accounts.remember(make_profile(telegram_user_id=44, username="old"))
+    telegram_accounts.remember(make_profile(telegram_user_id=45, username="requested"))
+    registration_requests.request(45)
     users.create_pending_user(make_profile(telegram_user_id=42, username="misha"), "Максим")
     users.create_pending_user(make_profile(telegram_user_id=44, username="old"), "Олег")
     users.abandon_by_telegram_id(44)
 
-    unregistered_accounts = telegram_accounts.list_unregistered(limit=10)
+    seen_accounts = telegram_accounts.list_seen(limit=10)
 
-    assert {account.telegram_user_id for account in unregistered_accounts} == {43, 44}
+    assert {account.telegram_user_id for account in seen_accounts} == {43, 44}
+
+
+def test_registration_request_repository_lists_requested_accounts(
+    database: Database,
+    users: UserRepository,
+) -> None:
+    telegram_accounts = TelegramAccountRepository(database)
+    registration_requests = RegistrationRequestRepository(database)
+    telegram_accounts.remember(make_profile(telegram_user_id=42, username="misha"))
+    telegram_accounts.remember(make_profile(telegram_user_id=43, username="olya"))
+    telegram_accounts.remember(make_profile(telegram_user_id=44, username="old"))
+    registration_requests.request(42)
+    registration_requests.request(44)
+    users.create_pending_user(make_profile(telegram_user_id=43, username="olya"), "Оля")
+    users.create_pending_user(make_profile(telegram_user_id=44, username="old"), "Олег")
+    users.abandon_by_telegram_id(44)
+
+    requested_accounts = registration_requests.list_requested(limit=10)
+
+    assert {account.telegram_user_id for account in requested_accounts} == {42, 44}
+
+
+def test_registration_request_repository_clears_requested_account(
+    database: Database,
+) -> None:
+    telegram_accounts = TelegramAccountRepository(database)
+    registration_requests = RegistrationRequestRepository(database)
+    telegram_accounts.remember(make_profile())
+    registration_requests.request(42)
+
+    registration_requests.clear(42)
+
+    assert registration_requests.list_requested(limit=10) == ()
 
 
 def test_database_init_replaces_empty_legacy_splitwise_users_table(tmp_path) -> None:

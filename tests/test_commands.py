@@ -42,6 +42,7 @@ from office_food_bot.database import Database
 from office_food_bot.models import SplitwiseBalance, SplitwiseMember, TelegramProfile, UserStatus
 from office_food_bot.repositories import (
     LunchAutoChatRepository,
+    RegistrationRequestRepository,
     TelegramAccountRepository,
     UserRepository,
     VacationRepository,
@@ -514,6 +515,7 @@ async def test_hi_logs_bot_identity(
     assert telegram_account.username == "misha"
     assert telegram_account.first_name == "Misha"
     assert telegram_account.last_name == "Petrov"
+    assert RegistrationRequestRepository(database).list_requested(limit=10) == ()
 
 
 async def test_command_updates_existing_telegram_profile(tmp_path: Path) -> None:
@@ -814,6 +816,10 @@ async def test_request_register_notifies_admin_with_register_command(tmp_path: P
     assert telegram_account.username == "misha"
     assert telegram_account.first_name == "Misha"
     assert telegram_account.last_name == "Petrov"
+    assert [
+        account.telegram_user_id
+        for account in RegistrationRequestRepository(database).list_requested(limit=10)
+    ] == [42]
 
 
 async def test_lunch_tags_user_registered_from_request_register(
@@ -843,6 +849,8 @@ async def test_lunch_tags_user_registered_from_request_register(
     await dispatcher.feed_update(bot, make_update("Пропустить", user_id=7))
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7))
     session.clear_messages()
+
+    assert RegistrationRequestRepository(database).list_requested(limit=10) == ()
 
     await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
 
@@ -878,6 +886,37 @@ async def test_admin_register_requests_list_shows_seen_unregistered_users(
         "Заявок на регистрацию нет.\n"
         "\n"
         "Видел незарегистрированных пользователей:\n"
+        "1. Misha Petrov (@misha) - Telegram ID 42 - /register 42"
+    ]
+
+
+async def test_admin_register_requests_list_shows_requested_users(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update(
+            "/request_register",
+            user_id=42,
+            first_name="Misha",
+            last_name="Petrov",
+            username="misha",
+        ),
+    )
+    session.clear_messages()
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/register_requests_list", user_id=7, first_name="Admin"),
+    )
+
+    assert sent_texts(session) == [
+        "Попросили регистрацию:\n"
         "1. Misha Petrov (@misha) - Telegram ID 42 - /register 42"
     ]
 

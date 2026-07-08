@@ -31,28 +31,50 @@ async def register_requests_list_command(
         return
 
     pending_requests = services.registration.list_pending_requests(profile.telegram_user_id)
-    telegram_accounts = services.registration.list_unregistered_telegram_accounts(
+    requested_accounts = services.registration.list_requested_telegram_accounts(
         profile.telegram_user_id,
     )
-    if not pending_requests and not telegram_accounts:
+    seen_accounts = services.registration.list_seen_telegram_accounts(profile.telegram_user_id)
+    if not pending_requests and not requested_accounts and not seen_accounts:
         await messenger.reply(message, "Заявок на регистрацию нет.")
         return
 
-    await messenger.reply(message, _registration_requests_text(pending_requests, telegram_accounts))
+    await messenger.reply(
+        message,
+        _registration_requests_text(pending_requests, requested_accounts, seen_accounts),
+    )
 
 
 def _registration_requests_text(
     pending_requests: tuple[PendingRegistration, ...],
-    telegram_accounts: tuple[KnownTelegramAccount, ...],
+    requested_accounts: tuple[KnownTelegramAccount, ...],
+    seen_accounts: tuple[KnownTelegramAccount, ...],
 ) -> str:
     lines: list[str] = []
     if pending_requests:
         lines.append(_pending_requests_text(pending_requests))
-    else:
+    elif not requested_accounts:
         lines.append("Заявок на регистрацию нет.")
 
-    if telegram_accounts:
-        lines.extend(("", _telegram_accounts_registration_text(telegram_accounts)))
+    if requested_accounts:
+        if lines:
+            lines.append("")
+        lines.append(
+            _telegram_accounts_registration_text(
+                "Попросили регистрацию:",
+                requested_accounts,
+            )
+        )
+
+    if seen_accounts:
+        if lines:
+            lines.append("")
+        lines.append(
+            _telegram_accounts_registration_text(
+                "Видел незарегистрированных пользователей:",
+                seen_accounts,
+            )
+        )
 
     return "\n".join(lines)
 
@@ -86,9 +108,10 @@ def _splitwise_text(splitwise: SplitwiseConnection | None) -> str:
 
 
 def _telegram_accounts_registration_text(
+    title: str,
     telegram_accounts: tuple[KnownTelegramAccount, ...],
 ) -> str:
-    lines = ["Видел незарегистрированных пользователей:"]
+    lines = [title]
     for index, telegram_account in enumerate(telegram_accounts, start=1):
         lines.append(
             f"{index}. {_telegram_account_display_text(telegram_account)} - "

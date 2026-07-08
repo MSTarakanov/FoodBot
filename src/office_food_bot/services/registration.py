@@ -15,6 +15,7 @@ from office_food_bot.models import (
     UserStatus,
 )
 from office_food_bot.repositories import (
+    RegistrationRequestRepository,
     TelegramAccountRepository,
     UserRepository,
     normalize_display_name,
@@ -41,10 +42,12 @@ class RegistrationService:
         self,
         users: UserRepository,
         telegram_accounts: TelegramAccountRepository,
+        registration_requests: RegistrationRequestRepository,
         admin_ids: frozenset[int],
     ) -> None:
         self._users = users
         self._telegram_accounts = telegram_accounts
+        self._registration_requests = registration_requests
         self.admin_ids = admin_ids
 
     def register(
@@ -60,7 +63,7 @@ class RegistrationService:
                 profile.telegram_user_id,
             )
             if existing_user.status == UserStatus.ABANDONED:
-                user = self._users.save_pending_registration(
+                user = self._save_pending_registration(
                     profile,
                     display_name,
                     splitwise_member,
@@ -74,6 +77,7 @@ class RegistrationService:
                     splitwise_member,
                 ):
                     self._users.refresh_telegram_profile(profile)
+                    self._registration_requests.clear(profile.telegram_user_id)
                     refreshed_user = self._users.get_by_telegram_id(
                         profile.telegram_user_id,
                     )
@@ -86,7 +90,7 @@ class RegistrationService:
                         previous_details,
                     )
 
-                user = self._users.save_pending_registration(
+                user = self._save_pending_registration(
                     profile,
                     display_name,
                     splitwise_member,
@@ -108,7 +112,7 @@ class RegistrationService:
                 previous_details,
             )
 
-        user = self._users.save_pending_registration(profile, display_name, splitwise_member)
+        user = self._save_pending_registration(profile, display_name, splitwise_member)
         return RegistrationResult(RegistrationKind.CREATED, user)
 
     def re_register(
@@ -117,11 +121,15 @@ class RegistrationService:
         raw_display_name: str,
         splitwise_member: SplitwiseMember | None,
     ) -> RegisteredUser:
-        return self._users.save_pending_registration(
+        return self._save_pending_registration(
             profile,
             self.display_name_from_input(profile, raw_display_name),
             splitwise_member,
         )
+
+    def request_registration(self, profile: TelegramProfile) -> None:
+        self._telegram_accounts.remember(profile)
+        self._registration_requests.request(profile.telegram_user_id)
 
     def display_name_from_input(self, profile: TelegramProfile, raw_display_name: str) -> str:
         return _clean_display_name(profile, raw_display_name)
@@ -196,13 +204,31 @@ class RegistrationService:
             return ()
         return self._users.list_pending_registrations()
 
-    def list_unregistered_telegram_accounts(
+    def list_requested_telegram_accounts(
         self,
         requester_telegram_user_id: int,
     ) -> tuple[KnownTelegramAccount, ...]:
         if not self.can_approve(requester_telegram_user_id):
             return ()
-        return self._telegram_accounts.list_unregistered(REGISTRATION_SUGGESTIONS_LIMIT)
+        return self._registration_requests.list_requested(REGISTRATION_SUGGESTIONS_LIMIT)
+
+    def list_seen_telegram_accounts(
+        self,
+        requester_telegram_user_id: int,
+    ) -> tuple[KnownTelegramAccount, ...]:
+        if not self.can_approve(requester_telegram_user_id):
+            return ()
+        return self._telegram_accounts.list_seen(REGISTRATION_SUGGESTIONS_LIMIT)
+
+    def _save_pending_registration(
+        self,
+        profile: TelegramProfile,
+        display_name: str,
+        splitwise_member: SplitwiseMember | None,
+    ) -> RegisteredUser:
+        user = self._users.save_pending_registration(profile, display_name, splitwise_member)
+        self._registration_requests.clear(profile.telegram_user_id)
+        return user
 
 
 def _telegram_profile_from_known_account(
