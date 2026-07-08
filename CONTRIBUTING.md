@@ -1,14 +1,12 @@
 # Contributing
 
-## Fork-first setup
+## Collaborator setup
 
-Contributors should work from a fork unless they own `MSTarakanov/FoodBot` or have collaborator
-access.
+Owners and collaborators should work directly from `MSTarakanov/FoodBot`.
 
 ```bash
-git clone git@github.com:your-github-user/FoodBot.git
+git clone git@github.com:MSTarakanov/FoodBot.git
 cd FoodBot
-git remote add upstream git@github.com:MSTarakanov/FoodBot.git
 ./setup-dev
 ```
 
@@ -22,9 +20,26 @@ repo-local paths are applied.
 If GitHub SSH authentication is not ready, `./setup-dev` prints the steps for
 creating an SSH key and adding the public key to GitHub. An SSH key authenticates
 your GitHub account; it does not grant write access to the main repository by
-itself. Without collaborator access, push to your fork and open a pull request.
-Setup asks whether to re-check SSH, generate an ed25519 key and print its public
-key for GitHub, continue without SSH, or stop setup.
+itself. Setup also checks direct write access to `MSTarakanov/FoodBot` with a
+dry-run push. If access is not confirmed, ask the repository owner to add you:
+`MSTarakanov/FoodBot -> Settings -> Collaborators and teams -> Add people`.
+
+After accepting the collaborator invite, re-run `./setup-dev`, then create and
+push a feature branch:
+
+```bash
+git checkout -b feature/my-change
+git push origin feature/my-change
+```
+
+Branches named `feature/**`, `fix/**`, `docs/**`, or `chore/**` in the main
+repository open pull requests automatically. External contributors without
+collaborator access can still work fork-first: clone their fork as `origin`, add
+`upstream` pointing to `git@github.com:MSTarakanov/FoodBot.git`, push to the
+fork, and open a pull request.
+
+The `main` branch is protected. Pull requests must pass CI and require review
+from the code owner in `.github/CODEOWNERS`.
 
 ## Local development
 

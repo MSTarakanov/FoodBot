@@ -204,23 +204,31 @@ scripts/check
 For everyday feature work, contributors do not need production tokens, VPS access, or deployment
 secrets.
 
-Repository owners and collaborators may keep `origin` on `MSTarakanov/FoodBot` and push branches
-directly over SSH. External contributors should work fork-first: `origin` points to their fork and
-`upstream` points to `MSTarakanov/FoodBot`.
+Repository owners and collaborators should keep `origin` on `MSTarakanov/FoodBot` and push feature
+branches directly over SSH. `./setup-dev` checks SSH authentication and then uses a dry-run push to
+confirm whether the current GitHub account has write access to `MSTarakanov/FoodBot`. If access is
+not confirmed, ask the repository owner to add you in GitHub:
+`MSTarakanov/FoodBot -> Settings -> Collaborators and teams -> Add people`.
 
 1. Create a branch named `feature/...`, `fix/...`, `docs/...`, or `chore/...`.
 2. Run the bot locally with a personal development Telegram bot token.
 3. Run local checks.
-4. Push the branch to your fork or to the main repository if you have collaborator access.
+4. Push the branch to the main repository.
 
-GitHub creates a pull request and runs checks. A maintainer reviews and merges the pull request;
-after `main` is updated, GitHub deploys the bot to the VPS.
+GitHub creates a pull request for feature branches in the main repository and runs checks. A
+maintainer reviews and merges the pull request; after `main` is updated, GitHub deploys the bot to
+the VPS. External contributors without collaborator access can still work fork-first: `origin`
+points to their fork and `upstream` points to `MSTarakanov/FoodBot`.
 
 SSH authentication is required for SSH remotes. `./setup-dev` checks `git@github.com` and prints
 instructions for creating an SSH key and adding the public key in GitHub Settings if authentication
 is not ready. The SSH key authenticates your GitHub account; it does not grant write access to the
 main repository by itself. If SSH is not ready, setup asks whether to re-check SSH, generate an
 ed25519 key and print its public key for GitHub, continue without SSH, or stop setup.
+
+The `main` branch is protected. Pull requests must pass `CI / checks` and require review from the
+repository code owner. The repository keeps `.github/CODEOWNERS` on `main` so changes request
+review from `@MSTarakanov`.
 
 ## Adding a Command
 
