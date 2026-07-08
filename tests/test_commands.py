@@ -516,6 +516,35 @@ async def test_hi_logs_bot_identity(
     assert seen_account.last_name == "Petrov"
 
 
+async def test_command_updates_existing_telegram_profile(tmp_path: Path) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+    users = UserRepository(database)
+    users.create_pending_user(
+        TelegramProfile(
+            telegram_user_id=42,
+            username=None,
+            first_name="Telegram ID 42",
+            last_name=None,
+        ),
+        "Максим",
+    )
+    users.approve_by_telegram_id(42)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/hi", first_name="Misha", last_name="Petrov", username="misha"),
+    )
+
+    user = users.get_by_telegram_id(42)
+    assert user is not None
+    assert user.username == "misha"
+    assert user.first_name == "Misha"
+    assert user.last_name == "Petrov"
+
+
 async def test_help_shows_admin_commands_to_admins(tmp_path: Path) -> None:
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
@@ -780,6 +809,44 @@ async def test_request_register_notifies_admin_with_register_command(tmp_path: P
     ]
     assert session.sent_messages[1].chat_id == 7
     assert UserRepository(database).get_by_telegram_id(42) is None
+    seen_account = TelegramSeenRepository(database).get(42)
+    assert seen_account is not None
+    assert seen_account.username == "misha"
+    assert seen_account.first_name == "Misha"
+    assert seen_account.last_name == "Petrov"
+
+
+async def test_lunch_tags_user_registered_from_request_register(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update(
+            "/request_register",
+            user_id=42,
+            first_name="Misha",
+            last_name="Petrov",
+            username="misha",
+        ),
+    )
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/register 42", user_id=7))
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Максим", user_id=7))
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Пропустить", user_id=7))
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
+
+    assert sent_texts(session)[0] == "Время обедать! @misha"
 
 
 async def test_admin_register_requests_list_shows_seen_unregistered_users(

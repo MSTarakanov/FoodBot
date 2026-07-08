@@ -70,7 +70,7 @@ def build_services(
     )
     return BotServices(
         telegram_bot_username=telegram_bot_username,
-        telegram_interactions=TelegramInteractionService(seen_accounts),
+        telegram_interactions=TelegramInteractionService(seen_accounts, users),
         registration=registration,
         debug=debug,
         command_access=CommandAccessService(registration, debug),
