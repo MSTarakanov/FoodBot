@@ -1,8 +1,25 @@
 # Contributing
 
-## Collaborator setup
+## Contributor setup
 
-Owners and collaborators should work directly from `MSTarakanov/FoodBot`.
+`./setup-dev` asks which Git contribution flow you want to use:
+
+- `fork-first`: push feature branches to your fork, then open a pull request to
+  `MSTarakanov/FoodBot`. This does not require write access to the main
+  repository.
+- `collaborator/direct`: push feature branches directly to
+  `MSTarakanov/FoodBot`. This requires collaborator access.
+
+External contributors can start fork-first:
+
+```bash
+git clone git@github.com:your-github-user/FoodBot.git
+cd FoodBot
+git remote add upstream git@github.com:MSTarakanov/FoodBot.git
+./setup-dev
+```
+
+Owners and collaborators can work directly from `MSTarakanov/FoodBot`:
 
 ```bash
 git clone git@github.com:MSTarakanov/FoodBot.git
@@ -20,12 +37,14 @@ repo-local paths are applied.
 If GitHub SSH authentication is not ready, `./setup-dev` prints the steps for
 creating an SSH key and adding the public key to GitHub. An SSH key authenticates
 your GitHub account; it does not grant write access to the main repository by
-itself. Setup also checks direct write access to `MSTarakanov/FoodBot` with a
-dry-run push. If access is not confirmed, ask the repository owner to add you:
-`MSTarakanov/FoodBot -> Settings -> Collaborators and teams -> Add people`.
+itself.
 
-After accepting the collaborator invite, re-run `./setup-dev`, then create and
-push a feature branch:
+In collaborator/direct mode, setup checks direct write access to
+`MSTarakanov/FoodBot` with a dry-run push. If access is not confirmed, ask the
+repository owner for collaborator access and re-run `./setup-dev` after accepting
+the invite. Owner profile: <https://github.com/MSTarakanov>.
+
+Create and push a feature branch:
 
 ```bash
 git checkout -b feature/my-change
@@ -33,13 +52,13 @@ git push origin feature/my-change
 ```
 
 Branches named `feature/**`, `fix/**`, `docs/**`, or `chore/**` in the main
-repository open pull requests automatically. External contributors without
-collaborator access can still work fork-first: clone their fork as `origin`, add
-`upstream` pointing to `git@github.com:MSTarakanov/FoodBot.git`, push to the
-fork, and open a pull request.
+repository open pull requests automatically.
 
 The `main` branch is protected. Pull requests must pass CI and require review
 from the code owner in `.github/CODEOWNERS`.
+
+Maintainer note: to grant direct push access, open the repository settings and
+use `MSTarakanov/FoodBot -> Settings -> Collaborators and teams -> Add people`.
 
 ## Local development
 

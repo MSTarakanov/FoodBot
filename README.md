@@ -166,7 +166,7 @@ not be active from two places for the same bot token.
 The local runtime has a guard for this: if `.env` accidentally contains the production bot token,
 `./run office-food-bot` exits before starting polling.
 
-Recommended developer flow:
+Recommended fork-first developer flow:
 
 ```bash
 git clone git@github.com:your-github-user/FoodBot.git
@@ -174,6 +174,11 @@ cd FoodBot
 git remote add upstream git@github.com:MSTarakanov/FoodBot.git
 ./setup-dev
 ```
+
+Owners and collaborators can also clone `git@github.com:MSTarakanov/FoodBot.git`
+directly. `./setup-dev` explains the difference between fork-first and
+collaborator/direct development, detects the current remotes, and asks whether
+to continue with the detected flow before changing remotes.
 
 Create a personal development bot via `@BotFather`; setup asks for its token and writes the token
 and bot username to `.env`. If token verification is available, setup detects the username from the
@@ -207,8 +212,8 @@ secrets.
 Repository owners and collaborators should keep `origin` on `MSTarakanov/FoodBot` and push feature
 branches directly over SSH. `./setup-dev` checks SSH authentication and then uses a dry-run push to
 confirm whether the current GitHub account has write access to `MSTarakanov/FoodBot`. If access is
-not confirmed, ask the repository owner to add you in GitHub:
-`MSTarakanov/FoodBot -> Settings -> Collaborators and teams -> Add people`.
+not confirmed, ask the repository owner for collaborator access and re-run setup after accepting the
+invite. Owner profile: <https://github.com/MSTarakanov>.
 
 1. Create a branch named `feature/...`, `fix/...`, `docs/...`, or `chore/...`.
 2. Run the bot locally with a personal development Telegram bot token.
@@ -218,7 +223,8 @@ not confirmed, ask the repository owner to add you in GitHub:
 GitHub creates a pull request for feature branches in the main repository and runs checks. A
 maintainer reviews and merges the pull request; after `main` is updated, GitHub deploys the bot to
 the VPS. External contributors without collaborator access can still work fork-first: `origin`
-points to their fork and `upstream` points to `MSTarakanov/FoodBot`.
+points to their fork and `upstream` points to `MSTarakanov/FoodBot`; setup can configure this flow
+when asked.
 
 SSH authentication is required for SSH remotes. `./setup-dev` checks `git@github.com` and prints
 instructions for creating an SSH key and adding the public key in GitHub Settings if authentication
@@ -229,6 +235,9 @@ ed25519 key and print its public key for GitHub, continue without SSH, or stop s
 The `main` branch is protected. Pull requests must pass `CI / checks` and require review from the
 repository code owner. The repository keeps `.github/CODEOWNERS` on `main` so changes request
 review from `@MSTarakanov`.
+
+Maintainer note: to grant direct push access, open
+`MSTarakanov/FoodBot -> Settings -> Collaborators and teams -> Add people`.
 
 ## Adding a Command
 
