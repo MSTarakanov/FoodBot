@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import pty
 import select
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -44,6 +45,7 @@ def run_interactive_setup(
     command: list[str],
     cwd: Path,
     user_input: str,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     master_fd, slave_fd = pty.openpty()
     process = subprocess.Popen(
@@ -53,7 +55,7 @@ def run_interactive_setup(
         stdout=slave_fd,
         stderr=slave_fd,
         close_fds=True,
-        env=clean_git_environment(),
+        env=env or clean_git_environment(),
     )
     os.close(slave_fd)
     output_chunks: list[bytes] = []
@@ -101,6 +103,169 @@ def run_git(cwd: Path, *args: str) -> None:
     )
 
 
+def write_executable(path: Path, content: str) -> None:
+    path.write_text(content, encoding="utf-8")
+    path.chmod(0o755)
+
+
+def make_setup_repo(tmp_path: Path, origin_url: str) -> Path:
+    repo = tmp_path / "FoodBot"
+    repo.mkdir()
+    (repo / "scripts").mkdir()
+    setup_copy = repo / "scripts" / "setup-dev"
+    setup_copy.write_text(SETUP_DEV.read_text(encoding="utf-8"), encoding="utf-8")
+    setup_copy.chmod(0o755)
+    (repo / ".env.defaults").write_text(
+        "SPLITWISE_GROUP_ID=55\nPRODUCTION_TELEGRAM_BOT_ID=8490386710\n",
+        encoding="utf-8",
+    )
+    (repo / ".tools" / "bin").mkdir(parents=True)
+    write_executable(repo / ".tools" / "bin" / "uv", "#!/usr/bin/env bash\nexit 0\n")
+
+    run_git(repo, "init")
+    run_git(repo, "config", "user.name", "Test User")
+    run_git(repo, "config", "user.email", "test@example.com")
+    run_git(repo, "add", "scripts/setup-dev", ".env.defaults")
+    run_git(repo, "commit", "-m", "init")
+    run_git(repo, "remote", "add", "origin", origin_url)
+    return repo
+
+
+def setup_fake_github_tools(
+    tmp_path: Path,
+    *,
+    git_push_status: int,
+    git_push_output: str,
+    ssh_user: str = "friend",
+) -> dict[str, str]:
+    real_git = shutil.which("git")
+    assert real_git is not None
+
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    write_executable(
+        fake_bin / "ssh",
+        "#!/usr/bin/env bash\n"
+        f"echo \"Hi {ssh_user}! You've successfully authenticated, "
+        "but GitHub does not provide shell access.\"\n"
+        "exit 1\n",
+    )
+    write_executable(
+        fake_bin / "git",
+        "#!/usr/bin/env bash\n"
+        "if [[ \"$1\" == \"push\" ]]; then\n"
+        f"  echo {git_push_output!r} >&2\n"
+        f"  exit {git_push_status}\n"
+        "fi\n"
+        f"exec \"{real_git}\" \"$@\"\n",
+    )
+
+    env = clean_git_environment()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    return env
+
+
+def run_full_setup_with_fake_github(
+    repo: Path,
+    env: dict[str, str],
+) -> subprocess.CompletedProcess[str]:
+    return run_interactive_setup(
+        ["bash", str(repo / "scripts" / "setup-dev"), "--skip-token-check"],
+        repo,
+        "123456:test-token\nfoodbot_dev\nn\ndev-splitwise-key\n",
+        env=env,
+    )
+
+
+def test_setup_dev_prints_confirmed_direct_feature_flow(tmp_path: Path) -> None:
+    repo = make_setup_repo(tmp_path, "git@github.com:MSTarakanov/FoodBot.git")
+    env = setup_fake_github_tools(
+        tmp_path,
+        git_push_status=0,
+        git_push_output="dry-run push accepted",
+    )
+
+    result = run_full_setup_with_fake_github(repo, env)
+
+    assert result.returncode == 0
+    assert "Write access to MSTarakanov/FoodBot confirmed." in result.stdout
+    assert "Write access to MSTarakanov/FoodBot: confirmed" in result.stdout
+    assert "Feature flow:" in result.stdout
+    assert "git checkout -b feature/name" in result.stdout
+    assert "git push origin feature/name" in result.stdout
+    assert "To push feature branches directly" not in result.stdout
+
+
+def test_setup_dev_prints_collaborator_invite_when_direct_push_denied(
+    tmp_path: Path,
+) -> None:
+    repo = make_setup_repo(tmp_path, "git@github.com:MSTarakanov/FoodBot.git")
+    env = setup_fake_github_tools(
+        tmp_path,
+        git_push_status=1,
+        git_push_output="ERROR: Permission to MSTarakanov/FoodBot.git denied to friend.",
+    )
+
+    result = run_full_setup_with_fake_github(repo, env)
+
+    assert result.returncode == 0
+    assert "Write access to MSTarakanov/FoodBot is not confirmed." in result.stdout
+    assert "Write access to MSTarakanov/FoodBot: not confirmed" in result.stdout
+    assert "To push feature branches directly" in result.stdout
+    assert (
+        "MSTarakanov/FoodBot -> Settings -> Collaborators and teams -> Add people"
+        in result.stdout
+    )
+    assert "After accepting the invite:" in result.stdout
+
+
+def test_setup_dev_prints_unknown_direct_push_access_diagnostic(
+    tmp_path: Path,
+) -> None:
+    repo = make_setup_repo(tmp_path, "git@github.com:MSTarakanov/FoodBot.git")
+    env = setup_fake_github_tools(
+        tmp_path,
+        git_push_status=1,
+        git_push_output="fatal: unable to access remote: network is unreachable",
+    )
+
+    result = run_full_setup_with_fake_github(repo, env)
+
+    assert result.returncode == 0
+    assert "Could not reliably check write access to MSTarakanov/FoodBot." in result.stdout
+    assert "Write access to MSTarakanov/FoodBot: could not be checked" in result.stdout
+    assert "If git push is rejected" in result.stdout
+    assert (
+        "MSTarakanov/FoodBot -> Settings -> Collaborators and teams -> Add people"
+        in result.stdout
+    )
+
+
+def test_setup_dev_keeps_fork_origin_flow_without_direct_push_check(tmp_path: Path) -> None:
+    repo = make_setup_repo(tmp_path, "git@github.com:friend/FoodBot.git")
+    env = setup_fake_github_tools(
+        tmp_path,
+        git_push_status=99,
+        git_push_output="dry-run push should not be called for fork origin",
+    )
+
+    result = run_full_setup_with_fake_github(repo, env)
+
+    assert result.returncode == 0
+    assert "Added upstream -> git@github.com:MSTarakanov/FoodBot.git" in result.stdout
+    assert "GitHub access:" not in result.stdout
+    assert "dry-run push should not be called for fork origin" not in result.stdout
+    remote_origin = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=True,
+        env=clean_git_environment(),
+    )
+    assert remote_origin.stdout.strip() == "git@github.com:friend/FoodBot.git"
+
+
 def test_setup_dev_creates_env_with_admin_id(tmp_path: Path) -> None:
     result = run_env_setup(
         tmp_path,
@@ -121,6 +286,7 @@ def test_setup_dev_creates_env_with_admin_id(tmp_path: Path) -> None:
     assert "123456:test-token" not in result.stderr
     assert "dev-splitwise-key" not in result.stdout
     assert "dev-splitwise-key" not in result.stderr
+    assert "Feature flow:" not in result.stdout
 
 
 def test_setup_dev_reuses_local_state_for_linked_worktree(tmp_path: Path) -> None:

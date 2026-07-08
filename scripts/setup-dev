@@ -17,6 +17,8 @@ TOOLS_DIR="$REPO_ROOT/.tools"
 LOCAL_UV_BIN="$TOOLS_DIR/bin/uv"
 UV_BIN=""
 GITHUB_SSH_USER=""
+OFFICIAL_REPO_ORIGIN=0
+OFFICIAL_REPO_WRITE_ACCESS="unknown"
 ENV_TMP_FILE=""
 
 cleanup_setup_dev() {
@@ -553,6 +555,62 @@ is_official_repo_url() {
   esac
 }
 
+github_user_ref_slug() {
+  local user="$1"
+  local slug=""
+
+  slug="$(printf "%s" "${user:-unknown}" | tr -c '[:alnum:]_.-' '-')"
+  slug="${slug#.}"
+  slug="${slug%.}"
+  slug="${slug:-unknown}"
+  printf "%s" "$slug"
+}
+
+check_official_repo_write_access() {
+  OFFICIAL_REPO_WRITE_ACCESS="unknown"
+
+  if [[ -z "$GITHUB_SSH_USER" ]]; then
+    return
+  fi
+
+  local user_slug=""
+  local check_ref=""
+  local push_output=""
+  local push_status=0
+
+  user_slug="$(github_user_ref_slug "$GITHUB_SSH_USER")"
+  check_ref="refs/heads/setup-access-check/$user_slug"
+
+  set +e
+  push_output="$(
+    git push \
+      --dry-run \
+      --no-verify \
+      "$OFFICIAL_REPO_SSH" \
+      "HEAD:$check_ref" 2>&1
+  )"
+  push_status=$?
+  set -e
+
+  if [[ "$push_status" -eq 0 ]]; then
+    OFFICIAL_REPO_WRITE_ACCESS="confirmed"
+    return
+  fi
+
+  case "$push_output" in
+    *"Permission to"* | \
+      *"permission denied"* | \
+      *"Permission denied"* | \
+      *"Write access to repository not granted"* | \
+      *"Repository not found"*)
+      OFFICIAL_REPO_WRITE_ACCESS="denied"
+      ;;
+    *)
+      OFFICIAL_REPO_WRITE_ACCESS="unknown"
+      ;;
+  esac
+}
+
 configure_git_remotes() {
   print_step "Git remotes"
 
@@ -571,11 +629,14 @@ configure_git_remotes() {
   echo "  upstream: ${upstream_url:-not configured}"
 
   if [[ -n "$origin_url" ]] && is_official_repo_url "$origin_url"; then
+    OFFICIAL_REPO_ORIGIN=1
+
     if [[ "$GITHUB_SSH_USER" == "MSTarakanov" ]]; then
       if [[ "$origin_url" != "$OFFICIAL_REPO_SSH" ]]; then
         git remote set-url origin "$OFFICIAL_REPO_SSH"
         echo "origin now uses SSH for MSTarakanov/FoodBot."
       fi
+      OFFICIAL_REPO_WRITE_ACCESS="confirmed"
       echo "GitHub SSH authenticated as repository owner MSTarakanov; keeping direct-push origin."
       return
     fi
@@ -583,40 +644,28 @@ configure_git_remotes() {
     printf "%s\n" \
       "" \
       "origin points to MSTarakanov/FoodBot." \
-      "GitHub SSH user: ${GITHUB_SSH_USER:-unknown}" \
-      "If this account has collaborator access, you can keep direct-push origin." \
-      "Otherwise, use fork-first: origin points to your fork and upstream points to MSTarakanov/FoodBot."
+      "GitHub SSH user: ${GITHUB_SSH_USER:-unknown}"
 
-    local keep_direct_origin="n"
-    prompt_yes_no keep_direct_origin "Keep direct-push origin on MSTarakanov/FoodBot?" "n"
-    if [[ "$keep_direct_origin" == "y" ]]; then
-      if [[ "$origin_url" == "$OFFICIAL_REPO_HTTPS" || "$origin_url" == "https://github.com/MSTarakanov/FoodBot" ]]; then
-        git remote set-url origin "$OFFICIAL_REPO_SSH"
-        echo "origin now uses SSH for MSTarakanov/FoodBot."
-      fi
-
-      echo "Keeping origin on MSTarakanov/FoodBot. Direct pushes require collaborator access."
-      return
+    if [[ "$origin_url" != "$OFFICIAL_REPO_SSH" && -n "$GITHUB_SSH_USER" ]]; then
+      git remote set-url origin "$OFFICIAL_REPO_SSH"
+      echo "origin now uses SSH for MSTarakanov/FoodBot."
     fi
 
-    local configure_fork="y"
-    prompt_yes_no configure_fork "Configure fork-first remotes now?" "y"
-    if [[ "$configure_fork" == "y" ]]; then
-      local fork_url=""
-      prompt_value fork_url "Fork SSH URL, for example git@github.com:your-user/FoodBot.git" "" 1 0
+    echo "Checking write access to MSTarakanov/FoodBot with a dry-run push..."
+    check_official_repo_write_access
 
-      if [[ -z "$upstream_url" ]]; then
-        git remote add upstream "$OFFICIAL_REPO_SSH"
-      elif ! is_official_repo_url "$upstream_url"; then
-        git remote set-url upstream "$OFFICIAL_REPO_SSH"
-      fi
-      git remote set-url origin "$fork_url"
-      echo "origin now points to your fork; upstream points to MSTarakanov/FoodBot."
-      return
-    fi
-
-    echo "Setup stopped. Configure a fork or confirm direct-push access."
-    exit 1
+    case "$OFFICIAL_REPO_WRITE_ACCESS" in
+      confirmed)
+        echo "Write access to MSTarakanov/FoodBot confirmed."
+        ;;
+      denied)
+        echo "Write access to MSTarakanov/FoodBot is not confirmed."
+        ;;
+      unknown)
+        echo "Could not reliably check write access to MSTarakanov/FoodBot."
+        ;;
+    esac
+    return
   fi
 
   if [[ -n "$origin_url" && -z "$upstream_url" ]]; then
@@ -625,6 +674,48 @@ configure_git_remotes() {
   elif [[ -n "$upstream_url" ]] && ! is_official_repo_url "$upstream_url"; then
     echo "upstream does not point to MSTarakanov/FoodBot; leaving it unchanged."
   fi
+}
+
+print_official_repo_next_steps() {
+  if [[ "$OFFICIAL_REPO_ORIGIN" -ne 1 ]]; then
+    return
+  fi
+
+  echo
+  echo "GitHub access:"
+  echo "  SSH user: ${GITHUB_SSH_USER:-unknown}"
+
+  case "$OFFICIAL_REPO_WRITE_ACCESS" in
+    confirmed)
+      echo "  Write access to MSTarakanov/FoodBot: confirmed"
+      echo
+      echo "Feature flow:"
+      echo "  git checkout -b feature/name"
+      echo "  git push origin feature/name"
+      ;;
+    denied)
+      echo "  Write access to MSTarakanov/FoodBot: not confirmed"
+      echo
+      echo "To push feature branches directly, ask the repository owner to add you:"
+      echo "  MSTarakanov/FoodBot -> Settings -> Collaborators and teams -> Add people"
+      echo
+      echo "After accepting the invite:"
+      echo "  ./setup-dev"
+      echo "  git checkout -b feature/name"
+      echo "  git push origin feature/name"
+      ;;
+    unknown)
+      echo "  Write access to MSTarakanov/FoodBot: could not be checked"
+      echo
+      echo "If git push is rejected, ask the repository owner to add you:"
+      echo "  MSTarakanov/FoodBot -> Settings -> Collaborators and teams -> Add people"
+      echo
+      echo "After accepting the invite:"
+      echo "  ./setup-dev"
+      echo "  git checkout -b feature/name"
+      echo "  git push origin feature/name"
+      ;;
+  esac
 }
 
 read_env_value() {
@@ -1009,6 +1100,7 @@ configure_env
 if [[ "$ENV_ONLY" -eq 0 ]]; then
   print_step "Done"
   echo "Local environment is ready."
+  print_official_repo_next_steps
   echo "Run the bot with:"
   echo "  ./run office-food-bot"
   echo "Run checks with:"
