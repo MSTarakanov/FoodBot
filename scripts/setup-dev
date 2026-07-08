@@ -3,6 +3,8 @@ set -euo pipefail
 
 OFFICIAL_REPO_SSH="git@github.com:MSTarakanov/FoodBot.git"
 OFFICIAL_REPO_HTTPS="https://github.com/MSTarakanov/FoodBot.git"
+OWNER_PROFILE_URL="https://github.com/MSTarakanov"
+COLLABORATOR_REQUEST_ISSUE_URL="https://github.com/MSTarakanov/FoodBot/issues/new?title=Collaborator%20access%20request"
 DEFAULT_DATABASE_PATH="foodbot.local.sqlite3"
 DEFAULT_TIMEZONE="Europe/Belgrade"
 
@@ -19,6 +21,7 @@ UV_BIN=""
 GITHUB_SSH_USER=""
 OFFICIAL_REPO_ORIGIN=0
 OFFICIAL_REPO_WRITE_ACCESS="unknown"
+CONTRIBUTION_FLOW=""
 DETECTED_TELEGRAM_BOT_USERNAME=""
 ENV_TMP_FILE=""
 
@@ -196,6 +199,28 @@ prompt_value_or_keep_current() {
   fi
 
   prompt_value "$result_variable" "$label" "" "$required" 0
+}
+
+prompt_value_with_default() {
+  local result_variable="$1"
+  local label="$2"
+  local default_value="$3"
+  local required="$4"
+  local answer=""
+
+  if [[ -n "$default_value" ]]; then
+    read -r -p "$label [$default_value]: " answer
+    answer="${answer:-$default_value}"
+  else
+    read -r -p "$label: " answer
+  fi
+
+  if [[ "$required" -eq 1 && -z "$answer" ]]; then
+    echo "$label is required." >&2
+    exit 1
+  fi
+
+  printf -v "$result_variable" "%s" "$answer"
 }
 
 prompt_choice() {
@@ -612,8 +637,225 @@ check_official_repo_write_access() {
   esac
 }
 
+detect_contribution_flow() {
+  local origin_url="$1"
+  local upstream_url="$2"
+
+  if [[ -n "$origin_url" ]] && is_official_repo_url "$origin_url"; then
+    printf "%s" "direct"
+    return
+  fi
+
+  if [[ -n "$origin_url" && -n "$upstream_url" ]] && is_official_repo_url "$upstream_url"; then
+    printf "%s" "fork"
+    return
+  fi
+
+  printf "%s" "unknown"
+}
+
+contribution_flow_label() {
+  case "$1" in
+    fork)
+      printf "%s" "fork-first"
+      ;;
+    direct)
+      printf "%s" "collaborator/direct"
+      ;;
+    *)
+      printf "%s" "unknown"
+      ;;
+  esac
+}
+
+print_contribution_flow_explanation() {
+  printf "%s\n" \
+    "Choose how this clone will push branches:" \
+    "  1) Fork-first: push to your fork, then open a PR to MSTarakanov/FoodBot." \
+    "     Write access to the main repository is not required." \
+    "  2) Collaborator/direct: push feature branches directly to MSTarakanov/FoodBot." \
+    "     This requires collaborator access."
+}
+
+prompt_contribution_flow_choice() {
+  local result_variable="$1"
+  local default_choice="1"
+  local choice=""
+
+  if [[ "$GITHUB_SSH_USER" == "MSTarakanov" ]]; then
+    default_choice="2"
+  fi
+
+  print_contribution_flow_explanation
+  while true; do
+    prompt_choice choice "Select 1-2 [$default_choice]:"
+    choice="${choice:-$default_choice}"
+    case "$choice" in
+      1 | fork | fork-first)
+        printf -v "$result_variable" "fork"
+        return
+        ;;
+      2 | direct | collaborator | collaborator/direct)
+        printf -v "$result_variable" "direct"
+        return
+        ;;
+      *)
+        echo "Please choose 1 or 2." >&2
+        ;;
+    esac
+  done
+}
+
+select_contribution_flow() {
+  local origin_url="$1"
+  local upstream_url="$2"
+  local detected_flow=""
+  detected_flow="$(detect_contribution_flow "$origin_url" "$upstream_url")"
+
+  if [[ "$detected_flow" != "unknown" ]]; then
+    local detected_label=""
+    local continue_detected="y"
+    detected_label="$(contribution_flow_label "$detected_flow")"
+    prompt_yes_no \
+      continue_detected \
+      "Current setup looks like $detected_label. Continue with $detected_label?" \
+      "y"
+    if [[ "$continue_detected" == "y" ]]; then
+      CONTRIBUTION_FLOW="$detected_flow"
+      return
+    fi
+  fi
+
+  prompt_contribution_flow_choice CONTRIBUTION_FLOW
+}
+
+prompt_fork_url() {
+  local result_variable="$1"
+  local fork_default=""
+  local fork_url=""
+
+  if [[ -n "$GITHUB_SSH_USER" && "$GITHUB_SSH_USER" != "MSTarakanov" ]]; then
+    fork_default="git@github.com:$GITHUB_SSH_USER/FoodBot.git"
+  fi
+
+  while true; do
+    echo "Fork SSH URL, for example git@github.com:your-user/FoodBot.git"
+    prompt_value_with_default fork_url "Fork SSH URL" "$fork_default" 1
+    if is_official_repo_url "$fork_url"; then
+      echo "Fork SSH URL must point to your fork, not MSTarakanov/FoodBot." >&2
+      continue
+    fi
+    printf -v "$result_variable" "%s" "$fork_url"
+    return
+  done
+}
+
+set_origin_url() {
+  local origin_url="$1"
+  local target_url="$2"
+
+  if [[ -z "$origin_url" ]]; then
+    git remote add origin "$target_url"
+  elif [[ "$origin_url" != "$target_url" ]]; then
+    git remote set-url origin "$target_url"
+  else
+    return
+  fi
+  echo "origin -> $target_url"
+}
+
+configure_upstream_official() {
+  local upstream_url="$1"
+
+  if [[ -z "$upstream_url" ]]; then
+    git remote add upstream "$OFFICIAL_REPO_SSH"
+    echo "upstream -> $OFFICIAL_REPO_SSH"
+  elif is_official_repo_url "$upstream_url"; then
+    if [[ "$upstream_url" != "$OFFICIAL_REPO_SSH" ]]; then
+      git remote set-url upstream "$OFFICIAL_REPO_SSH"
+      echo "upstream -> $OFFICIAL_REPO_SSH"
+    fi
+  else
+    echo "upstream does not point to MSTarakanov/FoodBot; leaving it unchanged."
+  fi
+}
+
+configure_fork_flow() {
+  local origin_url="$1"
+  local upstream_url="$2"
+  local selected_fork_url=""
+
+  CONTRIBUTION_FLOW="fork"
+  OFFICIAL_REPO_ORIGIN=0
+  OFFICIAL_REPO_WRITE_ACCESS="unknown"
+
+  if [[ -n "$origin_url" ]] && ! is_official_repo_url "$origin_url"; then
+    echo "Keeping fork origin: $origin_url"
+  else
+    prompt_fork_url selected_fork_url
+    set_origin_url "$origin_url" "$selected_fork_url"
+  fi
+
+  configure_upstream_official "$upstream_url"
+}
+
+print_write_access_result() {
+  case "$OFFICIAL_REPO_WRITE_ACCESS" in
+    confirmed)
+      echo "Write access to MSTarakanov/FoodBot confirmed."
+      ;;
+    denied)
+      echo "Write access to MSTarakanov/FoodBot is not confirmed."
+      ;;
+    unknown)
+      echo "Could not reliably check write access to MSTarakanov/FoodBot."
+      ;;
+  esac
+}
+
+print_collaborator_access_help() {
+  printf "%s\n" \
+    "Write access is not confirmed. Ask the repository owner for collaborator access, then re-run ./setup-dev." \
+    "Owner profile: $OWNER_PROFILE_URL" \
+    "Optional request issue: $COLLABORATOR_REQUEST_ISSUE_URL"
+}
+
+configure_direct_flow() {
+  local origin_url="$1"
+  local upstream_url="$2"
+
+  CONTRIBUTION_FLOW="direct"
+  OFFICIAL_REPO_ORIGIN=1
+
+  if [[ "$origin_url" != "$OFFICIAL_REPO_SSH" ]]; then
+    set_origin_url "$origin_url" "$OFFICIAL_REPO_SSH"
+  fi
+
+  if [[ "$GITHUB_SSH_USER" == "MSTarakanov" ]]; then
+    OFFICIAL_REPO_WRITE_ACCESS="confirmed"
+    echo "GitHub SSH authenticated as repository owner MSTarakanov."
+    return
+  fi
+
+  echo "Checking write access to MSTarakanov/FoodBot with a dry-run push..."
+  check_official_repo_write_access
+  print_write_access_result
+
+  if [[ "$OFFICIAL_REPO_WRITE_ACCESS" == "confirmed" ]]; then
+    return
+  fi
+
+  print_collaborator_access_help
+
+  local configure_fork="y"
+  prompt_yes_no configure_fork "Configure fork-first instead?" "y"
+  if [[ "$configure_fork" == "y" ]]; then
+    configure_fork_flow "$OFFICIAL_REPO_SSH" "$upstream_url"
+  fi
+}
+
 configure_git_remotes() {
-  print_step "Git remotes"
+  print_step "Git contribution flow"
 
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "Not inside a git repository; skipping remote checks."
@@ -629,92 +871,56 @@ configure_git_remotes() {
   echo "  origin: ${origin_url:-not configured}"
   echo "  upstream: ${upstream_url:-not configured}"
 
-  if [[ -n "$origin_url" ]] && is_official_repo_url "$origin_url"; then
-    OFFICIAL_REPO_ORIGIN=1
+  select_contribution_flow "$origin_url" "$upstream_url"
 
-    if [[ "$GITHUB_SSH_USER" == "MSTarakanov" ]]; then
-      if [[ "$origin_url" != "$OFFICIAL_REPO_SSH" ]]; then
-        git remote set-url origin "$OFFICIAL_REPO_SSH"
-        echo "origin now uses SSH for MSTarakanov/FoodBot."
-      fi
-      OFFICIAL_REPO_WRITE_ACCESS="confirmed"
-      echo "GitHub SSH authenticated as repository owner MSTarakanov; keeping direct-push origin."
-      return
-    fi
-
-    printf "%s\n" \
-      "" \
-      "origin points to MSTarakanov/FoodBot." \
-      "GitHub SSH user: ${GITHUB_SSH_USER:-unknown}"
-
-    if [[ "$origin_url" != "$OFFICIAL_REPO_SSH" && -n "$GITHUB_SSH_USER" ]]; then
-      git remote set-url origin "$OFFICIAL_REPO_SSH"
-      echo "origin now uses SSH for MSTarakanov/FoodBot."
-    fi
-
-    echo "Checking write access to MSTarakanov/FoodBot with a dry-run push..."
-    check_official_repo_write_access
-
-    case "$OFFICIAL_REPO_WRITE_ACCESS" in
-      confirmed)
-        echo "Write access to MSTarakanov/FoodBot confirmed."
-        ;;
-      denied)
-        echo "Write access to MSTarakanov/FoodBot is not confirmed."
-        ;;
-      unknown)
-        echo "Could not reliably check write access to MSTarakanov/FoodBot."
-        ;;
-    esac
-    return
-  fi
-
-  if [[ -n "$origin_url" && -z "$upstream_url" ]]; then
-    git remote add upstream "$OFFICIAL_REPO_SSH"
-    echo "Added upstream -> $OFFICIAL_REPO_SSH"
-  elif [[ -n "$upstream_url" ]] && ! is_official_repo_url "$upstream_url"; then
-    echo "upstream does not point to MSTarakanov/FoodBot; leaving it unchanged."
-  fi
+  case "$CONTRIBUTION_FLOW" in
+    fork)
+      configure_fork_flow "$origin_url" "$upstream_url"
+      ;;
+    direct)
+      configure_direct_flow "$origin_url" "$upstream_url"
+      ;;
+  esac
 }
 
-print_official_repo_next_steps() {
-  if [[ "$OFFICIAL_REPO_ORIGIN" -ne 1 ]]; then
+print_contribution_flow_next_steps() {
+  if [[ -z "$CONTRIBUTION_FLOW" ]]; then
     return
   fi
 
   echo
-  echo "GitHub access:"
+  echo "Git contribution flow:"
+  echo "  $(contribution_flow_label "$CONTRIBUTION_FLOW")"
   echo "  SSH user: ${GITHUB_SSH_USER:-unknown}"
 
-  case "$OFFICIAL_REPO_WRITE_ACCESS" in
-    confirmed)
-      echo "  Write access to MSTarakanov/FoodBot: confirmed"
+  case "$CONTRIBUTION_FLOW" in
+    fork)
       echo
       echo "Feature flow:"
       echo "  git checkout -b feature/name"
       echo "  git push origin feature/name"
+      echo "  Open a pull request from your fork to MSTarakanov/FoodBot."
       ;;
-    denied)
-      echo "  Write access to MSTarakanov/FoodBot: not confirmed"
-      echo
-      echo "To push feature branches directly, ask the repository owner to add you:"
-      echo "  MSTarakanov/FoodBot -> Settings -> Collaborators and teams -> Add people"
-      echo
-      echo "After accepting the invite:"
-      echo "  ./setup-dev"
-      echo "  git checkout -b feature/name"
-      echo "  git push origin feature/name"
-      ;;
-    unknown)
-      echo "  Write access to MSTarakanov/FoodBot: could not be checked"
-      echo
-      echo "If git push is rejected, ask the repository owner to add you:"
-      echo "  MSTarakanov/FoodBot -> Settings -> Collaborators and teams -> Add people"
-      echo
-      echo "After accepting the invite:"
-      echo "  ./setup-dev"
-      echo "  git checkout -b feature/name"
-      echo "  git push origin feature/name"
+    direct)
+      case "$OFFICIAL_REPO_WRITE_ACCESS" in
+        confirmed)
+          echo "  Write access to MSTarakanov/FoodBot: confirmed"
+          echo
+          echo "Feature flow:"
+          echo "  git checkout -b feature/name"
+          echo "  git push origin feature/name"
+          ;;
+        denied)
+          echo "  Write access to MSTarakanov/FoodBot: not confirmed"
+          echo
+          print_collaborator_access_help
+          ;;
+        unknown)
+          echo "  Write access to MSTarakanov/FoodBot: could not be checked"
+          echo
+          print_collaborator_access_help
+          ;;
+      esac
       ;;
   esac
 }
@@ -1081,7 +1287,7 @@ configure_env
 if [[ "$ENV_ONLY" -eq 0 ]]; then
   print_step "Done"
   echo "Local environment is ready."
-  print_official_repo_next_steps
+  print_contribution_flow_next_steps
   echo "Run the bot with:"
   echo "  ./run office-food-bot"
   echo "Run checks with:"

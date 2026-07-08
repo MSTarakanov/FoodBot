@@ -108,7 +108,7 @@ def write_executable(path: Path, content: str) -> None:
     path.chmod(0o755)
 
 
-def make_setup_repo(tmp_path: Path, origin_url: str) -> Path:
+def make_setup_repo(tmp_path: Path, origin_url: str | None) -> Path:
     repo = tmp_path / "FoodBot"
     repo.mkdir()
     (repo / "scripts").mkdir()
@@ -127,7 +127,8 @@ def make_setup_repo(tmp_path: Path, origin_url: str) -> Path:
     run_git(repo, "config", "user.email", "test@example.com")
     run_git(repo, "add", "scripts/setup-dev", ".env.defaults")
     run_git(repo, "commit", "-m", "init")
-    run_git(repo, "remote", "add", "origin", origin_url)
+    if origin_url is not None:
+        run_git(repo, "remote", "add", "origin", origin_url)
     return repo
 
 
@@ -168,11 +169,12 @@ def setup_fake_github_tools(
 def run_full_setup_with_fake_github(
     repo: Path,
     env: dict[str, str],
+    user_input: str = "y\n123456:test-token\nfoodbot_dev\nn\ndev-splitwise-key\n",
 ) -> subprocess.CompletedProcess[str]:
     return run_interactive_setup(
         ["bash", str(repo / "scripts" / "setup-dev"), "--skip-token-check"],
         repo,
-        "123456:test-token\nfoodbot_dev\nn\ndev-splitwise-key\n",
+        user_input,
         env=env,
     )
 
@@ -188,12 +190,16 @@ def test_setup_dev_prints_confirmed_direct_feature_flow(tmp_path: Path) -> None:
     result = run_full_setup_with_fake_github(repo, env)
 
     assert result.returncode == 0
+    assert "Current setup looks like collaborator/direct." in result.stdout
+    assert "Choose how this clone will push branches:" not in result.stdout
     assert "Write access to MSTarakanov/FoodBot confirmed." in result.stdout
+    assert "Git contribution flow:" in result.stdout
+    assert "collaborator/direct" in result.stdout
     assert "Write access to MSTarakanov/FoodBot: confirmed" in result.stdout
     assert "Feature flow:" in result.stdout
     assert "git checkout -b feature/name" in result.stdout
     assert "git push origin feature/name" in result.stdout
-    assert "To push feature branches directly" not in result.stdout
+    assert "Configure fork-first instead?" not in result.stdout
 
 
 def test_setup_dev_prints_collaborator_invite_when_direct_push_denied(
@@ -206,17 +212,23 @@ def test_setup_dev_prints_collaborator_invite_when_direct_push_denied(
         git_push_output="ERROR: Permission to MSTarakanov/FoodBot.git denied to friend.",
     )
 
-    result = run_full_setup_with_fake_github(repo, env)
+    result = run_full_setup_with_fake_github(
+        repo,
+        env,
+        "y\nn\n123456:test-token\nfoodbot_dev\nn\ndev-splitwise-key\n",
+    )
 
     assert result.returncode == 0
     assert "Write access to MSTarakanov/FoodBot is not confirmed." in result.stdout
     assert "Write access to MSTarakanov/FoodBot: not confirmed" in result.stdout
-    assert "To push feature branches directly" in result.stdout
+    assert "Ask the repository owner for collaborator access" in result.stdout
+    assert "Owner profile: https://github.com/MSTarakanov" in result.stdout
     assert (
-        "MSTarakanov/FoodBot -> Settings -> Collaborators and teams -> Add people"
+        "Optional request issue: https://github.com/MSTarakanov/FoodBot/issues/new"
         in result.stdout
     )
-    assert "After accepting the invite:" in result.stdout
+    assert "Settings -> Collaborators and teams -> Add people" not in result.stdout
+    assert "Configure fork-first instead?" in result.stdout
 
 
 def test_setup_dev_prints_unknown_direct_push_access_diagnostic(
@@ -229,20 +241,22 @@ def test_setup_dev_prints_unknown_direct_push_access_diagnostic(
         git_push_output="fatal: unable to access remote: network is unreachable",
     )
 
-    result = run_full_setup_with_fake_github(repo, env)
+    result = run_full_setup_with_fake_github(
+        repo,
+        env,
+        "y\nn\n123456:test-token\nfoodbot_dev\nn\ndev-splitwise-key\n",
+    )
 
     assert result.returncode == 0
     assert "Could not reliably check write access to MSTarakanov/FoodBot." in result.stdout
     assert "Write access to MSTarakanov/FoodBot: could not be checked" in result.stdout
-    assert "If git push is rejected" in result.stdout
-    assert (
-        "MSTarakanov/FoodBot -> Settings -> Collaborators and teams -> Add people"
-        in result.stdout
-    )
+    assert "Ask the repository owner for collaborator access" in result.stdout
+    assert "Settings -> Collaborators and teams -> Add people" not in result.stdout
 
 
 def test_setup_dev_keeps_fork_origin_flow_without_direct_push_check(tmp_path: Path) -> None:
     repo = make_setup_repo(tmp_path, "git@github.com:friend/FoodBot.git")
+    run_git(repo, "remote", "add", "upstream", "git@github.com:MSTarakanov/FoodBot.git")
     env = setup_fake_github_tools(
         tmp_path,
         git_push_status=99,
@@ -252,8 +266,12 @@ def test_setup_dev_keeps_fork_origin_flow_without_direct_push_check(tmp_path: Pa
     result = run_full_setup_with_fake_github(repo, env)
 
     assert result.returncode == 0
-    assert "Added upstream -> git@github.com:MSTarakanov/FoodBot.git" in result.stdout
-    assert "GitHub access:" not in result.stdout
+    assert "Current setup looks like fork-first. Continue with fork-first?" in result.stdout
+    assert "Choose how this clone will push branches:" not in result.stdout
+    assert "Select 1-2" not in result.stdout
+    assert "Keeping fork origin: git@github.com:friend/FoodBot.git" in result.stdout
+    assert "Git contribution flow:" in result.stdout
+    assert "fork-first" in result.stdout
     assert "dry-run push should not be called for fork origin" not in result.stdout
     remote_origin = subprocess.run(
         ["git", "remote", "get-url", "origin"],
@@ -264,6 +282,89 @@ def test_setup_dev_keeps_fork_origin_flow_without_direct_push_check(tmp_path: Pa
         env=clean_git_environment(),
     )
     assert remote_origin.stdout.strip() == "git@github.com:friend/FoodBot.git"
+
+
+def test_setup_dev_can_switch_detected_direct_origin_to_fork_flow(tmp_path: Path) -> None:
+    repo = make_setup_repo(tmp_path, "git@github.com:MSTarakanov/FoodBot.git")
+    env = setup_fake_github_tools(
+        tmp_path,
+        git_push_status=99,
+        git_push_output="dry-run push should not be called after fork choice",
+    )
+
+    result = run_full_setup_with_fake_github(
+        repo,
+        env,
+        "n\n1\ngit@github.com:friend/FoodBot.git\n123456:test-token\nfoodbot_dev\nn\ndev-splitwise-key\n",
+    )
+
+    assert result.returncode == 0
+    assert "Current setup looks like collaborator/direct." in result.stdout
+    assert "Choose how this clone will push branches:" in result.stdout
+    assert "Fork-first: push to your fork" in result.stdout
+    assert "Collaborator/direct: push feature branches directly" in result.stdout
+    assert "Select 1-2 [1]:" in result.stdout
+    assert "origin -> git@github.com:friend/FoodBot.git" in result.stdout
+    assert "upstream -> git@github.com:MSTarakanov/FoodBot.git" in result.stdout
+    assert "dry-run push should not be called after fork choice" not in result.stdout
+    remote_origin = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=True,
+        env=clean_git_environment(),
+    )
+    remote_upstream = subprocess.run(
+        ["git", "remote", "get-url", "upstream"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=True,
+        env=clean_git_environment(),
+    )
+    assert remote_origin.stdout.strip() == "git@github.com:friend/FoodBot.git"
+    assert remote_upstream.stdout.strip() == "git@github.com:MSTarakanov/FoodBot.git"
+
+
+def test_setup_dev_configures_unknown_remotes_as_fork_flow(tmp_path: Path) -> None:
+    repo = make_setup_repo(tmp_path, None)
+    env = setup_fake_github_tools(
+        tmp_path,
+        git_push_status=99,
+        git_push_output="dry-run push should not be called for fork choice",
+    )
+
+    result = run_full_setup_with_fake_github(
+        repo,
+        env,
+        "1\ngit@github.com:friend/FoodBot.git\n123456:test-token\n"
+        "foodbot_dev\nn\ndev-splitwise-key\n",
+    )
+
+    assert result.returncode == 0
+    assert "Select 1-2 [1]:" in result.stdout
+    assert "origin -> git@github.com:friend/FoodBot.git" in result.stdout
+    assert "upstream -> git@github.com:MSTarakanov/FoodBot.git" in result.stdout
+    assert "dry-run push should not be called for fork choice" not in result.stdout
+    remote_origin = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=True,
+        env=clean_git_environment(),
+    )
+    remote_upstream = subprocess.run(
+        ["git", "remote", "get-url", "upstream"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=True,
+        env=clean_git_environment(),
+    )
+    assert remote_origin.stdout.strip() == "git@github.com:friend/FoodBot.git"
+    assert remote_upstream.stdout.strip() == "git@github.com:MSTarakanov/FoodBot.git"
 
 
 def test_setup_dev_creates_env_with_admin_id(tmp_path: Path) -> None:
