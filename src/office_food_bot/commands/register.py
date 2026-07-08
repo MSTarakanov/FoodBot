@@ -99,6 +99,8 @@ async def request_register_command(
         await messenger.reply(message, block_reason)
         return
 
+    services.registration.request_registration(profile)
+
     await messenger.reply(message, REQUEST_REGISTER_REPLY_TEXT)
     for admin_id in services.registration.admin_ids:
         await messenger.try_send(

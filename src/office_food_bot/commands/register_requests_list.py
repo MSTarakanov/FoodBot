@@ -6,9 +6,9 @@ from aiogram.types import Message
 from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import (
+    KnownTelegramAccount,
     PendingRegistration,
     RegisteredUser,
-    SeenTelegramAccount,
     SplitwiseConnection,
 )
 from office_food_bot.services import BotServices
@@ -31,28 +31,50 @@ async def register_requests_list_command(
         return
 
     pending_requests = services.registration.list_pending_requests(profile.telegram_user_id)
-    seen_accounts = services.registration.list_unregistered_seen_accounts(
+    requested_accounts = services.registration.list_requested_telegram_accounts(
         profile.telegram_user_id,
     )
-    if not pending_requests and not seen_accounts:
+    seen_accounts = services.registration.list_seen_telegram_accounts(profile.telegram_user_id)
+    if not pending_requests and not requested_accounts and not seen_accounts:
         await messenger.reply(message, "Заявок на регистрацию нет.")
         return
 
-    await messenger.reply(message, _registration_requests_text(pending_requests, seen_accounts))
+    await messenger.reply(
+        message,
+        _registration_requests_text(pending_requests, requested_accounts, seen_accounts),
+    )
 
 
 def _registration_requests_text(
     pending_requests: tuple[PendingRegistration, ...],
-    seen_accounts: tuple[SeenTelegramAccount, ...],
+    requested_accounts: tuple[KnownTelegramAccount, ...],
+    seen_accounts: tuple[KnownTelegramAccount, ...],
 ) -> str:
     lines: list[str] = []
     if pending_requests:
         lines.append(_pending_requests_text(pending_requests))
-    else:
+    elif not requested_accounts:
         lines.append("Заявок на регистрацию нет.")
 
+    if requested_accounts:
+        if lines:
+            lines.append("")
+        lines.append(
+            _telegram_accounts_registration_text(
+                "Попросили регистрацию:",
+                requested_accounts,
+            )
+        )
+
     if seen_accounts:
-        lines.extend(("", _seen_accounts_registration_text(seen_accounts)))
+        if lines:
+            lines.append("")
+        lines.append(
+            _telegram_accounts_registration_text(
+                "Видел незарегистрированных пользователей:",
+                seen_accounts,
+            )
+        )
 
     return "\n".join(lines)
 
@@ -85,21 +107,28 @@ def _splitwise_text(splitwise: SplitwiseConnection | None) -> str:
     return f"Splitwise: {splitwise.email} (ID {splitwise.splitwise_user_id})"
 
 
-def _seen_accounts_registration_text(seen_accounts: tuple[SeenTelegramAccount, ...]) -> str:
-    lines = ["Видел незарегистрированных пользователей:"]
-    for index, seen_account in enumerate(seen_accounts, start=1):
+def _telegram_accounts_registration_text(
+    title: str,
+    telegram_accounts: tuple[KnownTelegramAccount, ...],
+) -> str:
+    lines = [title]
+    for index, telegram_account in enumerate(telegram_accounts, start=1):
         lines.append(
-            f"{index}. {_seen_account_display_text(seen_account)} - "
-            f"Telegram ID {seen_account.telegram_user_id} - "
-            f"/register {seen_account.telegram_user_id}"
+            f"{index}. {_telegram_account_display_text(telegram_account)} - "
+            f"Telegram ID {telegram_account.telegram_user_id} - "
+            f"/register {telegram_account.telegram_user_id}"
         )
     return "\n".join(lines)
 
 
-def _seen_account_display_text(seen_account: SeenTelegramAccount) -> str:
+def _telegram_account_display_text(telegram_account: KnownTelegramAccount) -> str:
     display_name = " ".join(
-        part for part in (seen_account.first_name, seen_account.last_name) if part is not None
+        part
+        for part in (telegram_account.first_name, telegram_account.last_name)
+        if part is not None
     )
-    if seen_account.username is None:
+    if not display_name:
+        display_name = f"Telegram ID {telegram_account.telegram_user_id}"
+    if telegram_account.username is None:
         return display_name
-    return f"{display_name} (@{seen_account.username})"
+    return f"{display_name} (@{telegram_account.username})"

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from office_food_bot.models import TelegramProfile
-from office_food_bot.repositories import TelegramSeenRepository
+from office_food_bot.repositories import TelegramAccountRepository
 
 
 class TelegramInteractionService:
-    def __init__(self, seen_accounts: TelegramSeenRepository) -> None:
-        self._seen_accounts = seen_accounts
+    def __init__(
+        self,
+        telegram_accounts: TelegramAccountRepository,
+    ) -> None:
+        self._telegram_accounts = telegram_accounts
 
     def remember(self, profile: TelegramProfile) -> None:
-        self._seen_accounts.remember(profile)
+        self._telegram_accounts.remember(profile)

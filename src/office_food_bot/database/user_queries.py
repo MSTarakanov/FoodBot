@@ -91,7 +91,7 @@ INSERT INTO users (display_name, status, role)
 VALUES (?, ?, ?)
 """
 
-INSERT_TELEGRAM_ACCOUNT_SQL = """
+UPSERT_LINKED_TELEGRAM_ACCOUNT_SQL = """
 INSERT INTO telegram_accounts (
     telegram_user_id,
     user_id,
@@ -100,6 +100,13 @@ INSERT INTO telegram_accounts (
     last_name
 )
 VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(telegram_user_id) DO UPDATE SET
+    user_id = excluded.user_id,
+    username = excluded.username,
+    first_name = excluded.first_name,
+    last_name = excluded.last_name,
+    last_seen_at = CURRENT_TIMESTAMP,
+    updated_at = CURRENT_TIMESTAMP
 """
 
 UPDATE_TELEGRAM_PROFILE_SQL = """
@@ -107,6 +114,7 @@ UPDATE telegram_accounts
 SET username = ?,
     first_name = ?,
     last_name = ?,
+    last_seen_at = CURRENT_TIMESTAMP,
     updated_at = CURRENT_TIMESTAMP
 WHERE telegram_user_id = ?
 """

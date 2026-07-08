@@ -14,10 +14,15 @@ from office_food_bot.database.lunch_auto_chat_queries import (
     LIST_ENABLED_LUNCH_AUTO_CHATS_SQL,
     UPSERT_LUNCH_AUTO_CHAT_SQL,
 )
-from office_food_bot.database.telegram_seen_queries import (
-    GET_TELEGRAM_SEEN_ACCOUNT_SQL,
-    LIST_UNREGISTERED_TELEGRAM_SEEN_ACCOUNTS_SQL,
-    UPSERT_TELEGRAM_SEEN_ACCOUNT_SQL,
+from office_food_bot.database.registration_request_queries import (
+    DELETE_REGISTRATION_REQUEST_SQL,
+    LIST_REQUESTED_REGISTRATION_ACCOUNTS_SQL,
+    UPSERT_REGISTRATION_REQUEST_SQL,
+)
+from office_food_bot.database.telegram_account_queries import (
+    GET_TELEGRAM_ACCOUNT_SQL,
+    LIST_SEEN_TELEGRAM_ACCOUNTS_SQL,
+    UPSERT_TELEGRAM_ACCOUNT_PROFILE_SQL,
 )
 from office_food_bot.database.user_queries import (
     COUNT_SPLITWISE_USERS_SQL,
@@ -25,7 +30,6 @@ from office_food_bot.database.user_queries import (
     GET_REGISTRATION_DETAILS_BY_TELEGRAM_ID_SQL,
     GET_USER_BY_TELEGRAM_ID_SQL,
     INSERT_SPLITWISE_USER_SQL,
-    INSERT_TELEGRAM_ACCOUNT_SQL,
     INSERT_USER_SQL,
     LIST_ACTIVE_SPLITWISE_USERS_SQL,
     LIST_ACTIVE_USERS_SQL,
@@ -34,6 +38,7 @@ from office_food_bot.database.user_queries import (
     UPDATE_TELEGRAM_PROFILE_SQL,
     UPDATE_USER_REGISTRATION_BY_TELEGRAM_ID_SQL,
     UPDATE_USER_STATUS_BY_TELEGRAM_ID_SQL,
+    UPSERT_LINKED_TELEGRAM_ACCOUNT_SQL,
 )
 from office_food_bot.database.vacation_queries import (
     DELETE_USER_VACATION_SQL,
@@ -43,11 +48,11 @@ from office_food_bot.database.vacation_queries import (
 )
 from office_food_bot.models import (
     ActiveSplitwiseUser,
+    KnownTelegramAccount,
     LunchAutoChat,
     PendingRegistration,
     RegisteredUser,
     RegistrationDetails,
-    SeenTelegramAccount,
     SplitwiseConnection,
     SplitwiseMember,
     TelegramProfile,
@@ -57,14 +62,14 @@ from office_food_bot.models import (
 )
 
 
-class TelegramSeenRepository:
+class TelegramAccountRepository:
     def __init__(self, database: Database) -> None:
         self._database = database
 
     def remember(self, profile: TelegramProfile) -> None:
         with self._database.connection:
             self._database.connection.execute(
-                UPSERT_TELEGRAM_SEEN_ACCOUNT_SQL,
+                UPSERT_TELEGRAM_ACCOUNT_PROFILE_SQL,
                 (
                     profile.telegram_user_id,
                     profile.username,
@@ -73,21 +78,47 @@ class TelegramSeenRepository:
                 ),
             )
 
-    def get(self, telegram_user_id: int) -> SeenTelegramAccount | None:
+    def get(self, telegram_user_id: int) -> KnownTelegramAccount | None:
         row = self._database.connection.execute(
-            GET_TELEGRAM_SEEN_ACCOUNT_SQL,
+            GET_TELEGRAM_ACCOUNT_SQL,
             (telegram_user_id,),
         ).fetchone()
         if row is None:
             return None
-        return _seen_telegram_account_from_row(row)
+        return _known_telegram_account_from_row(row)
 
-    def list_unregistered(self, limit: int) -> tuple[SeenTelegramAccount, ...]:
+    def list_seen(self, limit: int) -> tuple[KnownTelegramAccount, ...]:
         rows = self._database.connection.execute(
-            LIST_UNREGISTERED_TELEGRAM_SEEN_ACCOUNTS_SQL,
+            LIST_SEEN_TELEGRAM_ACCOUNTS_SQL,
             (UserStatus.ABANDONED.value, limit),
         ).fetchall()
-        return tuple(_seen_telegram_account_from_row(row) for row in rows)
+        return tuple(_known_telegram_account_from_row(row) for row in rows)
+
+
+class RegistrationRequestRepository:
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    def request(self, telegram_user_id: int) -> None:
+        with self._database.connection:
+            self._database.connection.execute(
+                UPSERT_REGISTRATION_REQUEST_SQL,
+                (telegram_user_id,),
+            )
+
+    def clear(self, telegram_user_id: int) -> None:
+        with self._database.connection:
+            self._database.connection.execute(
+                DELETE_REGISTRATION_REQUEST_SQL,
+                (telegram_user_id,),
+            )
+
+    def list_requested(self, limit: int) -> tuple[KnownTelegramAccount, ...]:
+        rows = self._database.connection.execute(
+            LIST_REQUESTED_REGISTRATION_ACCOUNTS_SQL,
+            (UserStatus.ABANDONED.value, limit),
+        ).fetchall()
+        return tuple(_known_telegram_account_from_row(row) for row in rows)
 
 
 class UserRepository:
@@ -181,7 +212,7 @@ class UserRepository:
                 msg = "Created user id was not returned"
                 raise RuntimeError(msg)
             self._database.connection.execute(
-                INSERT_TELEGRAM_ACCOUNT_SQL,
+                UPSERT_LINKED_TELEGRAM_ACCOUNT_SQL,
                 (
                     profile.telegram_user_id,
                     user_id,
@@ -417,11 +448,11 @@ def _registered_user_from_row(row: sqlite3.Row) -> RegisteredUser:
     )
 
 
-def _seen_telegram_account_from_row(row: sqlite3.Row) -> SeenTelegramAccount:
-    return SeenTelegramAccount(
+def _known_telegram_account_from_row(row: sqlite3.Row) -> KnownTelegramAccount:
+    return KnownTelegramAccount(
         telegram_user_id=int(row["telegram_user_id"]),
         username=_optional_str(row["username"]),
-        first_name=str(row["first_name"]),
+        first_name=_optional_str(row["first_name"]),
         last_name=_optional_str(row["last_name"]),
     )
 
