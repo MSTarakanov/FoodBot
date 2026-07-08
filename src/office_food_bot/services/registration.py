@@ -4,23 +4,23 @@ from dataclasses import dataclass
 
 from office_food_bot.models import (
     ApprovalKind,
+    KnownTelegramAccount,
     PendingRegistration,
     RegisteredUser,
     RegistrationDetails,
     RegistrationKind,
-    SeenTelegramAccount,
     SplitwiseConnection,
     SplitwiseMember,
     TelegramProfile,
     UserStatus,
 )
 from office_food_bot.repositories import (
-    TelegramSeenRepository,
+    TelegramAccountRepository,
     UserRepository,
     normalize_display_name,
 )
 
-SEEN_REGISTRATION_SUGGESTIONS_LIMIT = 10
+REGISTRATION_SUGGESTIONS_LIMIT = 10
 
 
 @dataclass(frozen=True)
@@ -40,11 +40,11 @@ class RegistrationService:
     def __init__(
         self,
         users: UserRepository,
-        seen_accounts: TelegramSeenRepository,
+        telegram_accounts: TelegramAccountRepository,
         admin_ids: frozenset[int],
     ) -> None:
         self._users = users
-        self._seen_accounts = seen_accounts
+        self._telegram_accounts = telegram_accounts
         self.admin_ids = admin_ids
 
     def register(
@@ -129,9 +129,9 @@ class RegistrationService:
     def registration_profile_for_telegram_id(self, telegram_user_id: int) -> TelegramProfile:
         user = self._users.get_by_telegram_id(telegram_user_id)
         if user is None:
-            seen_account = self._seen_accounts.get(telegram_user_id)
-            if seen_account is not None:
-                return _telegram_profile_from_seen_account(seen_account)
+            telegram_account = self._telegram_accounts.get(telegram_user_id)
+            if telegram_account is not None:
+                return _telegram_profile_from_known_account(telegram_account)
 
             return TelegramProfile(
                 telegram_user_id=telegram_user_id,
@@ -196,21 +196,24 @@ class RegistrationService:
             return ()
         return self._users.list_pending_registrations()
 
-    def list_unregistered_seen_accounts(
+    def list_unregistered_telegram_accounts(
         self,
         requester_telegram_user_id: int,
-    ) -> tuple[SeenTelegramAccount, ...]:
+    ) -> tuple[KnownTelegramAccount, ...]:
         if not self.can_approve(requester_telegram_user_id):
             return ()
-        return self._seen_accounts.list_unregistered(SEEN_REGISTRATION_SUGGESTIONS_LIMIT)
+        return self._telegram_accounts.list_unregistered(REGISTRATION_SUGGESTIONS_LIMIT)
 
 
-def _telegram_profile_from_seen_account(seen_account: SeenTelegramAccount) -> TelegramProfile:
+def _telegram_profile_from_known_account(
+    telegram_account: KnownTelegramAccount,
+) -> TelegramProfile:
     return TelegramProfile(
-        telegram_user_id=seen_account.telegram_user_id,
-        username=seen_account.username,
-        first_name=seen_account.first_name,
-        last_name=seen_account.last_name,
+        telegram_user_id=telegram_account.telegram_user_id,
+        username=telegram_account.username,
+        first_name=telegram_account.first_name
+        or f"Telegram ID {telegram_account.telegram_user_id}",
+        last_name=telegram_account.last_name,
     )
 
 

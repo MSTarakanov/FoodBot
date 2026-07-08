@@ -42,10 +42,10 @@ class TelegramProfile:
 
 
 @dataclass(frozen=True)
-class SeenTelegramAccount:
+class KnownTelegramAccount:
     telegram_user_id: int
     username: str | None
-    first_name: str
+    first_name: str | None
     last_name: str | None
 
 

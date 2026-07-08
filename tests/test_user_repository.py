@@ -11,7 +11,7 @@ from office_food_bot.models import SplitwiseMember, TelegramProfile, UserRole, U
 from office_food_bot.repositories import (
     DebugRepository,
     LunchAutoChatRepository,
-    TelegramSeenRepository,
+    TelegramAccountRepository,
     UserRepository,
     VacationRepository,
 )
@@ -102,6 +102,20 @@ def test_refresh_telegram_profile_updates_account(users: UserRepository) -> None
     assert user.username == "new"
     assert user.first_name == "New"
     assert user.last_name == "Name"
+
+
+def test_create_pending_user_links_known_telegram_account(
+    database: Database,
+    users: UserRepository,
+) -> None:
+    telegram_accounts = TelegramAccountRepository(database)
+    telegram_accounts.remember(make_profile(username="misha", first_name="Misha"))
+
+    user = users.create_pending_user(make_profile(username="misha"), "Максим")
+
+    assert user.telegram_user_id == 42
+    assert users.get_by_telegram_id(42) is not None
+    assert telegram_accounts.list_unregistered(limit=10) == ()
 
 
 def test_approve_by_telegram_id_activates_user(users: UserRepository) -> None:
@@ -355,6 +369,7 @@ def test_database_migrations_are_loaded_from_files() -> None:
         (6, "relax_splitwise_email_nullable"),
         (7, "add_user_vacations"),
         (8, "add_telegram_seen_accounts"),
+        (9, "merge_seen_accounts_into_telegram_accounts"),
     ]
 
 
@@ -387,25 +402,150 @@ def test_database_init_creates_telegram_debug_settings_table(tmp_path) -> None:
     assert columns == ["telegram_user_id", "enabled", "updated_at"]
 
 
-def test_database_init_creates_telegram_seen_accounts_table(tmp_path) -> None:
+def test_database_init_creates_known_telegram_accounts_table(tmp_path) -> None:
     database = Database(tmp_path / "test.sqlite3")
     database.init_schema()
     try:
         columns = [
             str(row["name"])
-            for row in database.connection.execute("PRAGMA table_info(telegram_seen_accounts)")
+            for row in database.connection.execute("PRAGMA table_info(telegram_accounts)")
         ]
+        seen_table = database.connection.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'telegram_seen_accounts'
+            """,
+        ).fetchone()
     finally:
         database.close()
 
     assert columns == [
         "telegram_user_id",
+        "user_id",
         "username",
         "first_name",
         "last_name",
         "first_seen_at",
         "last_seen_at",
+        "updated_at",
     ]
+    assert seen_table is None
+
+
+def test_database_init_merges_seen_accounts_into_telegram_accounts(tmp_path) -> None:
+    database_path = tmp_path / "test.sqlite3"
+    legacy_connection = sqlite3.connect(database_path)
+    try:
+        legacy_connection.executescript(
+            """
+            PRAGMA foreign_keys = ON;
+
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                display_name TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN (
+                        'pending', 'active', 'rejected', 'disabled', 'abandoned'
+                    )),
+                role TEXT NOT NULL DEFAULT 'member'
+                    CHECK (role IN ('member', 'admin')),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE telegram_accounts (
+                telegram_user_id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                username TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE telegram_seen_accounts (
+                telegram_user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                first_name TEXT NOT NULL,
+                last_name TEXT,
+                first_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            INSERT INTO users (id, display_name, status, role)
+            VALUES (1, 'Максим', 'active', 'member');
+
+            INSERT INTO telegram_accounts (
+                telegram_user_id,
+                user_id,
+                username,
+                first_name,
+                last_name,
+                updated_at
+            )
+            VALUES (42, 1, 'old', 'Old', NULL, '2026-07-01 10:00:00');
+
+            INSERT INTO telegram_seen_accounts (
+                telegram_user_id,
+                username,
+                first_name,
+                last_name,
+                first_seen_at,
+                last_seen_at
+            )
+            VALUES
+                (42, 'misha', 'Misha', 'Petrov',
+                    '2026-07-01 11:00:00', '2026-07-01 12:00:00'),
+                (43, 'olya', 'Olya', NULL,
+                    '2026-07-01 13:00:00', '2026-07-01 14:00:00');
+
+            PRAGMA user_version = 8;
+            """,
+        )
+    finally:
+        legacy_connection.close()
+
+    database = Database(database_path)
+    database.init_schema()
+    try:
+        seen_table = database.connection.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'telegram_seen_accounts'
+            """,
+        ).fetchone()
+        linked_row = database.connection.execute(
+            """
+            SELECT user_id, username, first_name, last_name, first_seen_at, last_seen_at
+            FROM telegram_accounts
+            WHERE telegram_user_id = 42
+            """,
+        ).fetchone()
+        unlinked_row = database.connection.execute(
+            """
+            SELECT user_id, username, first_name, last_name, first_seen_at, last_seen_at
+            FROM telegram_accounts
+            WHERE telegram_user_id = 43
+            """,
+        ).fetchone()
+        schema_version = database.schema_version()
+    finally:
+        database.close()
+
+    assert schema_version == 9
+    assert seen_table is None
+    assert linked_row is not None
+    assert int(linked_row["user_id"]) == 1
+    assert linked_row["username"] == "misha"
+    assert linked_row["first_name"] == "Misha"
+    assert linked_row["last_name"] == "Petrov"
+    assert linked_row["first_seen_at"] == "2026-07-01 11:00:00"
+    assert linked_row["last_seen_at"] == "2026-07-01 12:00:00"
+    assert unlinked_row is not None
+    assert unlinked_row["user_id"] is None
+    assert unlinked_row["username"] == "olya"
+    assert unlinked_row["first_name"] == "Olya"
 
 
 def test_database_init_creates_lunch_auto_chats_table(tmp_path) -> None:
@@ -564,36 +704,36 @@ def test_debug_repository_persists_debug_status(database: Database) -> None:
     assert not DebugRepository(database).is_enabled(7)
 
 
-def test_telegram_seen_repository_stores_and_updates_profile(database: Database) -> None:
-    seen_accounts = TelegramSeenRepository(database)
+def test_telegram_account_repository_stores_and_updates_profile(database: Database) -> None:
+    telegram_accounts = TelegramAccountRepository(database)
 
-    seen_accounts.remember(make_profile(username="old", first_name="Old"))
-    seen_accounts.remember(
+    telegram_accounts.remember(make_profile(username="old", first_name="Old"))
+    telegram_accounts.remember(
         make_profile(username="new", first_name="New", last_name="Name"),
     )
 
-    seen_account = seen_accounts.get(42)
+    telegram_account = telegram_accounts.get(42)
 
-    assert seen_account is not None
-    assert seen_account.telegram_user_id == 42
-    assert seen_account.username == "new"
-    assert seen_account.first_name == "New"
-    assert seen_account.last_name == "Name"
+    assert telegram_account is not None
+    assert telegram_account.telegram_user_id == 42
+    assert telegram_account.username == "new"
+    assert telegram_account.first_name == "New"
+    assert telegram_account.last_name == "Name"
 
 
-def test_telegram_seen_repository_lists_only_unregistered_accounts(
+def test_telegram_account_repository_lists_only_unregistered_accounts(
     database: Database,
     users: UserRepository,
 ) -> None:
-    seen_accounts = TelegramSeenRepository(database)
-    seen_accounts.remember(make_profile(telegram_user_id=42, username="misha"))
-    seen_accounts.remember(make_profile(telegram_user_id=43, username="olya"))
-    seen_accounts.remember(make_profile(telegram_user_id=44, username="old"))
+    telegram_accounts = TelegramAccountRepository(database)
+    telegram_accounts.remember(make_profile(telegram_user_id=42, username="misha"))
+    telegram_accounts.remember(make_profile(telegram_user_id=43, username="olya"))
+    telegram_accounts.remember(make_profile(telegram_user_id=44, username="old"))
     users.create_pending_user(make_profile(telegram_user_id=42, username="misha"), "Максим")
     users.create_pending_user(make_profile(telegram_user_id=44, username="old"), "Олег")
     users.abandon_by_telegram_id(44)
 
-    unregistered_accounts = seen_accounts.list_unregistered(limit=10)
+    unregistered_accounts = telegram_accounts.list_unregistered(limit=10)
 
     assert {account.telegram_user_id for account in unregistered_accounts} == {43, 44}
 

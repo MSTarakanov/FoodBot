@@ -42,7 +42,7 @@ from office_food_bot.database import Database
 from office_food_bot.models import SplitwiseBalance, SplitwiseMember, TelegramProfile, UserStatus
 from office_food_bot.repositories import (
     LunchAutoChatRepository,
-    TelegramSeenRepository,
+    TelegramAccountRepository,
     UserRepository,
     VacationRepository,
 )
@@ -509,11 +509,11 @@ async def test_hi_logs_bot_identity(
 
     assert "/hi handled by @foodbot_dev: chat_id=42, telegram_user_id=42" in caplog.text
     assert UserRepository(database).get_by_telegram_id(42) is None
-    seen_account = TelegramSeenRepository(database).get(42)
-    assert seen_account is not None
-    assert seen_account.username == "misha"
-    assert seen_account.first_name == "Misha"
-    assert seen_account.last_name == "Petrov"
+    telegram_account = TelegramAccountRepository(database).get(42)
+    assert telegram_account is not None
+    assert telegram_account.username == "misha"
+    assert telegram_account.first_name == "Misha"
+    assert telegram_account.last_name == "Petrov"
 
 
 async def test_command_updates_existing_telegram_profile(tmp_path: Path) -> None:
@@ -809,11 +809,11 @@ async def test_request_register_notifies_admin_with_register_command(tmp_path: P
     ]
     assert session.sent_messages[1].chat_id == 7
     assert UserRepository(database).get_by_telegram_id(42) is None
-    seen_account = TelegramSeenRepository(database).get(42)
-    assert seen_account is not None
-    assert seen_account.username == "misha"
-    assert seen_account.first_name == "Misha"
-    assert seen_account.last_name == "Petrov"
+    telegram_account = TelegramAccountRepository(database).get(42)
+    assert telegram_account is not None
+    assert telegram_account.username == "misha"
+    assert telegram_account.first_name == "Misha"
+    assert telegram_account.last_name == "Petrov"
 
 
 async def test_lunch_tags_user_registered_from_request_register(
@@ -1069,7 +1069,7 @@ async def test_admin_registers_seen_user_by_id_with_seen_profile(tmp_path: Path)
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
-    TelegramSeenRepository(database).remember(
+    TelegramAccountRepository(database).remember(
         TelegramProfile(
             telegram_user_id=42,
             username="misha",

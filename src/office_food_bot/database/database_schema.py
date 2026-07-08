@@ -18,20 +18,13 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS telegram_accounts (
     telegram_user_id INTEGER PRIMARY KEY,
-    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     username TEXT,
     first_name TEXT,
     last_name TEXT,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS telegram_seen_accounts (
-    telegram_user_id INTEGER PRIMARY KEY,
-    username TEXT,
-    first_name TEXT NOT NULL,
-    last_name TEXT,
     first_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS splitwise_users (
