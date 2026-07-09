@@ -14,6 +14,7 @@ from office_food_bot.services.lunch_auto import (
     LunchPollPublisher,
     LunchSchedulerService,
 )
+from office_food_bot.services.lunch_pin import LunchPinService
 from office_food_bot.services.poll_tracking import (
     PollAction,
     PollActionRequest,
@@ -48,6 +49,7 @@ __all__ = [
     "DebugService",
     "LunchService",
     "LunchAutoChatService",
+    "LunchPinService",
     "LunchPollPublisher",
     "LunchSchedulerService",
     "PollAction",

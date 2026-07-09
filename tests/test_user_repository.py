@@ -11,6 +11,7 @@ from office_food_bot.models import SplitwiseMember, TelegramProfile, UserRole, U
 from office_food_bot.repositories import (
     DebugRepository,
     LunchAutoChatRepository,
+    LunchPinRepository,
     RegistrationRequestRepository,
     TelegramAccountRepository,
     UserRepository,
@@ -372,6 +373,7 @@ def test_database_migrations_are_loaded_from_files() -> None:
         (8, "add_telegram_seen_accounts"),
         (9, "merge_seen_accounts_into_telegram_accounts"),
         (10, "add_registration_requests"),
+        (11, "add_lunch_pinned_messages"),
     ]
 
 
@@ -549,7 +551,7 @@ def test_database_init_merges_seen_accounts_into_telegram_accounts(tmp_path) -> 
     finally:
         database.close()
 
-    assert schema_version == 10
+    assert schema_version == 11
     assert seen_table is None
     assert linked_row is not None
     assert int(linked_row["user_id"]) == 1
@@ -576,6 +578,20 @@ def test_database_init_creates_lunch_auto_chats_table(tmp_path) -> None:
         database.close()
 
     assert columns == ["chat_id", "title", "enabled", "created_at", "updated_at"]
+
+
+def test_database_init_creates_lunch_pinned_messages_table(tmp_path) -> None:
+    database = Database(tmp_path / "test.sqlite3")
+    database.init_schema()
+    try:
+        columns = [
+            str(row["name"])
+            for row in database.connection.execute("PRAGMA table_info(lunch_pinned_messages)")
+        ]
+    finally:
+        database.close()
+
+    assert columns == ["chat_id", "message_id", "lunch_date", "updated_at"]
 
 
 def test_database_init_creates_user_vacations_table(tmp_path) -> None:
@@ -685,6 +701,26 @@ def test_lunch_auto_chat_repository_enables_disables_and_lists_chats(
     assert reenabled_chat.title == "Office 2"
     assert reenabled_chat.enabled
     assert [chat.chat_id for chat in chats.list_enabled()] == [-100]
+
+
+def test_lunch_pin_repository_stores_updates_and_clears_message(
+    database: Database,
+) -> None:
+    pins = LunchPinRepository(database)
+
+    first_pin = pins.upsert(-100, 10, date(2026, 7, 9))
+    second_pin = pins.upsert(-100, 11, date(2026, 7, 10))
+
+    assert first_pin.chat_id == -100
+    assert first_pin.message_id == 10
+    assert first_pin.lunch_date == date(2026, 7, 9)
+    assert second_pin.message_id == 11
+    assert second_pin.lunch_date == date(2026, 7, 10)
+    assert pins.get(-100) == second_pin
+
+    pins.clear(-100)
+
+    assert pins.get(-100) is None
 
 
 def test_vacation_repository_stores_updates_and_clears_vacation(

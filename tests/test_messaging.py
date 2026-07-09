@@ -7,15 +7,23 @@ from typing import Any
 import pytest
 from aiogram import Bot
 from aiogram.client.session.base import BaseSession
-from aiogram.methods import SendMessage, SendPoll, TelegramMethod
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.methods import (
+    PinChatMessage,
+    SendMessage,
+    SendPoll,
+    TelegramMethod,
+    UnpinChatMessage,
+)
 from aiogram.types import Chat, Message, ReplyKeyboardRemove
 
 from office_food_bot.messaging import BotMessenger, InlineChoice
 
 
 class RecordingSession(BaseSession):
-    def __init__(self) -> None:
+    def __init__(self, fail_method_name: str | None = None) -> None:
         super().__init__()
+        self._fail_method_name = fail_method_name
         self.requests: list[TelegramMethod[Any]] = []
 
     async def close(self) -> None:
@@ -27,7 +35,12 @@ class RecordingSession(BaseSession):
         method: TelegramMethod[Any],
         timeout: int | None = None,
     ) -> Message:
+        if type(method).__name__ == self._fail_method_name:
+            raise TelegramBadRequest(method=method, message="Bad Request")
+
         self.requests.append(method)
+        if isinstance(method, PinChatMessage | UnpinChatMessage):
+            return True
         return Message(
             message_id=len(self.requests),
             date=datetime.now(tz=UTC),
@@ -120,6 +133,55 @@ async def test_send_poll_validates_options_before_calling_telegram() -> None:
         await messenger.send_poll(bot, 42, "Что заказать?", ["Пицца"])
 
     assert session.requests == []
+
+
+async def test_try_pin_chat_message_uses_silent_pin() -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    messenger = BotMessenger()
+
+    pinned = await messenger.try_pin_chat_message(bot, 42, 100)
+
+    method = session.requests[0]
+    assert pinned
+    assert isinstance(method, PinChatMessage)
+    assert method.chat_id == 42
+    assert method.message_id == 100
+    assert method.disable_notification is True
+
+
+async def test_try_unpin_chat_message_uses_message_id() -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    messenger = BotMessenger()
+
+    unpinned = await messenger.try_unpin_chat_message(bot, 42, 100)
+
+    method = session.requests[0]
+    assert unpinned
+    assert isinstance(method, UnpinChatMessage)
+    assert method.chat_id == 42
+    assert method.message_id == 100
+
+
+async def test_try_pin_and_unpin_return_false_on_telegram_error() -> None:
+    pin_session = RecordingSession(fail_method_name="PinChatMessage")
+    unpin_session = RecordingSession(fail_method_name="UnpinChatMessage")
+    messenger = BotMessenger()
+
+    pinned = await messenger.try_pin_chat_message(
+        Bot(token="123456:test-token", session=pin_session),
+        42,
+        100,
+    )
+    unpinned = await messenger.try_unpin_chat_message(
+        Bot(token="123456:test-token", session=unpin_session),
+        42,
+        100,
+    )
+
+    assert not pinned
+    assert not unpinned
 
 
 def test_remove_keyboard_markup() -> None:

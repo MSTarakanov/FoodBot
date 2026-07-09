@@ -8,6 +8,7 @@ from office_food_bot.messaging import BotMessenger
 from office_food_bot.repositories import (
     DebugRepository,
     LunchAutoChatRepository,
+    LunchPinRepository,
     RegistrationRequestRepository,
     TelegramAccountRepository,
     UserRepository,
@@ -24,6 +25,7 @@ from office_food_bot.services.lunch_auto import (
     LunchPollPublisher,
     LunchSchedulerService,
 )
+from office_food_bot.services.lunch_pin import LunchPinService
 from office_food_bot.services.poll_tracking import PollTrackingService
 from office_food_bot.services.presence import PresenceService
 from office_food_bot.services.registration import RegistrationService
@@ -51,6 +53,7 @@ def build_services(
     registration_requests = RegistrationRequestRepository(database)
     debug_settings = DebugRepository(database)
     lunch_auto_chat_repository = LunchAutoChatRepository(database)
+    lunch_pin_repository = LunchPinRepository(database)
     vacations = VacationRepository(database)
     client = splitwise_client
     if client is None and splitwise_api_key is not None:
@@ -66,12 +69,15 @@ def build_services(
     debug = DebugService(debug_settings)
     business_calendar = BusinessCalendarService()
     poll_tracking = PollTrackingService()
+    messenger = BotMessenger()
+    lunch_pins = LunchPinService(messenger, lunch_pin_repository)
     lunch_auto_chats = LunchAutoChatService(lunch_auto_chat_repository)
     lunch_publisher = LunchPollPublisher(
-        BotMessenger(),
+        messenger,
         poll_tracking,
         users,
         vacations,
+        lunch_pins,
         timezone_name,
         clock,
     )
@@ -87,11 +93,13 @@ def build_services(
         lunch=LunchService(users),
         vacation=VacationService(users, vacations, timezone_name, clock),
         lunch_auto_chats=lunch_auto_chats,
+        lunch_pins=lunch_pins,
         lunch_publisher=lunch_publisher,
         lunch_scheduler=LunchSchedulerService(
             lunch_auto_chats,
             business_calendar,
             lunch_publisher,
+            lunch_pins,
             timezone_name,
             clock,
         ),

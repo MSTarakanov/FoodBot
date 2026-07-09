@@ -191,6 +191,37 @@ class BotMessenger:
             return False
         return True
 
+    async def try_pin_chat_message(
+        self,
+        bot: Bot,
+        chat_id: int,
+        message_id: int,
+    ) -> bool:
+        try:
+            await bot.pin_chat_message(
+                chat_id=chat_id,
+                message_id=message_id,
+                disable_notification=True,
+            )
+        except TelegramAPIError:
+            return False
+        return True
+
+    async def try_unpin_chat_message(
+        self,
+        bot: Bot,
+        chat_id: int,
+        message_id: int,
+    ) -> bool:
+        try:
+            await bot.unpin_chat_message(
+                chat_id=chat_id,
+                message_id=message_id,
+            )
+        except TelegramAPIError:
+            return False
+        return True
+
     def choice_keyboard(
         self,
         choices: Sequence[str],
