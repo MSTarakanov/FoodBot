@@ -27,6 +27,7 @@ from office_food_bot.services.lunch import (
     LUNCH_POLL_QUESTION,
     lunch_announcement_text,
 )
+from office_food_bot.services.lunch_pin import LunchPinService
 from office_food_bot.services.poll_tracking import PollAction, PollTrackingService
 
 AUTO_LUNCH_JOB_ID = "auto_lunch"
@@ -64,6 +65,7 @@ class LunchPollPublisher:
         poll_tracking: PollTrackingService,
         users: UserRepository,
         vacations: VacationRepository,
+        lunch_pins: LunchPinService,
         timezone_name: str,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
@@ -71,6 +73,7 @@ class LunchPollPublisher:
         self._poll_tracking = poll_tracking
         self._users = users
         self._vacations = vacations
+        self._lunch_pins = lunch_pins
         self._timezone = ZoneInfo(timezone_name)
         self._clock = clock or (lambda: datetime.now(tz=UTC))
 
@@ -80,6 +83,7 @@ class LunchPollPublisher:
         chat_id: int,
         mode: CommandExecutionMode,
     ) -> LunchPublishKind:
+        today = self._clock().astimezone(self._timezone).date()
         active_users = self._active_users_available_for_lunch()
         if not active_users and mode == CommandExecutionMode.AUTOMATIC:
             return LunchPublishKind.SKIPPED_ALL_ON_VACATION
@@ -89,7 +93,7 @@ class LunchPollPublisher:
             chat_id,
             lunch_announcement_text(active_users),
         )
-        await self._messenger.send_poll(
+        lunch_poll_message = await self._messenger.send_poll(
             bot,
             chat_id,
             LUNCH_POLL_QUESTION,
@@ -98,6 +102,14 @@ class LunchPollPublisher:
             allows_multiple_answers=False,
             allow_adding_options=True,
         )
+        if mode == CommandExecutionMode.AUTOMATIC:
+            await self._lunch_pins.replace_pin(
+                bot,
+                chat_id,
+                lunch_poll_message.message_id,
+                today,
+            )
+
         place_poll_message = await self._messenger.send_poll(
             bot,
             chat_id,
@@ -131,12 +143,14 @@ class LunchSchedulerService:
         auto_chats: LunchAutoChatService,
         calendar: BusinessCalendarService,
         publisher: LunchPollPublisher,
+        lunch_pins: LunchPinService,
         timezone_name: str,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._auto_chats = auto_chats
         self._calendar = calendar
         self._publisher = publisher
+        self._lunch_pins = lunch_pins
         self._timezone = ZoneInfo(timezone_name)
         self._clock = clock or (lambda: datetime.now(tz=UTC))
         self._scheduler: AsyncIOScheduler | None = None  # type: ignore[no-any-unimported]
@@ -172,15 +186,20 @@ class LunchSchedulerService:
 
     async def run_due_lunch(self, bot: Bot) -> None:
         today = self._clock().astimezone(self._timezone).date()
+        enabled_chats = self._auto_chats.list_enabled()
         if not self._calendar.is_working_day(today):
+            for chat in enabled_chats:
+                await self._lunch_pins.clear_pin(bot, chat.chat_id)
             return
 
-        for chat in self._auto_chats.list_enabled():
+        for chat in enabled_chats:
             try:
-                await self._publisher.publish(
+                publish_kind = await self._publisher.publish(
                     bot,
                     chat.chat_id,
                     CommandExecutionMode.AUTOMATIC,
                 )
+                if publish_kind == LunchPublishKind.SKIPPED_ALL_ON_VACATION:
+                    await self._lunch_pins.clear_pin(bot, chat.chat_id)
             except TelegramAPIError:
                 continue

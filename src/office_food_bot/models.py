@@ -109,6 +109,13 @@ class LunchAutoChat:
 
 
 @dataclass(frozen=True)
+class LunchPinnedMessage:
+    chat_id: int
+    message_id: int
+    lunch_date: date
+
+
+@dataclass(frozen=True)
 class UserVacation:
     user_id: int
     until_date: date

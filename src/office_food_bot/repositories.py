@@ -14,6 +14,11 @@ from office_food_bot.database.lunch_auto_chat_queries import (
     LIST_ENABLED_LUNCH_AUTO_CHATS_SQL,
     UPSERT_LUNCH_AUTO_CHAT_SQL,
 )
+from office_food_bot.database.lunch_pin_queries import (
+    DELETE_LUNCH_PINNED_MESSAGE_SQL,
+    GET_LUNCH_PINNED_MESSAGE_SQL,
+    UPSERT_LUNCH_PINNED_MESSAGE_SQL,
+)
 from office_food_bot.database.registration_request_queries import (
     DELETE_REGISTRATION_REQUEST_SQL,
     LIST_REQUESTED_REGISTRATION_ACCOUNTS_SQL,
@@ -50,6 +55,7 @@ from office_food_bot.models import (
     ActiveSplitwiseUser,
     KnownTelegramAccount,
     LunchAutoChat,
+    LunchPinnedMessage,
     PendingRegistration,
     RegisteredUser,
     RegistrationDetails,
@@ -393,6 +399,45 @@ class LunchAutoChatRepository:
         return tuple(_lunch_auto_chat_from_row(row) for row in rows)
 
 
+class LunchPinRepository:
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    def get(self, chat_id: int) -> LunchPinnedMessage | None:
+        row = self._database.connection.execute(
+            GET_LUNCH_PINNED_MESSAGE_SQL,
+            (chat_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return _lunch_pinned_message_from_row(row)
+
+    def upsert(
+        self,
+        chat_id: int,
+        message_id: int,
+        lunch_date: date,
+    ) -> LunchPinnedMessage:
+        with self._database.connection:
+            self._database.connection.execute(
+                UPSERT_LUNCH_PINNED_MESSAGE_SQL,
+                (chat_id, message_id, lunch_date.isoformat()),
+            )
+
+        pinned_message = self.get(chat_id)
+        if pinned_message is None:
+            msg = "Lunch pinned message was not found after upsert"
+            raise RuntimeError(msg)
+        return pinned_message
+
+    def clear(self, chat_id: int) -> None:
+        with self._database.connection:
+            self._database.connection.execute(
+                DELETE_LUNCH_PINNED_MESSAGE_SQL,
+                (chat_id,),
+            )
+
+
 class VacationRepository:
     def __init__(self, database: Database) -> None:
         self._database = database
@@ -484,6 +529,14 @@ def _lunch_auto_chat_from_row(row: sqlite3.Row) -> LunchAutoChat:
         chat_id=int(row["chat_id"]),
         title=_optional_str(row["title"]),
         enabled=bool(row["enabled"]),
+    )
+
+
+def _lunch_pinned_message_from_row(row: sqlite3.Row) -> LunchPinnedMessage:
+    return LunchPinnedMessage(
+        chat_id=int(row["chat_id"]),
+        message_id=int(row["message_id"]),
+        lunch_date=date.fromisoformat(str(row["lunch_date"])),
     )
 
 

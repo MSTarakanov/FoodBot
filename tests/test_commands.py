@@ -13,7 +13,14 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
-from aiogram.methods import GetMe, SendPoll, SetMyCommands, TelegramMethod
+from aiogram.methods import (
+    GetMe,
+    PinChatMessage,
+    SendPoll,
+    SetMyCommands,
+    TelegramMethod,
+    UnpinChatMessage,
+)
 from aiogram.methods.base import TelegramType
 from aiogram.methods.send_message import SendMessage
 from aiogram.types import (
@@ -42,6 +49,7 @@ from office_food_bot.database import Database
 from office_food_bot.models import SplitwiseBalance, SplitwiseMember, TelegramProfile, UserStatus
 from office_food_bot.repositories import (
     LunchAutoChatRepository,
+    LunchPinRepository,
     RegistrationRequestRepository,
     TelegramAccountRepository,
     UserRepository,
@@ -112,11 +120,17 @@ class CommandMenu:
 
 
 class RecordingSession(BaseSession):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        failed_method_names: frozenset[str] = frozenset(),
+    ) -> None:
         super().__init__()
+        self._failed_method_names = failed_method_names
         self.sent_messages: list[SendMessage] = []
         self.sent_polls: list[SendPoll] = []
         self.sent_poll_ids: list[str] = []
+        self.pin_requests: list[PinChatMessage] = []
+        self.unpin_requests: list[UnpinChatMessage] = []
         self.set_command_requests: list[SetMyCommands] = []
 
     async def close(self) -> None:
@@ -128,6 +142,9 @@ class RecordingSession(BaseSession):
         method: TelegramMethod[TelegramType],
         timeout: int | None = None,
     ) -> TelegramType:
+        if type(method).__name__ in self._failed_method_names:
+            raise TelegramBadRequest(method=method, message="Bad Request")
+
         if isinstance(method, SendMessage):
             self.sent_messages.append(method)
             return _send_message_response(method, len(self.sent_messages) + len(self.sent_polls))
@@ -138,6 +155,12 @@ class RecordingSession(BaseSession):
                 raise AssertionError("Expected fake sendPoll response to include poll")
             self.sent_poll_ids.append(message.poll.id)
             return message
+        if isinstance(method, PinChatMessage):
+            self.pin_requests.append(method)
+            return True
+        if isinstance(method, UnpinChatMessage):
+            self.unpin_requests.append(method)
+            return True
         if isinstance(method, GetMe):
             return User(
                 id=123456,
@@ -166,6 +189,8 @@ class RecordingSession(BaseSession):
         self.sent_messages.clear()
         self.sent_polls.clear()
         self.sent_poll_ids.clear()
+        self.pin_requests.clear()
+        self.unpin_requests.clear()
 
 
 class RecordingCommandMenuClient:
@@ -2000,9 +2025,11 @@ async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path)
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
+    pins = LunchPinRepository(database)
 
     await submit_registration(dispatcher, bot, session)
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    old_pin = pins.upsert(-100, 99, date(2026, 7, 8))
     session.clear_messages()
 
     await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
@@ -2023,6 +2050,9 @@ async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path)
     assert place_poll.is_anonymous is False
     assert place_poll.allows_multiple_answers is True
     assert place_poll.allow_adding_options is True
+    assert session.pin_requests == []
+    assert session.unpin_requests == []
+    assert pins.get(-100) == old_pin
 
 
 async def test_lunch_skips_vacation_users_in_announcement(tmp_path: Path) -> None:
@@ -2238,12 +2268,74 @@ async def test_scheduled_lunch_publishes_to_enabled_chats_and_tracks_poll(
     assert session.sent_polls[0].chat_id == -100
     assert session.sent_polls[0].question == LUNCH_POLL_QUESTION
     assert session.sent_polls[1].question == LUNCH_PLACE_POLL_QUESTION
+    assert session.unpin_requests == []
+    assert len(session.pin_requests) == 1
+    assert session.pin_requests[0].chat_id == -100
+    assert session.pin_requests[0].message_id == 2
+    assert session.pin_requests[0].disable_notification is True
     action_requests = services.poll_tracking.consume_action_requests(
         session.sent_poll_ids[1],
         (LUNCH_PLACE_OTHER_OPTION_INDEX,),
     )
     assert len(action_requests) == 1
     assert action_requests[0].chat_id == -100
+
+
+async def test_scheduled_lunch_replaces_previous_pinned_poll(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    services.lunch_auto_chats.enable(-100, "Office")
+    users = UserRepository(database)
+    users.create_pending_user(
+        TelegramProfile(
+            telegram_user_id=42,
+            username="misha",
+            first_name="Misha",
+            last_name=None,
+        ),
+        "Максим",
+    )
+    users.approve_by_telegram_id(42)
+
+    await services.lunch_scheduler.run_due_lunch(bot)
+    await services.lunch_scheduler.run_due_lunch(bot)
+
+    assert [request.message_id for request in session.pin_requests] == [2, 5]
+    assert [request.message_id for request in session.unpin_requests] == [2]
+    current_pin = LunchPinRepository(database).get(-100)
+    assert current_pin is not None
+    assert current_pin.message_id == 5
+
+
+async def test_scheduled_lunch_still_publishes_when_pin_fails(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession(failed_method_names=frozenset({"PinChatMessage"}))
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    services.lunch_auto_chats.enable(-100, "Office")
+    users = UserRepository(database)
+    users.create_pending_user(
+        TelegramProfile(
+            telegram_user_id=42,
+            username="misha",
+            first_name="Misha",
+            last_name=None,
+        ),
+        "Максим",
+    )
+    users.approve_by_telegram_id(42)
+
+    await services.lunch_scheduler.run_due_lunch(bot)
+
+    assert sent_texts(session) == ["Время обедать! @misha"]
+    assert len(session.sent_polls) == 2
+    assert LunchPinRepository(database).get(-100) is None
 
 
 async def test_scheduled_lunch_skips_when_all_active_users_are_on_vacation(
@@ -2266,11 +2358,15 @@ async def test_scheduled_lunch_skips_when_all_active_users_are_on_vacation(
     )
     users.approve_by_telegram_id(42)
     VacationRepository(database).set_until_date(user.id, date(2026, 6, 30))
+    LunchPinRepository(database).upsert(-100, 10, date(2026, 6, 29))
 
     await services.lunch_scheduler.run_due_lunch(bot)
 
     assert sent_texts(session) == []
     assert session.sent_polls == []
+    assert session.pin_requests == []
+    assert [request.message_id for request in session.unpin_requests] == [10]
+    assert LunchPinRepository(database).get(-100) is None
 
 
 async def test_scheduled_lunch_skips_serbian_holiday(tmp_path: Path) -> None:
@@ -2282,10 +2378,13 @@ async def test_scheduled_lunch_skips_serbian_holiday(tmp_path: Path) -> None:
         clock=lambda: datetime(2026, 1, 1, 11, 30, tzinfo=ZoneInfo("Europe/Belgrade")),
     )
     services.lunch_auto_chats.enable(-100, "Office")
+    LunchPinRepository(database).upsert(-100, 10, date(2025, 12, 31))
 
     await services.lunch_scheduler.run_due_lunch(bot)
 
     assert session.sent_polls == []
+    assert [request.message_id for request in session.unpin_requests] == [10]
+    assert LunchPinRepository(database).get(-100) is None
 
 
 async def test_scheduled_lunch_skips_weekend(tmp_path: Path) -> None:
@@ -2297,10 +2396,13 @@ async def test_scheduled_lunch_skips_weekend(tmp_path: Path) -> None:
         clock=lambda: datetime(2026, 7, 4, 11, 30, tzinfo=ZoneInfo("Europe/Belgrade")),
     )
     services.lunch_auto_chats.enable(-100, "Office")
+    LunchPinRepository(database).upsert(-100, 10, date(2026, 7, 3))
 
     await services.lunch_scheduler.run_due_lunch(bot)
 
     assert session.sent_polls == []
+    assert [request.message_id for request in session.unpin_requests] == [10]
+    assert LunchPinRepository(database).get(-100) is None
 
 
 async def test_admin_debug_allows_group_only_command_in_private_chat(

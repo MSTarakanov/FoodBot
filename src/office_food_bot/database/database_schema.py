@@ -55,6 +55,13 @@ CREATE TABLE IF NOT EXISTS lunch_auto_chats (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS lunch_pinned_messages (
+    chat_id INTEGER PRIMARY KEY,
+    message_id INTEGER NOT NULL,
+    lunch_date TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS user_vacations (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     until_date TEXT NOT NULL,

@@ -12,6 +12,7 @@ from office_food_bot.services.lunch_auto import (
     LunchPollPublisher,
     LunchSchedulerService,
 )
+from office_food_bot.services.lunch_pin import LunchPinService
 from office_food_bot.services.poll_tracking import PollTrackingService
 from office_food_bot.services.presence import PresenceService
 from office_food_bot.services.registration import RegistrationService
@@ -33,6 +34,7 @@ class BotServices:
     lunch: LunchService
     vacation: VacationService
     lunch_auto_chats: LunchAutoChatService
+    lunch_pins: LunchPinService
     lunch_publisher: LunchPollPublisher
     lunch_scheduler: LunchSchedulerService
     poll_tracking: PollTrackingService
