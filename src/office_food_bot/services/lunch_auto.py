@@ -23,7 +23,7 @@ from office_food_bot.services.business_calendar import BusinessCalendarService
 from office_food_bot.services.lunch import lunch_announcement_text
 from office_food_bot.services.lunch_pin import LunchPinService
 from office_food_bot.services.lunch_polls import (
-    SKYLINE_LUNCH_POLLS,
+    LunchPollCatalog,
     LunchPollDefinition,
 )
 from office_food_bot.services.poll_tracking import PollTrackingService
@@ -64,6 +64,7 @@ class LunchPollPublisher:
         users: UserRepository,
         vacations: VacationRepository,
         lunch_pins: LunchPinService,
+        poll_catalog: LunchPollCatalog,
         timezone_name: str,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
@@ -72,6 +73,7 @@ class LunchPollPublisher:
         self._users = users
         self._vacations = vacations
         self._lunch_pins = lunch_pins
+        self._poll_catalog = poll_catalog
         self._timezone = ZoneInfo(timezone_name)
         self._clock = clock or (lambda: datetime.now(tz=UTC))
 
@@ -82,6 +84,7 @@ class LunchPollPublisher:
         mode: CommandExecutionMode,
     ) -> LunchPublishKind:
         today = self._clock().astimezone(self._timezone).date()
+        polls = self._poll_catalog.for_date(today)
         active_users = self._active_users_available_for_lunch()
         if not active_users and mode == CommandExecutionMode.AUTOMATIC:
             return LunchPublishKind.SKIPPED_ALL_ON_VACATION
@@ -94,7 +97,7 @@ class LunchPollPublisher:
         lunch_poll_message = await self.send_poll(
             bot,
             chat_id,
-            SKYLINE_LUNCH_POLLS.lunch,
+            polls.lunch,
         )
         if mode == CommandExecutionMode.AUTOMATIC:
             await self._lunch_pins.replace_pin(
@@ -107,13 +110,13 @@ class LunchPollPublisher:
         place_poll_message = await self.send_poll(
             bot,
             chat_id,
-            SKYLINE_LUNCH_POLLS.place,
+            polls.place,
         )
         if place_poll_message.poll is not None:
             self._poll_tracking.track_poll(
                 place_poll_message.poll.id,
                 chat_id,
-                SKYLINE_LUNCH_POLLS.place.option_actions_by_index(),
+                polls.place.option_actions_by_index(),
             )
         return LunchPublishKind.PUBLISHED
 
