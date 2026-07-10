@@ -40,7 +40,7 @@ class LunchPinService:
         if pinned:
             self._pins.upsert(chat_id, new_message_id, lunch_date)
 
-    async def clear_pin(self, bot: Bot, chat_id: int) -> None:
+    async def clear_saved_pin(self, bot: Bot, chat_id: int) -> None:
         existing_pin = self._pins.get(chat_id)
         if existing_pin is None:
             return

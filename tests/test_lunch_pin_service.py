@@ -92,7 +92,7 @@ async def test_lunch_pin_service_does_not_store_failed_pin(
     assert pins.get(-100) is None
 
 
-async def test_lunch_pin_service_clear_removes_state_even_when_unpin_fails(
+async def test_lunch_pin_service_clear_saved_pin_removes_state_even_when_unpin_fails(
     database: Database,
 ) -> None:
     messenger = RecordingPinMessenger(unpin_result=False)
@@ -100,7 +100,7 @@ async def test_lunch_pin_service_clear_removes_state_even_when_unpin_fails(
     pins.upsert(-100, 10, date(2026, 7, 8))
     service = LunchPinService(messenger, pins)
 
-    await service.clear_pin(make_bot(), -100)
+    await service.clear_saved_pin(make_bot(), -100)
 
     assert messenger.unpins == [(-100, 10)]
     assert pins.get(-100) is None

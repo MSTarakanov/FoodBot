@@ -2338,6 +2338,25 @@ async def test_scheduled_lunch_still_publishes_when_pin_fails(
     assert LunchPinRepository(database).get(-100) is None
 
 
+async def test_scheduled_lunch_clears_previous_pin_when_publish_fails(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession(failed_method_names=frozenset({"SendMessage"}))
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    services.lunch_auto_chats.enable(-100, "Office")
+    LunchPinRepository(database).upsert(-100, 10, date(2026, 6, 29))
+
+    await services.lunch_scheduler.run_due_lunch(bot)
+
+    assert sent_texts(session) == []
+    assert session.sent_polls == []
+    assert session.pin_requests == []
+    assert [request.message_id for request in session.unpin_requests] == [10]
+    assert LunchPinRepository(database).get(-100) is None
+
+
 async def test_scheduled_lunch_skips_when_all_active_users_are_on_vacation(
     tmp_path: Path,
 ) -> None:
