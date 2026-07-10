@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from aiogram import Bot
+from aiogram.filters.command import CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
@@ -8,13 +9,19 @@ from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.execution import CommandExecutionMode
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
+from office_food_bot.services.lunch_polls import parse_lunch_office_selection
 
 GROUP_CHAT_TYPES = frozenset({"group", "supergroup"})
 GROUP_ONLY_MESSAGE = "Команда доступна только в групповом чате."
+INVALID_LUNCH_OFFICE_MESSAGE = (
+    "Не понял офис. Используй /lunch, /lunch rose, /lunch роза, "
+    "/lunch skyline или /lunch скайлайн."
+)
 
 
 async def lunch_command(
     message: Message,
+    command: CommandObject,
     bot: Bot,
     messenger: BotMessenger,
     services: BotServices,
@@ -31,10 +38,16 @@ async def lunch_command(
         await messenger.reply(message, block_reason)
         return
 
+    office_selection = parse_lunch_office_selection(command.args)
+    if office_selection is None:
+        await messenger.reply(message, INVALID_LUNCH_OFFICE_MESSAGE)
+        return
+
     await services.lunch_publisher.publish(
         bot,
         message.chat.id,
-        CommandExecutionMode.MANUAL,
+        mode=CommandExecutionMode.MANUAL,
+        office_selection=office_selection,
     )
 
 

@@ -12,7 +12,8 @@ LUNCH_POLL_QUESTION = "Обед в офисе сегодня"
 LUNCH_PLACE_POLL_QUESTION = "Что едим / заказываем?"
 
 
-class OfficeLocation(StrEnum):
+class LunchOfficeSelection(StrEnum):
+    AUTOMATIC = "automatic"
     SKYLINE = "skyline"
     ROSE = "rose"
 
@@ -105,17 +106,41 @@ ROSE_LUNCH_POLLS = OfficeLunchPolls(
 )
 
 _OFFICE_LUNCH_POLLS = {
-    OfficeLocation.SKYLINE: SKYLINE_LUNCH_POLLS,
-    OfficeLocation.ROSE: ROSE_LUNCH_POLLS,
+    LunchOfficeSelection.SKYLINE: SKYLINE_LUNCH_POLLS,
+    LunchOfficeSelection.ROSE: ROSE_LUNCH_POLLS,
+}
+
+_LUNCH_OFFICE_ALIASES = {
+    "rose": LunchOfficeSelection.ROSE,
+    "роза": LunchOfficeSelection.ROSE,
+    "skyline": LunchOfficeSelection.SKYLINE,
+    "скайлайн": LunchOfficeSelection.SKYLINE,
 }
 
 
 class LunchPollCatalog:
-    def for_date(self, lunch_date: date) -> OfficeLunchPolls:
-        office = OfficeLocation.SKYLINE
+    def select(
+        self,
+        selection: LunchOfficeSelection,
+        lunch_date: date,
+    ) -> OfficeLunchPolls:
+        resolved_selection = selection
+        if selection == LunchOfficeSelection.AUTOMATIC:
+            resolved_selection = self._selection_for_date(lunch_date)
+        return _OFFICE_LUNCH_POLLS[resolved_selection]
+
+    def _selection_for_date(self, lunch_date: date) -> LunchOfficeSelection:
         if lunch_date.weekday() == calendar.TUESDAY:
-            office = OfficeLocation.ROSE
-        return _OFFICE_LUNCH_POLLS[office]
+            return LunchOfficeSelection.ROSE
+        return LunchOfficeSelection.SKYLINE
+
+
+def parse_lunch_office_selection(
+    raw_argument: str | None,
+) -> LunchOfficeSelection | None:
+    if raw_argument is None or not raw_argument.strip():
+        return LunchOfficeSelection.AUTOMATIC
+    return _LUNCH_OFFICE_ALIASES.get(raw_argument.strip().casefold())
 
 LUNCH_OTHER_FOOD_POLL = LunchPollDefinition(
     question="Закажем ...",

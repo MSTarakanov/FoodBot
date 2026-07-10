@@ -61,6 +61,7 @@ from office_food_bot.services.lunch_polls import (
     LUNCH_PLACE_OTHER_OPTION,
     ROSE_LUNCH_POLLS,
     SKYLINE_LUNCH_POLLS,
+    OfficeLunchPolls,
 )
 from office_food_bot.services.splitwise import SplitwiseUnavailableError
 
@@ -102,7 +103,7 @@ GROUP_HELP_TEXT = (
     "/eta 20 или /eta 20-30 - сообщить ожидаемое время доставки\n"
     "/balance - показать баланс Splitwise\n"
     "/vacation 2 - отметить отпуск\n"
-    "/lunch - создать опрос про обед"
+    "/lunch [rose|роза|skyline|скайлайн] - создать опрос про обед"
 )
 ADMIN_GROUP_HELP_TEXT = (
     GROUP_HELP_TEXT
@@ -2090,6 +2091,66 @@ async def test_lunch_uses_rose_poll_definitions_on_tuesday(tmp_path: Path) -> No
     assert len(session.sent_polls) == 2
     assert poll_option_texts(session.sent_polls[0]) == list(ROSE_LUNCH_POLLS.lunch.options)
     assert poll_option_texts(session.sent_polls[1]) == list(ROSE_LUNCH_POLLS.place.options)
+
+
+@pytest.mark.parametrize(
+    ("command_text", "day", "expected_polls"),
+    [
+        ("/lunch rose", 6, ROSE_LUNCH_POLLS),
+        ("/lunch роза", 6, ROSE_LUNCH_POLLS),
+        ("/lunch skyline", 7, SKYLINE_LUNCH_POLLS),
+        ("/lunch скайлайн", 7, SKYLINE_LUNCH_POLLS),
+    ],
+)
+async def test_lunch_office_argument_overrides_weekday(
+    tmp_path: Path,
+    command_text: str,
+    day: int,
+    expected_polls: OfficeLunchPolls,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(
+        database,
+        clock=lambda: datetime(
+            2026,
+            7,
+            day,
+            12,
+            15,
+            tzinfo=ZoneInfo("Europe/Belgrade"),
+        ),
+    )
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update(command_text, chat_type="group"))
+
+    assert len(session.sent_polls) == 2
+    assert poll_option_texts(session.sent_polls[0]) == list(expected_polls.lunch.options)
+    assert poll_option_texts(session.sent_polls[1]) == list(expected_polls.place.options)
+
+
+async def test_lunch_rejects_unknown_office_argument(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/lunch office", chat_type="group"))
+
+    assert sent_texts(session) == [
+        "Не понял офис. Используй /lunch, /lunch rose, /lunch роза, "
+        "/lunch skyline или /lunch скайлайн."
+    ]
+    assert session.sent_polls == []
 
 
 async def test_lunch_skips_vacation_users_in_announcement(tmp_path: Path) -> None:

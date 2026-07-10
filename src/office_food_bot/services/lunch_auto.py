@@ -23,6 +23,7 @@ from office_food_bot.services.business_calendar import BusinessCalendarService
 from office_food_bot.services.lunch import lunch_announcement_text
 from office_food_bot.services.lunch_pin import LunchPinService
 from office_food_bot.services.lunch_polls import (
+    LunchOfficeSelection,
     LunchPollCatalog,
     LunchPollDefinition,
 )
@@ -81,10 +82,12 @@ class LunchPollPublisher:
         self,
         bot: Bot,
         chat_id: int,
+        *,
         mode: CommandExecutionMode,
+        office_selection: LunchOfficeSelection,
     ) -> LunchPublishKind:
         today = self._clock().astimezone(self._timezone).date()
-        polls = self._poll_catalog.for_date(today)
+        polls = self._poll_catalog.select(office_selection, today)
         active_users = self._active_users_available_for_lunch()
         if not active_users and mode == CommandExecutionMode.AUTOMATIC:
             return LunchPublishKind.SKIPPED_ALL_ON_VACATION
@@ -205,7 +208,8 @@ class LunchSchedulerService:
                 await self._publisher.publish(
                     bot,
                     chat.chat_id,
-                    CommandExecutionMode.AUTOMATIC,
+                    mode=CommandExecutionMode.AUTOMATIC,
+                    office_selection=LunchOfficeSelection.AUTOMATIC,
                 )
             except TelegramAPIError:
                 continue
