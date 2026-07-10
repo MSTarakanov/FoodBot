@@ -187,19 +187,24 @@ class LunchSchedulerService:
     async def run_due_lunch(self, bot: Bot) -> None:
         today = self._clock().astimezone(self._timezone).date()
         enabled_chats = self._auto_chats.list_enabled()
+        await self._clear_existing_lunch_pins(bot, enabled_chats)
         if not self._calendar.is_working_day(today):
-            for chat in enabled_chats:
-                await self._lunch_pins.clear_pin(bot, chat.chat_id)
             return
 
         for chat in enabled_chats:
             try:
-                publish_kind = await self._publisher.publish(
+                await self._publisher.publish(
                     bot,
                     chat.chat_id,
                     CommandExecutionMode.AUTOMATIC,
                 )
-                if publish_kind == LunchPublishKind.SKIPPED_ALL_ON_VACATION:
-                    await self._lunch_pins.clear_pin(bot, chat.chat_id)
             except TelegramAPIError:
                 continue
+
+    async def _clear_existing_lunch_pins(
+        self,
+        bot: Bot,
+        chats: tuple[LunchAutoChat, ...],
+    ) -> None:
+        for chat in chats:
+            await self._lunch_pins.clear_pin(bot, chat.chat_id)
