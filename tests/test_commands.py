@@ -56,19 +56,18 @@ from office_food_bot.repositories import (
     VacationRepository,
 )
 from office_food_bot.services import BotServices
-from office_food_bot.services.lunch import (
-    LUNCH_OTHER_FOOD_POLL_OPTIONS,
-    LUNCH_OTHER_FOOD_POLL_QUESTION,
-    LUNCH_PLACE_OTHER_OPTION_INDEX,
-    LUNCH_PLACE_POLL_OPTIONS,
-    LUNCH_PLACE_POLL_QUESTION,
-    LUNCH_POLL_OPTIONS,
-    LUNCH_POLL_QUESTION,
+from office_food_bot.services.lunch_polls import (
+    LUNCH_OTHER_FOOD_POLL,
+    LUNCH_PLACE_OTHER_OPTION,
+    SKYLINE_LUNCH_POLLS,
 )
 from office_food_bot.services.splitwise import SplitwiseUnavailableError
 
 DEFAULT_ADMIN_IDS = frozenset({7})
 DEFAULT_SPLITWISE_GROUP_ID = 55
+SKYLINE_OTHER_OPTION_INDEX = SKYLINE_LUNCH_POLLS.place.options.index(
+    LUNCH_PLACE_OTHER_OPTION
+)
 PRIVATE_HELP_TEXT = (
     "Команды:\n"
     "/start - показать приветствие\n"
@@ -2038,15 +2037,15 @@ async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path)
     assert len(session.sent_polls) == 2
 
     lunch_poll = session.sent_polls[0]
-    assert lunch_poll.question == LUNCH_POLL_QUESTION
-    assert poll_option_texts(lunch_poll) == list(LUNCH_POLL_OPTIONS)
+    assert lunch_poll.question == SKYLINE_LUNCH_POLLS.lunch.question
+    assert poll_option_texts(lunch_poll) == list(SKYLINE_LUNCH_POLLS.lunch.options)
     assert lunch_poll.is_anonymous is False
     assert lunch_poll.allows_multiple_answers is False
     assert lunch_poll.allow_adding_options is True
 
     place_poll = session.sent_polls[1]
-    assert place_poll.question == LUNCH_PLACE_POLL_QUESTION
-    assert poll_option_texts(place_poll) == list(LUNCH_PLACE_POLL_OPTIONS)
+    assert place_poll.question == SKYLINE_LUNCH_POLLS.place.question
+    assert poll_option_texts(place_poll) == list(SKYLINE_LUNCH_POLLS.place.options)
     assert place_poll.is_anonymous is False
     assert place_poll.allows_multiple_answers is True
     assert place_poll.allow_adding_options is True
@@ -2266,8 +2265,8 @@ async def test_scheduled_lunch_publishes_to_enabled_chats_and_tracks_poll(
     assert sent_texts(session) == ["Время обедать! @misha"]
     assert len(session.sent_polls) == 2
     assert session.sent_polls[0].chat_id == -100
-    assert session.sent_polls[0].question == LUNCH_POLL_QUESTION
-    assert session.sent_polls[1].question == LUNCH_PLACE_POLL_QUESTION
+    assert session.sent_polls[0].question == SKYLINE_LUNCH_POLLS.lunch.question
+    assert session.sent_polls[1].question == SKYLINE_LUNCH_POLLS.place.question
     assert session.unpin_requests == []
     assert len(session.pin_requests) == 1
     assert session.pin_requests[0].chat_id == -100
@@ -2275,7 +2274,7 @@ async def test_scheduled_lunch_publishes_to_enabled_chats_and_tracks_poll(
     assert session.pin_requests[0].disable_notification is True
     action_requests = services.poll_tracking.consume_action_requests(
         session.sent_poll_ids[1],
-        (LUNCH_PLACE_OTHER_OPTION_INDEX,),
+        (SKYLINE_OTHER_OPTION_INDEX,),
     )
     assert len(action_requests) == 1
     assert action_requests[0].chat_id == -100
@@ -2496,14 +2495,14 @@ async def test_lunch_other_place_answer_creates_other_food_poll_once(
         bot,
         make_poll_answer_update(
             place_poll_id,
-            (0, LUNCH_PLACE_OTHER_OPTION_INDEX),
+            (0, SKYLINE_OTHER_OPTION_INDEX),
         ),
     )
     await dispatcher.feed_update(
         bot,
         make_poll_answer_update(
             place_poll_id,
-            (LUNCH_PLACE_OTHER_OPTION_INDEX,),
+            (SKYLINE_OTHER_OPTION_INDEX,),
             user_id=43,
             first_name="Anton",
             username="anton",
@@ -2513,8 +2512,8 @@ async def test_lunch_other_place_answer_creates_other_food_poll_once(
     assert sent_texts(session) == []
     assert len(session.sent_polls) == 1
     other_food_poll = session.sent_polls[0]
-    assert other_food_poll.question == LUNCH_OTHER_FOOD_POLL_QUESTION
-    assert poll_option_texts(other_food_poll) == list(LUNCH_OTHER_FOOD_POLL_OPTIONS)
+    assert other_food_poll.question == LUNCH_OTHER_FOOD_POLL.question
+    assert poll_option_texts(other_food_poll) == list(LUNCH_OTHER_FOOD_POLL.options)
     assert other_food_poll.is_anonymous is False
     assert other_food_poll.allows_multiple_answers is True
     assert other_food_poll.allow_adding_options is True
