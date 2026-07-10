@@ -73,7 +73,12 @@ COMMANDS: tuple[CommandDefinition, ...] = (
         "/vacation 2",
         CommandScope.GROUP,
     ),
-    CommandDefinition("lunch", "создать опрос про обед", "/lunch", CommandScope.GROUP),
+    CommandDefinition(
+        "lunch",
+        "создать опрос про обед",
+        "/lunch [rose|роза|skyline|скайлайн]",
+        CommandScope.GROUP,
+    ),
     CommandDefinition(
         "lunch_auto_on",
         "включить авто-ланч в этом чате",

@@ -26,6 +26,7 @@ from office_food_bot.services.lunch_auto import (
     LunchSchedulerService,
 )
 from office_food_bot.services.lunch_pin import LunchPinService
+from office_food_bot.services.lunch_polls import LunchPollCatalog
 from office_food_bot.services.poll_tracking import PollTrackingService
 from office_food_bot.services.presence import PresenceService
 from office_food_bot.services.registration import RegistrationService
@@ -78,6 +79,7 @@ def build_services(
         users,
         vacations,
         lunch_pins,
+        LunchPollCatalog(),
         timezone_name,
         clock,
     )

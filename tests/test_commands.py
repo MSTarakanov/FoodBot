@@ -56,19 +56,20 @@ from office_food_bot.repositories import (
     VacationRepository,
 )
 from office_food_bot.services import BotServices
-from office_food_bot.services.lunch import (
-    LUNCH_OTHER_FOOD_POLL_OPTIONS,
-    LUNCH_OTHER_FOOD_POLL_QUESTION,
-    LUNCH_PLACE_OTHER_OPTION_INDEX,
-    LUNCH_PLACE_POLL_OPTIONS,
-    LUNCH_PLACE_POLL_QUESTION,
-    LUNCH_POLL_OPTIONS,
-    LUNCH_POLL_QUESTION,
+from office_food_bot.services.lunch_polls import (
+    LUNCH_OTHER_FOOD_POLL,
+    LUNCH_PLACE_OTHER_OPTION,
+    ROSE_LUNCH_POLLS,
+    SKYLINE_LUNCH_POLLS,
+    OfficeLunchPolls,
 )
 from office_food_bot.services.splitwise import SplitwiseUnavailableError
 
 DEFAULT_ADMIN_IDS = frozenset({7})
 DEFAULT_SPLITWISE_GROUP_ID = 55
+ROSE_OTHER_OPTION_INDEX = ROSE_LUNCH_POLLS.place.options.index(
+    LUNCH_PLACE_OTHER_OPTION
+)
 PRIVATE_HELP_TEXT = (
     "Команды:\n"
     "/start - показать приветствие\n"
@@ -102,7 +103,7 @@ GROUP_HELP_TEXT = (
     "/eta 20 или /eta 20-30 - сообщить ожидаемое время доставки\n"
     "/balance - показать баланс Splitwise\n"
     "/vacation 2 - отметить отпуск\n"
-    "/lunch - создать опрос про обед"
+    "/lunch [rose|роза|skyline|скайлайн] - создать опрос про обед"
 )
 ADMIN_GROUP_HELP_TEXT = (
     GROUP_HELP_TEXT
@@ -2024,7 +2025,17 @@ async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path)
     database = make_database(tmp_path)
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
-    dispatcher = make_dispatcher(database)
+    dispatcher = make_dispatcher(
+        database,
+        clock=lambda: datetime(
+            2026,
+            7,
+            6,
+            12,
+            15,
+            tzinfo=ZoneInfo("Europe/Belgrade"),
+        ),
+    )
     pins = LunchPinRepository(database)
 
     await submit_registration(dispatcher, bot, session)
@@ -2038,21 +2049,108 @@ async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path)
     assert len(session.sent_polls) == 2
 
     lunch_poll = session.sent_polls[0]
-    assert lunch_poll.question == LUNCH_POLL_QUESTION
-    assert poll_option_texts(lunch_poll) == list(LUNCH_POLL_OPTIONS)
+    assert lunch_poll.question == SKYLINE_LUNCH_POLLS.lunch.question
+    assert poll_option_texts(lunch_poll) == list(SKYLINE_LUNCH_POLLS.lunch.options)
     assert lunch_poll.is_anonymous is False
     assert lunch_poll.allows_multiple_answers is False
     assert lunch_poll.allow_adding_options is True
 
     place_poll = session.sent_polls[1]
-    assert place_poll.question == LUNCH_PLACE_POLL_QUESTION
-    assert poll_option_texts(place_poll) == list(LUNCH_PLACE_POLL_OPTIONS)
+    assert place_poll.question == SKYLINE_LUNCH_POLLS.place.question
+    assert poll_option_texts(place_poll) == list(SKYLINE_LUNCH_POLLS.place.options)
     assert place_poll.is_anonymous is False
     assert place_poll.allows_multiple_answers is True
     assert place_poll.allow_adding_options is True
     assert session.pin_requests == []
     assert session.unpin_requests == []
     assert pins.get(-100) == old_pin
+
+
+async def test_lunch_uses_rose_poll_definitions_on_tuesday(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(
+        database,
+        clock=lambda: datetime(
+            2026,
+            7,
+            7,
+            12,
+            15,
+            tzinfo=ZoneInfo("Europe/Belgrade"),
+        ),
+    )
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
+
+    assert len(session.sent_polls) == 2
+    assert poll_option_texts(session.sent_polls[0]) == list(ROSE_LUNCH_POLLS.lunch.options)
+    assert poll_option_texts(session.sent_polls[1]) == list(ROSE_LUNCH_POLLS.place.options)
+
+
+@pytest.mark.parametrize(
+    ("command_text", "day", "expected_polls"),
+    [
+        ("/lunch rose", 6, ROSE_LUNCH_POLLS),
+        ("/lunch роза", 6, ROSE_LUNCH_POLLS),
+        ("/lunch skyline", 7, SKYLINE_LUNCH_POLLS),
+        ("/lunch скайлайн", 7, SKYLINE_LUNCH_POLLS),
+    ],
+)
+async def test_lunch_office_argument_overrides_weekday(
+    tmp_path: Path,
+    command_text: str,
+    day: int,
+    expected_polls: OfficeLunchPolls,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(
+        database,
+        clock=lambda: datetime(
+            2026,
+            7,
+            day,
+            12,
+            15,
+            tzinfo=ZoneInfo("Europe/Belgrade"),
+        ),
+    )
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update(command_text, chat_type="group"))
+
+    assert len(session.sent_polls) == 2
+    assert poll_option_texts(session.sent_polls[0]) == list(expected_polls.lunch.options)
+    assert poll_option_texts(session.sent_polls[1]) == list(expected_polls.place.options)
+
+
+async def test_lunch_rejects_unknown_office_argument(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await submit_registration(dispatcher, bot, session)
+    await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/lunch office", chat_type="group"))
+
+    assert sent_texts(session) == [
+        "Не понял офис. Используй /lunch, /lunch rose, /lunch роза, "
+        "/lunch skyline или /lunch скайлайн."
+    ]
+    assert session.sent_polls == []
 
 
 async def test_lunch_skips_vacation_users_in_announcement(tmp_path: Path) -> None:
@@ -2241,13 +2339,23 @@ async def test_lunch_auto_commands_are_admin_only(tmp_path: Path) -> None:
     assert LunchAutoChatRepository(database).get(-100) is None
 
 
-async def test_scheduled_lunch_publishes_to_enabled_chats_and_tracks_poll(
+async def test_scheduled_lunch_uses_rose_polls_and_tracks_actions_on_tuesday(
     tmp_path: Path,
 ) -> None:
     database = make_database(tmp_path)
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
-    services = make_test_services(database)
+    services = make_test_services(
+        database,
+        clock=lambda: datetime(
+            2026,
+            7,
+            7,
+            11,
+            30,
+            tzinfo=ZoneInfo("Europe/Belgrade"),
+        ),
+    )
     services.lunch_auto_chats.enable(-100, "Office")
     users = UserRepository(database)
     users.create_pending_user(
@@ -2266,8 +2374,8 @@ async def test_scheduled_lunch_publishes_to_enabled_chats_and_tracks_poll(
     assert sent_texts(session) == ["Время обедать! @misha"]
     assert len(session.sent_polls) == 2
     assert session.sent_polls[0].chat_id == -100
-    assert session.sent_polls[0].question == LUNCH_POLL_QUESTION
-    assert session.sent_polls[1].question == LUNCH_PLACE_POLL_QUESTION
+    assert poll_option_texts(session.sent_polls[0]) == list(ROSE_LUNCH_POLLS.lunch.options)
+    assert poll_option_texts(session.sent_polls[1]) == list(ROSE_LUNCH_POLLS.place.options)
     assert session.unpin_requests == []
     assert len(session.pin_requests) == 1
     assert session.pin_requests[0].chat_id == -100
@@ -2275,7 +2383,7 @@ async def test_scheduled_lunch_publishes_to_enabled_chats_and_tracks_poll(
     assert session.pin_requests[0].disable_notification is True
     action_requests = services.poll_tracking.consume_action_requests(
         session.sent_poll_ids[1],
-        (LUNCH_PLACE_OTHER_OPTION_INDEX,),
+        (ROSE_OTHER_OPTION_INDEX,),
     )
     assert len(action_requests) == 1
     assert action_requests[0].chat_id == -100
@@ -2476,13 +2584,23 @@ async def test_admin_debug_allows_group_only_command_in_private_chat(
     assert session.sent_polls == []
 
 
-async def test_lunch_other_place_answer_creates_other_food_poll_once(
+async def test_rose_lunch_other_place_answer_creates_other_food_poll_once(
     tmp_path: Path,
 ) -> None:
     database = make_database(tmp_path)
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
-    dispatcher = make_dispatcher(database)
+    dispatcher = make_dispatcher(
+        database,
+        clock=lambda: datetime(
+            2026,
+            7,
+            7,
+            12,
+            15,
+            tzinfo=ZoneInfo("Europe/Belgrade"),
+        ),
+    )
 
     await submit_registration(dispatcher, bot, session)
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))
@@ -2496,14 +2614,14 @@ async def test_lunch_other_place_answer_creates_other_food_poll_once(
         bot,
         make_poll_answer_update(
             place_poll_id,
-            (0, LUNCH_PLACE_OTHER_OPTION_INDEX),
+            (0, ROSE_OTHER_OPTION_INDEX),
         ),
     )
     await dispatcher.feed_update(
         bot,
         make_poll_answer_update(
             place_poll_id,
-            (LUNCH_PLACE_OTHER_OPTION_INDEX,),
+            (ROSE_OTHER_OPTION_INDEX,),
             user_id=43,
             first_name="Anton",
             username="anton",
@@ -2513,8 +2631,8 @@ async def test_lunch_other_place_answer_creates_other_food_poll_once(
     assert sent_texts(session) == []
     assert len(session.sent_polls) == 1
     other_food_poll = session.sent_polls[0]
-    assert other_food_poll.question == LUNCH_OTHER_FOOD_POLL_QUESTION
-    assert poll_option_texts(other_food_poll) == list(LUNCH_OTHER_FOOD_POLL_OPTIONS)
+    assert other_food_poll.question == LUNCH_OTHER_FOOD_POLL.question
+    assert poll_option_texts(other_food_poll) == list(LUNCH_OTHER_FOOD_POLL.options)
     assert other_food_poll.is_anonymous is False
     assert other_food_poll.allows_multiple_answers is True
     assert other_food_poll.allow_adding_options is True
@@ -2526,7 +2644,17 @@ async def test_lunch_place_answer_without_other_choice_does_not_create_poll(
     database = make_database(tmp_path)
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
-    dispatcher = make_dispatcher(database)
+    dispatcher = make_dispatcher(
+        database,
+        clock=lambda: datetime(
+            2026,
+            7,
+            7,
+            12,
+            15,
+            tzinfo=ZoneInfo("Europe/Belgrade"),
+        ),
+    )
 
     await submit_registration(dispatcher, bot, session)
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7, first_name="Admin"))

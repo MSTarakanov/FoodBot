@@ -31,7 +31,8 @@ Group chat commands:
 - `/balance` - shows Splitwise balances.
 - `/vacation <days|date|0>` - marks the current user as on vacation until the end of the given
   date, or disables vacation with `0`/`off`.
-- `/lunch` - creates lunch polls.
+- `/lunch [rose|роза|skyline|скайлайн]` - creates lunch polls. Without an office argument,
+  Tuesday uses Rose and every other day uses Skyline.
 - `/lunch_auto_on` - admin-only: enables automatic lunch polls for the current group chat.
 - `/lunch_auto_off` - admin-only: disables automatic lunch polls for the current group chat.
 - `/lunch_auto_status` - admin-only: shows whether automatic lunch polls are enabled.
