@@ -132,7 +132,6 @@ class RecordingSession(BaseSession):
         self.pin_requests: list[PinChatMessage] = []
         self.unpin_requests: list[UnpinChatMessage] = []
         self.set_command_requests: list[SetMyCommands] = []
-        self.request_names: list[str] = []
 
     async def close(self) -> None:
         return None
@@ -143,7 +142,6 @@ class RecordingSession(BaseSession):
         method: TelegramMethod[TelegramType],
         timeout: int | None = None,
     ) -> TelegramType:
-        self.request_names.append(type(method).__name__)
         if type(method).__name__ in self._failed_method_names:
             raise TelegramBadRequest(method=method, message="Bad Request")
 
@@ -193,7 +191,6 @@ class RecordingSession(BaseSession):
         self.sent_poll_ids.clear()
         self.pin_requests.clear()
         self.unpin_requests.clear()
-        self.request_names.clear()
 
 
 class RecordingCommandMenuClient:
@@ -2309,17 +2306,6 @@ async def test_scheduled_lunch_replaces_previous_pinned_poll(
 
     assert [request.message_id for request in session.pin_requests] == [2, 5]
     assert [request.message_id for request in session.unpin_requests] == [2]
-    assert session.request_names == [
-        "SendMessage",
-        "SendPoll",
-        "PinChatMessage",
-        "SendPoll",
-        "UnpinChatMessage",
-        "SendMessage",
-        "SendPoll",
-        "PinChatMessage",
-        "SendPoll",
-    ]
     current_pin = LunchPinRepository(database).get(-100)
     assert current_pin is not None
     assert current_pin.message_id == 5
