@@ -49,20 +49,22 @@ LUNCH_PLACE_OTHER_OPTION_ACTION = PollOptionActionDefinition(
     action=PollAction.LUNCH_OTHER_FOOD_POLL,
 )
 
-SKYLINE_LUNCH_POLLS = OfficeLunchPolls(
-    lunch=LunchPollDefinition(
-        question=LUNCH_POLL_QUESTION,
-        options=(
-            "са собом",
-            "кушаю в офисе",
-            "заказал бы что-то",
-            "сижу дома",
-            "поел/поем самостоятельно",
-            "не решил еще",
-            "ахахахахаххаахаха",
-        ),
-        allows_multiple_answers=False,
+LUNCH_ATTENDANCE_POLL = LunchPollDefinition(
+    question=LUNCH_POLL_QUESTION,
+    options=(
+        "са собом",
+        "кушаю в офисе",
+        "заказал бы что-то",
+        "сижу дома",
+        "поел/поем самостоятельно",
+        "не решил еще",
+        "ахахахахаххаахаха",
     ),
+    allows_multiple_answers=False,
+)
+
+SKYLINE_LUNCH_POLLS = OfficeLunchPolls(
+    lunch=LUNCH_ATTENDANCE_POLL,
     place=LunchPollDefinition(
         question=LUNCH_PLACE_POLL_QUESTION,
         options=(
@@ -78,25 +80,13 @@ SKYLINE_LUNCH_POLLS = OfficeLunchPolls(
 )
 
 ROSE_LUNCH_POLLS = OfficeLunchPolls(
-    lunch=LunchPollDefinition(
-        question=LUNCH_POLL_QUESTION,
-        options=(
-            "са собом",
-            "кушаю в офисе",
-            "заказал бы что-то",
-            "сходил бы куда-то поесть",
-            "сижу дома",
-            "поел/поем самостоятельно",
-            "не решил еще",
-            "ахахахахаххаахаха",
-        ),
-        allows_multiple_answers=False,
-    ),
+    lunch=LUNCH_ATTENDANCE_POLL,
     place=LunchPollDefinition(
         question=LUNCH_PLACE_POLL_QUESTION,
         options=(
-            "Березка",
-            "Салатница",
+            "березка",
+            "салатница",
+            "сходил бы куда-то поесть рядом",
             LUNCH_PLACE_OTHER_OPTION,
             "посмотреть результаты",
         ),

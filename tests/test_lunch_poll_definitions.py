@@ -86,19 +86,20 @@ def test_lunch_office_selection_parser_rejects_unknown_argument() -> None:
 
 
 def test_rose_poll_definitions_have_office_specific_options() -> None:
+    assert ROSE_LUNCH_POLLS.lunch.options == SKYLINE_LUNCH_POLLS.lunch.options
     assert ROSE_LUNCH_POLLS.lunch.options == (
         "са собом",
         "кушаю в офисе",
         "заказал бы что-то",
-        "сходил бы куда-то поесть",
         "сижу дома",
         "поел/поем самостоятельно",
         "не решил еще",
         "ахахахахаххаахаха",
     )
     assert ROSE_LUNCH_POLLS.place.options == (
-        "Березка",
-        "Салатница",
+        "березка",
+        "салатница",
+        "сходил бы куда-то поесть рядом",
         LUNCH_PLACE_OTHER_OPTION,
         "посмотреть результаты",
     )
