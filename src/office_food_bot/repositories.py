@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import date
+from collections.abc import Collection
+from datetime import UTC, date, datetime
 
 from office_food_bot.database import Database
 from office_food_bot.database.debug_queries import (
@@ -19,6 +20,15 @@ from office_food_bot.database.lunch_pin_queries import (
     GET_LUNCH_PINNED_MESSAGE_SQL,
     UPSERT_LUNCH_PINNED_MESSAGE_SQL,
 )
+from office_food_bot.database.poll_queries import (
+    DELETE_SELECTED_POLL_OPTIONS_SQL,
+    GET_LATEST_POLL_SQL,
+    GET_POLL_SQL,
+    INSERT_POLL_SQL,
+    INSERT_SELECTED_POLL_OPTION_SQL,
+    LIST_ACTIVE_USERS_WITH_SELECTED_OPTIONS_SQL,
+    LIST_SELECTED_POLL_OPTIONS_SQL,
+)
 from office_food_bot.database.registration_request_queries import (
     DELETE_REGISTRATION_REQUEST_SQL,
     LIST_REQUESTED_REGISTRATION_ACCOUNTS_SQL,
@@ -33,6 +43,7 @@ from office_food_bot.database.user_queries import (
     COUNT_SPLITWISE_USERS_SQL,
     DELETE_SPLITWISE_USER_BY_USER_ID_SQL,
     GET_REGISTRATION_DETAILS_BY_TELEGRAM_ID_SQL,
+    GET_USER_BY_ID_SQL,
     GET_USER_BY_TELEGRAM_ID_SQL,
     INSERT_SPLITWISE_USER_SQL,
     INSERT_USER_SQL,
@@ -57,10 +68,13 @@ from office_food_bot.models import (
     LunchAutoChat,
     LunchPinnedMessage,
     PendingRegistration,
+    PollKind,
+    PollOptionKey,
     RegisteredUser,
     RegistrationDetails,
     SplitwiseConnection,
     SplitwiseMember,
+    StoredPoll,
     TelegramProfile,
     UserRole,
     UserStatus,
@@ -135,6 +149,15 @@ class UserRepository:
         row = self._database.connection.execute(
             GET_USER_BY_TELEGRAM_ID_SQL,
             (telegram_user_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return _registered_user_from_row(row)
+
+    def get_by_id(self, user_id: int) -> RegisteredUser | None:
+        row = self._database.connection.execute(
+            GET_USER_BY_ID_SQL,
+            (user_id,),
         ).fetchone()
         if row is None:
             return None
@@ -438,6 +461,100 @@ class LunchPinRepository:
             )
 
 
+class PollRepository:
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    def save(self, poll: StoredPoll) -> None:
+        with self._database.connection:
+            self._database.connection.execute(
+                INSERT_POLL_SQL,
+                (
+                    poll.poll_id,
+                    poll.chat_id,
+                    poll.message_id,
+                    poll.kind.value,
+                    poll.context_date.isoformat(),
+                    poll.published_at.isoformat(),
+                ),
+            )
+
+    def get(self, poll_id: str) -> StoredPoll | None:
+        row = self._database.connection.execute(GET_POLL_SQL, (poll_id,)).fetchone()
+        if row is None:
+            return None
+        return _stored_poll_from_row(row)
+
+    def latest_for_kinds(
+        self,
+        chat_id: int,
+        context_date: date,
+        kinds: Collection[PollKind],
+    ) -> StoredPoll | None:
+        requested_kinds = tuple(kinds)
+        if not requested_kinds:
+            return None
+        placeholders = ", ".join("?" for _ in requested_kinds)
+        row = self._database.connection.execute(
+            GET_LATEST_POLL_SQL.format(kind_placeholders=placeholders),
+            (
+                chat_id,
+                context_date.isoformat(),
+                *(kind.value for kind in requested_kinds),
+            ),
+        ).fetchone()
+        if row is None:
+            return None
+        return _stored_poll_from_row(row)
+
+    def replace_selected_options(
+        self,
+        poll_id: str,
+        telegram_user_id: int,
+        option_keys: Collection[PollOptionKey],
+        selected_at: datetime,
+    ) -> frozenset[PollOptionKey]:
+        selected = frozenset(option_keys)
+        with self._database.connection:
+            previous_rows = self._database.connection.execute(
+                LIST_SELECTED_POLL_OPTIONS_SQL,
+                (poll_id, telegram_user_id),
+            ).fetchall()
+            previous = frozenset(
+                PollOptionKey(str(row["option_key"])) for row in previous_rows
+            )
+            self._database.connection.execute(
+                DELETE_SELECTED_POLL_OPTIONS_SQL,
+                (poll_id, telegram_user_id),
+            )
+            self._database.connection.executemany(
+                INSERT_SELECTED_POLL_OPTION_SQL,
+                (
+                    (poll_id, telegram_user_id, key.value, selected_at.isoformat())
+                    for key in sorted(selected, key=lambda item: item.value)
+                ),
+            )
+        return selected - previous
+
+    def list_active_users_with_any_option(
+        self,
+        poll_id: str,
+        option_keys: Collection[PollOptionKey],
+    ) -> tuple[RegisteredUser, ...]:
+        keys = tuple(option_keys)
+        if not keys:
+            return ()
+        placeholders = ", ".join("?" for _ in keys)
+        query = LIST_ACTIVE_USERS_WITH_SELECTED_OPTIONS_SQL.format(
+            option_placeholders=placeholders
+        )
+        rows = self._database.connection.execute(
+            query,
+            (poll_id, UserStatus.ACTIVE.value, *(key.value for key in keys)),
+        ).fetchall()
+        return tuple(_registered_user_from_row(row) for row in rows)
+
+
 class VacationRepository:
     def __init__(self, database: Database) -> None:
         self._database = database
@@ -490,6 +607,20 @@ def _registered_user_from_row(row: sqlite3.Row) -> RegisteredUser:
         username=_optional_str(row["username"]),
         first_name=_optional_str(row["first_name"]),
         last_name=_optional_str(row["last_name"]),
+    )
+
+
+def _stored_poll_from_row(row: sqlite3.Row) -> StoredPoll:
+    published_at = datetime.fromisoformat(str(row["published_at"]))
+    if published_at.tzinfo is None:
+        published_at = published_at.replace(tzinfo=UTC)
+    return StoredPoll(
+        poll_id=str(row["poll_id"]),
+        chat_id=int(row["chat_id"]),
+        message_id=int(row["message_id"]),
+        kind=PollKind(str(row["kind"])),
+        context_date=date.fromisoformat(str(row["context_date"])),
+        published_at=published_at,
     )
 
 

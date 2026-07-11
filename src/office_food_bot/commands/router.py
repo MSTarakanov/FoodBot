@@ -5,6 +5,7 @@ from aiogram.filters import Command, CommandStart
 
 from office_food_bot.commands.approve import approve_command
 from office_food_bot.commands.balance import balance_command
+from office_food_bot.commands.coffee import coffee_callback_handler, coffee_command
 from office_food_bot.commands.debug import debug_command
 from office_food_bot.commands.eta import eta_command
 from office_food_bot.commands.help import help_command
@@ -57,6 +58,8 @@ def create_command_router(services: BotServices, messenger: BotMessenger) -> Rou
     router.message.register(lunch_auto_off_command, Command("lunch_auto_off"))
     router.message.register(lunch_auto_status_command, Command("lunch_auto_status"))
     router.message.register(lunch_command, Command("lunch"))
+    router.message.register(coffee_command, Command("coffee"))
+    router.callback_query.register(coffee_callback_handler, F.data.startswith("coffee:"))
     router.poll_answer.register(poll_answer_handler)
     router.message.register(register_name_message, RegistrationFlow.waiting_for_name, F.text)
     router.message.register(

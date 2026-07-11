@@ -12,12 +12,19 @@ class CommandScope(StrEnum):
 
 
 @dataclass(frozen=True)
+class CommandHelpEntry:
+    usage: str
+    description: str
+
+
+@dataclass(frozen=True)
 class CommandDefinition:
     name: str
     description: str
     usage: str
     scope: CommandScope
     admin_only: bool = False
+    additional_help: tuple[CommandHelpEntry, ...] = ()
 
 
 COMMANDS: tuple[CommandDefinition, ...] = (
@@ -80,6 +87,16 @@ COMMANDS: tuple[CommandDefinition, ...] = (
         CommandScope.GROUP,
     ),
     CommandDefinition(
+        "coffee",
+        "позвать на кофе",
+        "/coffee 15 или /coffee 16:30",
+        CommandScope.GROUP,
+        additional_help=(
+            CommandHelpEntry("/coffee on", "включить приглашения"),
+            CommandHelpEntry("/coffee off", "выключить приглашения"),
+        ),
+    ),
+    CommandDefinition(
         "lunch_auto_on",
         "включить авто-ланч в этом чате",
         "/lunch_auto_on",
@@ -110,7 +127,11 @@ def command_definition(name: str) -> CommandDefinition | None:
 
 
 def help_text(definitions: Iterable[CommandDefinition]) -> str:
-    return "Команды:\n" + "\n".join(
-        f"{definition.usage} - {definition.description}"
-        for definition in definitions
-    )
+    lines: list[str] = []
+    for definition in definitions:
+        lines.append(f"{definition.usage} - {definition.description}")
+        lines.extend(
+            f"{entry.usage} - {entry.description}"
+            for entry in definition.additional_help
+        )
+    return "Команды:\n" + "\n".join(lines)

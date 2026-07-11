@@ -13,8 +13,11 @@ async def poll_answer_handler(
     bot: Bot,
     services: BotServices,
 ) -> None:
+    if poll_answer.user is None:
+        return
     action_requests = services.poll_tracking.consume_action_requests(
         poll_answer.poll_id,
+        poll_answer.user.id,
         tuple(poll_answer.option_ids),
     )
     for action_request in action_requests:
@@ -23,4 +26,5 @@ async def poll_answer_handler(
                 bot,
                 action_request.chat_id,
                 LUNCH_OTHER_FOOD_POLL,
+                action_request.context_date,
             )

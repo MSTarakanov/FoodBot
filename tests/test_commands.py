@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
@@ -14,6 +15,8 @@ from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.methods import (
+    AnswerCallbackQuery,
+    EditMessageText,
     GetMe,
     PinChatMessage,
     SendPoll,
@@ -30,7 +33,9 @@ from aiogram.types import (
     BotCommandScopeChat,
     BotCommandScopeDefault,
     BotCommandScopeUnion,
+    CallbackQuery,
     Chat,
+    InlineKeyboardMarkup,
     Message,
     Poll,
     PollAnswer,
@@ -41,12 +46,21 @@ from aiogram.types import (
 )
 
 from office_food_bot.app import create_dispatcher, create_services
+from office_food_bot.coffee_repositories import CoffeeSessionRepository
 from office_food_bot.commands.definitions import COMMANDS, START_TEXT
 from office_food_bot.commands.errors import UNHANDLED_ERROR_REPLY_TEXT
 from office_food_bot.commands.menu import setup_bot_commands
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
-from office_food_bot.models import SplitwiseBalance, SplitwiseMember, TelegramProfile, UserStatus
+from office_food_bot.models import (
+    CoffeeSessionStatus,
+    PollKind,
+    PollOptionKey,
+    SplitwiseBalance,
+    SplitwiseMember,
+    TelegramProfile,
+    UserStatus,
+)
 from office_food_bot.repositories import (
     LunchAutoChatRepository,
     LunchPinRepository,
@@ -58,7 +72,6 @@ from office_food_bot.repositories import (
 from office_food_bot.services import BotServices
 from office_food_bot.services.lunch_polls import (
     LUNCH_OTHER_FOOD_POLL,
-    LUNCH_PLACE_OTHER_OPTION,
     ROSE_LUNCH_POLLS,
     SKYLINE_LUNCH_POLLS,
     OfficeLunchPolls,
@@ -67,8 +80,10 @@ from office_food_bot.services.splitwise import SplitwiseUnavailableError
 
 DEFAULT_ADMIN_IDS = frozenset({7})
 DEFAULT_SPLITWISE_GROUP_ID = 55
-ROSE_OTHER_OPTION_INDEX = ROSE_LUNCH_POLLS.place.options.index(
-    LUNCH_PLACE_OTHER_OPTION
+ROSE_OTHER_OPTION_INDEX = tuple(
+    option.key for option in ROSE_LUNCH_POLLS.place.options
+).index(
+    PollOptionKey.LUNCH_PLACE_OTHER
 )
 PRIVATE_HELP_TEXT = (
     "Команды:\n"
@@ -103,7 +118,10 @@ GROUP_HELP_TEXT = (
     "/eta 20 или /eta 20-30 - сообщить ожидаемое время доставки\n"
     "/balance - показать баланс Splitwise\n"
     "/vacation 2 - отметить отпуск\n"
-    "/lunch [rose|роза|skyline|скайлайн] - создать опрос про обед"
+    "/lunch [rose|роза|skyline|скайлайн] - создать опрос про обед\n"
+    "/coffee 15 или /coffee 16:30 - позвать на кофе\n"
+    "/coffee on - включить приглашения\n"
+    "/coffee off - выключить приглашения"
 )
 ADMIN_GROUP_HELP_TEXT = (
     GROUP_HELP_TEXT
@@ -133,6 +151,8 @@ class RecordingSession(BaseSession):
         self.pin_requests: list[PinChatMessage] = []
         self.unpin_requests: list[UnpinChatMessage] = []
         self.set_command_requests: list[SetMyCommands] = []
+        self.edited_messages: list[EditMessageText] = []
+        self.callback_answers: list[AnswerCallbackQuery] = []
 
     async def close(self) -> None:
         return None
@@ -156,6 +176,17 @@ class RecordingSession(BaseSession):
                 raise AssertionError("Expected fake sendPoll response to include poll")
             self.sent_poll_ids.append(message.poll.id)
             return message
+        if isinstance(method, EditMessageText):
+            self.edited_messages.append(method)
+            return Message(
+                message_id=method.message_id or 1,
+                date=datetime.now(tz=UTC),
+                chat=Chat(id=int(method.chat_id or -100), type="group"),
+                text=method.text,
+            )
+        if isinstance(method, AnswerCallbackQuery):
+            self.callback_answers.append(method)
+            return True
         if isinstance(method, PinChatMessage):
             self.pin_requests.append(method)
             return True
@@ -192,6 +223,11 @@ class RecordingSession(BaseSession):
         self.sent_poll_ids.clear()
         self.pin_requests.clear()
         self.unpin_requests.clear()
+        self.edited_messages.clear()
+        self.callback_answers.clear()
+
+    def fail_methods(self, *method_names: str) -> None:
+        self._failed_method_names = frozenset(method_names)
 
 
 class RecordingCommandMenuClient:
@@ -366,10 +402,50 @@ def make_poll_answer_update(
     )
 
 
+def make_callback_update(
+    data: str,
+    user_id: int = 42,
+    username: str | None = "misha",
+) -> Update:
+    return Update(
+        update_id=3,
+        callback_query=CallbackQuery(
+            id="callback-1",
+            from_user=User(
+                id=user_id,
+                is_bot=False,
+                first_name="Misha",
+                username=username,
+            ),
+            chat_instance="coffee-chat",
+            data=data,
+        ),
+    )
+
+
 def make_database(tmp_path: Path) -> Database:
     database = Database(tmp_path / "test.sqlite3")
     database.init_schema()
     return database
+
+
+def activate_user(
+    database: Database,
+    telegram_user_id: int,
+    display_name: str,
+    username: str | None,
+) -> None:
+    users = UserRepository(database)
+    users.create_pending_user(
+        TelegramProfile(
+            telegram_user_id=telegram_user_id,
+            username=username,
+            first_name=display_name,
+            last_name=None,
+        ),
+        display_name,
+    )
+    users.approve_by_telegram_id(telegram_user_id)
 
 
 def make_test_services(
@@ -432,6 +508,16 @@ def keyboard_texts(message: SendMessage) -> list[list[str]]:
     reply_markup = message.reply_markup
     assert isinstance(reply_markup, ReplyKeyboardMarkup)
     return [[button.text for button in row] for row in reply_markup.keyboard]
+
+
+def inline_callback_data(message: SendMessage) -> dict[str, str]:
+    reply_markup = message.reply_markup
+    assert isinstance(reply_markup, InlineKeyboardMarkup)
+    return {
+        button.text: button.callback_data or ""
+        for row in reply_markup.inline_keyboard
+        for button in row
+    }
 
 
 def poll_option_texts(poll: SendPoll) -> list[str]:
@@ -702,6 +788,7 @@ async def test_setup_bot_commands_registers_telegram_menu() -> None:
         "balance",
         "vacation",
         "lunch",
+        "coffee",
     ]
 
     admin_menu = bot.command_menus[3]
@@ -2050,14 +2137,14 @@ async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path)
 
     lunch_poll = session.sent_polls[0]
     assert lunch_poll.question == SKYLINE_LUNCH_POLLS.lunch.question
-    assert poll_option_texts(lunch_poll) == list(SKYLINE_LUNCH_POLLS.lunch.options)
+    assert poll_option_texts(lunch_poll) == list(SKYLINE_LUNCH_POLLS.lunch.option_texts())
     assert lunch_poll.is_anonymous is False
     assert lunch_poll.allows_multiple_answers is False
     assert lunch_poll.allow_adding_options is True
 
     place_poll = session.sent_polls[1]
     assert place_poll.question == SKYLINE_LUNCH_POLLS.place.question
-    assert poll_option_texts(place_poll) == list(SKYLINE_LUNCH_POLLS.place.options)
+    assert poll_option_texts(place_poll) == list(SKYLINE_LUNCH_POLLS.place.option_texts())
     assert place_poll.is_anonymous is False
     assert place_poll.allows_multiple_answers is True
     assert place_poll.allow_adding_options is True
@@ -2089,8 +2176,8 @@ async def test_lunch_uses_rose_poll_definitions_on_tuesday(tmp_path: Path) -> No
     await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
 
     assert len(session.sent_polls) == 2
-    assert poll_option_texts(session.sent_polls[0]) == list(ROSE_LUNCH_POLLS.lunch.options)
-    assert poll_option_texts(session.sent_polls[1]) == list(ROSE_LUNCH_POLLS.place.options)
+    assert poll_option_texts(session.sent_polls[0]) == list(ROSE_LUNCH_POLLS.lunch.option_texts())
+    assert poll_option_texts(session.sent_polls[1]) == list(ROSE_LUNCH_POLLS.place.option_texts())
 
 
 @pytest.mark.parametrize(
@@ -2130,8 +2217,8 @@ async def test_lunch_office_argument_overrides_weekday(
     await dispatcher.feed_update(bot, make_update(command_text, chat_type="group"))
 
     assert len(session.sent_polls) == 2
-    assert poll_option_texts(session.sent_polls[0]) == list(expected_polls.lunch.options)
-    assert poll_option_texts(session.sent_polls[1]) == list(expected_polls.place.options)
+    assert poll_option_texts(session.sent_polls[0]) == list(expected_polls.lunch.option_texts())
+    assert poll_option_texts(session.sent_polls[1]) == list(expected_polls.place.option_texts())
 
 
 async def test_lunch_rejects_unknown_office_argument(tmp_path: Path) -> None:
@@ -2374,8 +2461,8 @@ async def test_scheduled_lunch_uses_rose_polls_and_tracks_actions_on_tuesday(
     assert sent_texts(session) == ["Время обедать! @misha"]
     assert len(session.sent_polls) == 2
     assert session.sent_polls[0].chat_id == -100
-    assert poll_option_texts(session.sent_polls[0]) == list(ROSE_LUNCH_POLLS.lunch.options)
-    assert poll_option_texts(session.sent_polls[1]) == list(ROSE_LUNCH_POLLS.place.options)
+    assert poll_option_texts(session.sent_polls[0]) == list(ROSE_LUNCH_POLLS.lunch.option_texts())
+    assert poll_option_texts(session.sent_polls[1]) == list(ROSE_LUNCH_POLLS.place.option_texts())
     assert session.unpin_requests == []
     assert len(session.pin_requests) == 1
     assert session.pin_requests[0].chat_id == -100
@@ -2383,6 +2470,7 @@ async def test_scheduled_lunch_uses_rose_polls_and_tracks_actions_on_tuesday(
     assert session.pin_requests[0].disable_notification is True
     action_requests = services.poll_tracking.consume_action_requests(
         session.sent_poll_ids[1],
+        42,
         (ROSE_OTHER_OPTION_INDEX,),
     )
     assert len(action_requests) == 1
@@ -2632,10 +2720,19 @@ async def test_rose_lunch_other_place_answer_creates_other_food_poll_once(
     assert len(session.sent_polls) == 1
     other_food_poll = session.sent_polls[0]
     assert other_food_poll.question == LUNCH_OTHER_FOOD_POLL.question
-    assert poll_option_texts(other_food_poll) == list(LUNCH_OTHER_FOOD_POLL.options)
+    assert poll_option_texts(other_food_poll) == list(LUNCH_OTHER_FOOD_POLL.option_texts())
     assert other_food_poll.is_anonymous is False
     assert other_food_poll.allows_multiple_answers is True
     assert other_food_poll.allow_adding_options is True
+    stored_kinds = {
+        str(row["kind"])
+        for row in database.connection.execute("SELECT kind FROM polls").fetchall()
+    }
+    assert stored_kinds == {
+        PollKind.LUNCH_ATTENDANCE_V1.value,
+        PollKind.LUNCH_PLACE_ROSE_V1.value,
+        PollKind.LUNCH_OTHER_FOOD_V1.value,
+    }
 
 
 async def test_lunch_place_answer_without_other_choice_does_not_create_poll(
@@ -2668,3 +2765,298 @@ async def test_lunch_place_answer_without_other_choice_does_not_create_poll(
 
     assert sent_texts(session) == []
     assert session.sent_polls == []
+
+
+async def test_lunch_poll_action_survives_service_restart(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    first_dispatcher = make_dispatcher(
+        database,
+        clock=lambda: datetime(2026, 7, 7, 12, 15, tzinfo=ZoneInfo("Europe/Belgrade")),
+    )
+    await first_dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
+    place_poll_id = session.sent_poll_ids[1]
+    session.clear_messages()
+    restarted_dispatcher = make_dispatcher(
+        database,
+        clock=lambda: datetime(2026, 7, 7, 12, 16, tzinfo=ZoneInfo("Europe/Belgrade")),
+    )
+
+    await restarted_dispatcher.feed_update(
+        bot,
+        make_poll_answer_update(place_poll_id, (ROSE_OTHER_OPTION_INDEX,)),
+    )
+
+    assert len(session.sent_polls) == 1
+    assert session.sent_polls[0].question == LUNCH_OTHER_FOOD_POLL.question
+
+
+async def test_coffee_without_arguments_shows_status_usage_and_meeting(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/coffee", chat_type="group"))
+
+    assert sent_texts(session) == [
+        "Приглашения на кофе: включены.\n\n"
+        "Создать или перенести встречу: /coffee 15 или /coffee 16:30.\n\n"
+        "Текущей встречи нет."
+    ]
+
+
+async def test_coffee_off_changes_only_invitation_preference(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/coffee off", chat_type="group"))
+    await dispatcher.feed_update(bot, make_update("/coffee", chat_type="group"))
+
+    assert sent_texts(session) == [
+        "Приглашения на кофе выключены.",
+        "Приглашения на кофе: выключены.\n\n"
+        "Создать или перенести встречу: /coffee 15 или /coffee 16:30.\n\n"
+        "Текущей встречи нет.",
+    ]
+
+
+async def test_coffee_creates_card_and_persists_session(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    dispatcher = create_dispatcher(services)
+
+    await dispatcher.feed_update(bot, make_update("/coffee 15", chat_type="group"))
+
+    assert sent_texts(session) == [
+        "☕ Максим предлагает кофе\nВремя: 12:30\n\nИдут (1):\n• Максим"
+    ]
+    assert inline_callback_data(session.sent_messages[0]).keys() == {
+        "Пойду",
+        "Не пойду",
+    }
+    coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
+    assert coffee_session is not None
+    assert coffee_session.message_id == 1
+    assert [user.display_name for user in CoffeeSessionRepository(database).list_participants(
+        coffee_session.id
+    )] == ["Максим"]
+
+
+async def test_coffee_reschedule_edits_card_and_keeps_participants(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    activate_user(database, 43, "Анна", "anna")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    dispatcher = create_dispatcher(services)
+
+    await dispatcher.feed_update(bot, make_update("/coffee 15", chat_type="group"))
+    await dispatcher.feed_update(
+        bot,
+        make_update(
+            "/coffee 30",
+            user_id=43,
+            first_name="Anna",
+            username="anna",
+            chat_type="group",
+        ),
+    )
+
+    assert len(session.sent_messages) == 1
+    assert len(session.edited_messages) == 1
+    assert session.edited_messages[0].text == (
+        "☕ Анна предлагает кофе\nВремя: 12:45\n\n"
+        "Идут (2):\n• Максим\n• Анна"
+    )
+    coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
+    assert coffee_session is not None
+    assert [user.display_name for user in CoffeeSessionRepository(database).list_participants(
+        coffee_session.id
+    )] == ["Максим", "Анна"]
+
+
+async def test_concurrent_coffee_reschedules_are_serialized(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    await services.coffee.create_or_reschedule(bot, -100, 42, "15")
+
+    await asyncio.gather(
+        services.coffee.create_or_reschedule(bot, -100, 42, "20"),
+        services.coffee.create_or_reschedule(bot, -100, 42, "30"),
+    )
+
+    coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
+    assert coffee_session is not None
+    local_time = coffee_session.scheduled_at.astimezone(
+        ZoneInfo("Europe/Belgrade")
+    ).strftime("%H:%M")
+    assert local_time == "12:45"
+
+
+async def test_failed_coffee_card_update_rolls_back_reschedule(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    activate_user(database, 43, "Анна", "anna")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    await services.coffee.create_or_reschedule(bot, -100, 42, "15")
+    session.fail_methods("EditMessageText", "SendMessage")
+
+    with pytest.raises(TelegramBadRequest):
+        await services.coffee.create_or_reschedule(bot, -100, 43, "30")
+
+    coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
+    assert coffee_session is not None
+    local_time = coffee_session.scheduled_at.astimezone(
+        ZoneInfo("Europe/Belgrade")
+    ).strftime("%H:%M")
+    assert local_time == "12:30"
+    assert [
+        user.display_name
+        for user in CoffeeSessionRepository(database).list_participants(
+            coffee_session.id
+        )
+    ] == ["Максим"]
+
+
+async def test_coffee_shout_uses_persisted_lunch_attendance(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    activate_user(database, 43, "Анна", "anna")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    dispatcher = create_dispatcher(services)
+
+    await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
+    attendance_poll_id = session.sent_poll_ids[0]
+    await dispatcher.feed_update(
+        bot,
+        make_poll_answer_update(attendance_poll_id, (1,), user_id=43, username="anna"),
+    )
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/coffee 15", chat_type="group"))
+
+    assert sent_texts(session) == [
+        "☕ Максим предлагает кофе\nВремя: 12:30\n\nИдут (1):\n• Максим",
+        "@anna, присоединяйтесь на кофе.",
+    ]
+    assert session.sent_messages[1].reply_parameters is not None
+    assert session.sent_messages[1].reply_parameters.message_id == 1
+
+
+async def test_coffee_leave_button_makes_empty_session_complete_silently(
+    tmp_path: Path,
+) -> None:
+    now = [datetime(2026, 6, 30, 12, 15, tzinfo=ZoneInfo("Europe/Belgrade"))]
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database, clock=lambda: now[0])
+    dispatcher = create_dispatcher(services)
+
+    await dispatcher.feed_update(bot, make_update("/coffee 15", chat_type="group"))
+    callback_data = inline_callback_data(session.sent_messages[0])["Не пойду"]
+    await dispatcher.feed_update(bot, make_callback_update(callback_data))
+    coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
+    assert coffee_session is not None
+    session.clear_messages()
+    now[0] = datetime(2026, 6, 30, 12, 30, tzinfo=ZoneInfo("Europe/Belgrade"))
+
+    await services.coffee.complete(bot, coffee_session.id)
+
+    assert sent_texts(session) == []
+    completed = CoffeeSessionRepository(database).require(coffee_session.id)
+    assert completed.status == CoffeeSessionStatus.COMPLETED
+
+
+async def test_coffee_callback_rejects_unregistered_user_with_alert(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    dispatcher = create_dispatcher(services)
+    await dispatcher.feed_update(bot, make_update("/coffee 15", chat_type="group"))
+    callback_data = inline_callback_data(session.sent_messages[0])["Пойду"]
+
+    await dispatcher.feed_update(
+        bot,
+        make_callback_update(callback_data, user_id=99, username="unknown"),
+    )
+
+    assert session.callback_answers[-1].show_alert is True
+    assert session.callback_answers[-1].text == "Сначала зарегистрируйся: /register"
+
+
+async def test_coffee_completion_exhausts_retries_and_marks_failed(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    dispatcher = create_dispatcher(services)
+
+    await dispatcher.feed_update(bot, make_update("/coffee 15", chat_type="group"))
+    coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
+    assert coffee_session is not None
+    session.fail_methods("SendMessage")
+
+    for _ in range(4):
+        await services.coffee.complete(bot, coffee_session.id)
+
+    failed = CoffeeSessionRepository(database).require(coffee_session.id)
+    assert failed.status == CoffeeSessionStatus.FAILED
+    assert failed.notification_attempts == 3
+
+
+def test_coffee_recovery_expires_session_older_than_grace_period(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    users = UserRepository(database)
+    user = users.get_by_telegram_id(42)
+    assert user is not None
+    sessions = CoffeeSessionRepository(database)
+    coffee_session = sessions.create(
+        -100,
+        user.id,
+        datetime(2026, 6, 30, 9, tzinfo=UTC),
+    )
+    sessions.activate(coffee_session.id, 10)
+    services = make_test_services(
+        database,
+        clock=lambda: datetime(2026, 6, 30, 12, tzinfo=UTC),
+    )
+    bot = Bot(token="123456:test-token", session=RecordingSession())
+
+    services.coffee.restore_jobs(bot)
+
+    expired = sessions.require(coffee_session.id)
+    assert expired.status == CoffeeSessionStatus.EXPIRED

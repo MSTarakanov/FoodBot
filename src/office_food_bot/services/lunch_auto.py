@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import Message
-from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
-from apscheduler.triggers.cron import CronTrigger  # type: ignore[import-untyped]
 
 from office_food_bot.execution import CommandExecutionMode
 from office_food_bot.messaging import BotMessenger
@@ -20,14 +18,12 @@ from office_food_bot.repositories import (
     VacationRepository,
 )
 from office_food_bot.services.business_calendar import BusinessCalendarService
+from office_food_bot.services.job_scheduler import JobScheduler
 from office_food_bot.services.lunch import lunch_announcement_text
 from office_food_bot.services.lunch_pin import LunchPinService
-from office_food_bot.services.lunch_polls import (
-    LunchOfficeSelection,
-    LunchPollCatalog,
-    LunchPollDefinition,
-)
+from office_food_bot.services.lunch_polls import LunchOfficeSelection, LunchPollCatalog
 from office_food_bot.services.poll_tracking import PollTrackingService
+from office_food_bot.services.polls import PollDefinition
 
 AUTO_LUNCH_JOB_ID = "auto_lunch"
 
@@ -101,6 +97,7 @@ class LunchPollPublisher:
             bot,
             chat_id,
             polls.lunch,
+            today,
         )
         if mode == CommandExecutionMode.AUTOMATIC:
             await self._lunch_pins.replace_pin(
@@ -110,34 +107,39 @@ class LunchPollPublisher:
                 today,
             )
 
-        place_poll_message = await self.send_poll(
+        await self.send_poll(
             bot,
             chat_id,
             polls.place,
+            today,
         )
-        if place_poll_message.poll is not None:
-            self._poll_tracking.track_poll(
-                place_poll_message.poll.id,
-                chat_id,
-                polls.place.option_actions_by_index(),
-            )
         return LunchPublishKind.PUBLISHED
 
     async def send_poll(
         self,
         bot: Bot,
         chat_id: int,
-        definition: LunchPollDefinition,
+        definition: PollDefinition,
+        context_date: date,
     ) -> Message:
-        return await self._messenger.send_poll(
+        message = await self._messenger.send_poll(
             bot,
             chat_id,
             definition.question,
-            definition.options,
+            definition.option_texts(),
             is_anonymous=False,
             allows_multiple_answers=definition.allows_multiple_answers,
             allow_adding_options=True,
         )
+        if message.poll is not None:
+            self._poll_tracking.register_poll(
+                message.poll.id,
+                chat_id,
+                message.message_id,
+                definition,
+                context_date,
+            )
+        return message
 
     def _active_users_available_for_lunch(self) -> tuple[RegisteredUser, ...]:
         today = self._clock().astimezone(self._timezone).date()
@@ -156,6 +158,7 @@ class LunchSchedulerService:
         calendar: BusinessCalendarService,
         publisher: LunchPollPublisher,
         lunch_pins: LunchPinService,
+        scheduler: JobScheduler,
         timezone_name: str,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
@@ -163,38 +166,20 @@ class LunchSchedulerService:
         self._calendar = calendar
         self._publisher = publisher
         self._lunch_pins = lunch_pins
+        self._scheduler = scheduler
         self._timezone = ZoneInfo(timezone_name)
         self._clock = clock or (lambda: datetime.now(tz=UTC))
-        self._scheduler: AsyncIOScheduler | None = None  # type: ignore[no-any-unimported]
 
-    def start(self, bot: Bot) -> None:
-        if self._scheduler is not None:
-            return
+    def register_job(self, bot: Bot) -> None:
+        async def run() -> None:
+            await self.run_due_lunch(bot)
 
-        scheduler = AsyncIOScheduler(timezone=self._timezone)
-        scheduler.add_job(
-            self.run_due_lunch,
-            trigger=CronTrigger(
-                day_of_week="mon-fri",
-                hour=11,
-                minute=30,
-                timezone=self._timezone,
-            ),
-            args=(bot,),
-            id=AUTO_LUNCH_JOB_ID,
-            replace_existing=True,
-            coalesce=True,
-            max_instances=1,
+        self._scheduler.add_weekday_cron(
+            AUTO_LUNCH_JOB_ID,
+            run,
+            hour=11,
+            minute=30,
         )
-        scheduler.start()
-        self._scheduler = scheduler
-
-    def shutdown(self) -> None:
-        if self._scheduler is None:
-            return
-
-        self._scheduler.shutdown(wait=False)
-        self._scheduler = None
 
     async def run_due_lunch(self, bot: Bot) -> None:
         today = self._clock().astimezone(self._timezone).date()

@@ -5,7 +5,14 @@ from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 
-from office_food_bot.services.poll_tracking import PollAction
+from office_food_bot.models import PollKind, PollOptionKey
+from office_food_bot.services.polls import (
+    PollAction,
+    PollDefinition,
+    PollDefinitionCatalog,
+    PollOptionActionDefinition,
+    PollOptionDefinition,
+)
 
 LUNCH_PLACE_OTHER_OPTION = "не знаю что хочу/хочу что-то другое"
 LUNCH_POLL_QUESTION = "Обед в офисе сегодня"
@@ -19,81 +26,94 @@ class LunchOfficeSelection(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class PollOptionActionDefinition:
-    option_text: str
-    action: PollAction
-
-
-@dataclass(frozen=True, slots=True)
-class LunchPollDefinition:
-    question: str
-    options: tuple[str, ...]
-    allows_multiple_answers: bool
-    option_actions: tuple[PollOptionActionDefinition, ...] = ()
-
-    def option_actions_by_index(self) -> dict[int, PollAction]:
-        return {
-            self.options.index(option_action.option_text): option_action.action
-            for option_action in self.option_actions
-        }
-
-
-@dataclass(frozen=True, slots=True)
 class OfficeLunchPolls:
-    lunch: LunchPollDefinition
-    place: LunchPollDefinition
+    lunch: PollDefinition
+    place: PollDefinition
 
 
-LUNCH_PLACE_OTHER_OPTION_ACTION = PollOptionActionDefinition(
-    option_text=LUNCH_PLACE_OTHER_OPTION,
-    action=PollAction.LUNCH_OTHER_FOOD_POLL,
-)
+def _option(key: PollOptionKey, text: str) -> PollOptionDefinition:
+    return PollOptionDefinition(key, text)
 
-LUNCH_ATTENDANCE_POLL = LunchPollDefinition(
+
+LUNCH_ATTENDANCE_POLL = PollDefinition(
+    kind=PollKind.LUNCH_ATTENDANCE_V1,
     question=LUNCH_POLL_QUESTION,
     options=(
-        "са собом",
-        "кушаю в офисе",
-        "заказал бы что-то",
-        "сижу дома",
-        "поел/поем самостоятельно",
-        "не решил еще",
-        "ахахахахаххаахаха",
+        _option(PollOptionKey.LUNCH_BRING_OWN, "са собом"),
+        _option(PollOptionKey.LUNCH_EAT_IN_OFFICE, "кушаю в офисе"),
+        _option(PollOptionKey.LUNCH_WOULD_ORDER, "заказал бы что-то"),
+        _option(PollOptionKey.LUNCH_STAY_HOME, "сижу дома"),
+        _option(PollOptionKey.LUNCH_EAT_INDEPENDENTLY, "поел/поем самостоятельно"),
+        _option(PollOptionKey.LUNCH_UNDECIDED, "не решил еще"),
+        _option(PollOptionKey.LUNCH_NOT_WORKING, "ахахахахаххаахаха"),
     ),
     allows_multiple_answers=False,
 )
 
 SKYLINE_LUNCH_POLLS = OfficeLunchPolls(
     lunch=LUNCH_ATTENDANCE_POLL,
-    place=LunchPollDefinition(
+    place=PollDefinition(
+        kind=PollKind.LUNCH_PLACE_SKYLINE_V1,
         question=LUNCH_PLACE_POLL_QUESTION,
         options=(
-            "30 этаж",
-            "макдонелдс",
-            "домашняя еда",
-            LUNCH_PLACE_OTHER_OPTION,
-            "посмотреть результаты",
+            _option(PollOptionKey.LUNCH_PLACE_SKYLINE_30_FLOOR, "30 этаж"),
+            _option(PollOptionKey.LUNCH_PLACE_MCDONALDS, "макдонелдс"),
+            _option(PollOptionKey.LUNCH_PLACE_HOME_FOOD, "домашняя еда"),
+            _option(PollOptionKey.LUNCH_PLACE_OTHER, LUNCH_PLACE_OTHER_OPTION),
+            _option(PollOptionKey.LUNCH_PLACE_VIEW_RESULTS, "посмотреть результаты"),
         ),
         allows_multiple_answers=True,
-        option_actions=(LUNCH_PLACE_OTHER_OPTION_ACTION,),
+        option_actions=(
+            PollOptionActionDefinition(
+                PollOptionKey.LUNCH_PLACE_OTHER,
+                PollAction.LUNCH_OTHER_FOOD_POLL,
+            ),
+        ),
     ),
 )
 
 ROSE_LUNCH_POLLS = OfficeLunchPolls(
     lunch=LUNCH_ATTENDANCE_POLL,
-    place=LunchPollDefinition(
+    place=PollDefinition(
+        kind=PollKind.LUNCH_PLACE_ROSE_V1,
         question=LUNCH_PLACE_POLL_QUESTION,
         options=(
-            "березка",
-            "салатница",
-            "сходил бы куда-то поесть рядом",
-            LUNCH_PLACE_OTHER_OPTION,
-            "посмотреть результаты",
+            _option(PollOptionKey.LUNCH_PLACE_ROSE_BEREZKA, "березка"),
+            _option(PollOptionKey.LUNCH_PLACE_ROSE_SALATNITSA, "салатница"),
+            _option(PollOptionKey.LUNCH_PLACE_EAT_OUT, "сходил бы куда-то поесть рядом"),
+            _option(PollOptionKey.LUNCH_PLACE_OTHER, LUNCH_PLACE_OTHER_OPTION),
+            _option(PollOptionKey.LUNCH_PLACE_VIEW_RESULTS, "посмотреть результаты"),
         ),
         allows_multiple_answers=True,
-        option_actions=(LUNCH_PLACE_OTHER_OPTION_ACTION,),
+        option_actions=(
+            PollOptionActionDefinition(
+                PollOptionKey.LUNCH_PLACE_OTHER,
+                PollAction.LUNCH_OTHER_FOOD_POLL,
+            ),
+        ),
     ),
 )
+
+LUNCH_OTHER_FOOD_POLL = PollDefinition(
+    kind=PollKind.LUNCH_OTHER_FOOD_V1,
+    question="Закажем ...",
+    options=(
+        _option(PollOptionKey.OTHER_FOOD_BURGER, "другой бургер"),
+        _option(PollOptionKey.OTHER_FOOD_SHAWARMA, "шаурма"),
+        _option(PollOptionKey.OTHER_FOOD_POKE, "поке"),
+        _option(PollOptionKey.OTHER_FOOD_PIZZA, "пицца"),
+    ),
+    allows_multiple_answers=True,
+)
+
+ALL_LUNCH_POLL_DEFINITIONS = (
+    LUNCH_ATTENDANCE_POLL,
+    SKYLINE_LUNCH_POLLS.place,
+    ROSE_LUNCH_POLLS.place,
+    LUNCH_OTHER_FOOD_POLL,
+)
+
+LUNCH_POLL_DEFINITION_CATALOG = PollDefinitionCatalog(ALL_LUNCH_POLL_DEFINITIONS)
 
 _OFFICE_LUNCH_POLLS = {
     LunchOfficeSelection.SKYLINE: SKYLINE_LUNCH_POLLS,
@@ -131,14 +151,3 @@ def parse_lunch_office_selection(
     if raw_argument is None or not raw_argument.strip():
         return LunchOfficeSelection.AUTOMATIC
     return _LUNCH_OFFICE_ALIASES.get(raw_argument.strip().casefold())
-
-LUNCH_OTHER_FOOD_POLL = LunchPollDefinition(
-    question="Закажем ...",
-    options=(
-        "другой бургер",
-        "шаурма",
-        "поке",
-        "пицца",
-    ),
-    allows_multiple_answers=True,
-)

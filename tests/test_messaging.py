@@ -9,6 +9,7 @@ from aiogram import Bot
 from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import (
+    EditMessageText,
     PinChatMessage,
     SendMessage,
     SendPoll,
@@ -41,6 +42,12 @@ class RecordingSession(BaseSession):
         self.requests.append(method)
         if isinstance(method, PinChatMessage | UnpinChatMessage):
             return True
+        if isinstance(method, EditMessageText):
+            return Message(
+                message_id=method.message_id or 1,
+                date=datetime.now(tz=UTC),
+                chat=Chat(id=42, type="private"),
+            )
         return Message(
             message_id=len(self.requests),
             date=datetime.now(tz=UTC),
@@ -148,6 +155,28 @@ async def test_try_pin_chat_message_uses_silent_pin() -> None:
     assert method.chat_id == 42
     assert method.message_id == 100
     assert method.disable_notification is True
+
+
+async def test_edit_or_send_edits_existing_message() -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+
+    message = await BotMessenger().edit_or_send(bot, 42, 100, "Новое время")
+
+    assert message.message_id == 100
+    assert len(session.requests) == 1
+    assert isinstance(session.requests[0], EditMessageText)
+
+
+async def test_edit_or_send_falls_back_to_new_message() -> None:
+    session = RecordingSession(fail_method_name="EditMessageText")
+    bot = Bot(token="123456:test-token", session=session)
+
+    message = await BotMessenger().edit_or_send(bot, 42, 100, "Новая карточка")
+
+    assert message.message_id == 1
+    assert len(session.requests) == 1
+    assert isinstance(session.requests[0], SendMessage)
 
 
 async def test_try_unpin_chat_message_uses_message_id() -> None:

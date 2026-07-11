@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
-from enum import StrEnum
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
 
-
-class PollAction(StrEnum):
-    LUNCH_OTHER_FOOD_POLL = "lunch_other_food_poll"
+from office_food_bot.models import StoredPoll
+from office_food_bot.repositories import PollRepository
+from office_food_bot.services.polls import PollAction, PollDefinition, PollDefinitionCatalog
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,52 +14,72 @@ class PollActionRequest:
     poll_id: str
     chat_id: int
     action: PollAction
-
-
-@dataclass(slots=True)
-class TrackedPoll:
-    chat_id: int
-    option_actions: dict[int, PollAction]
-    consumed_actions: set[PollAction] = field(default_factory=set)
+    context_date: date
 
 
 class PollTrackingService:
-    def __init__(self) -> None:
-        self._tracked_polls: dict[str, TrackedPoll] = {}
+    def __init__(
+        self,
+        polls: PollRepository,
+        definitions: PollDefinitionCatalog,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
+        self._polls = polls
+        self._definitions = definitions
+        self._clock = clock or (lambda: datetime.now(tz=UTC))
+        self._consumed_actions: set[tuple[str, PollAction]] = set()
 
-    def track_poll(
+    def register_poll(
         self,
         poll_id: str,
         chat_id: int,
-        option_actions: Mapping[int, PollAction],
+        message_id: int,
+        definition: PollDefinition,
+        context_date: date,
     ) -> None:
-        self._tracked_polls[poll_id] = TrackedPoll(
-            chat_id=chat_id,
-            option_actions=dict(option_actions),
+        self._polls.save(
+            StoredPoll(
+                poll_id=poll_id,
+                chat_id=chat_id,
+                message_id=message_id,
+                kind=definition.kind,
+                context_date=context_date,
+                published_at=self._clock(),
+            )
         )
 
     def consume_action_requests(
         self,
         poll_id: str,
+        telegram_user_id: int,
         selected_option_ids: tuple[int, ...],
     ) -> tuple[PollActionRequest, ...]:
-        tracked_poll = self._tracked_polls.get(poll_id)
-        if tracked_poll is None:
+        stored_poll = self._polls.get(poll_id)
+        if stored_poll is None:
             return ()
-
-        action_requests: list[PollActionRequest] = []
-        for option_id in selected_option_ids:
-            action = tracked_poll.option_actions.get(option_id)
-            if action is None or action in tracked_poll.consumed_actions:
+        definition = self._definitions.get(stored_poll.kind)
+        selected_keys = definition.known_keys_for_indices(selected_option_ids)
+        new_keys = self._polls.replace_selected_options(
+            poll_id,
+            telegram_user_id,
+            selected_keys,
+            self._clock(),
+        )
+        requests: list[PollActionRequest] = []
+        for key in new_keys:
+            action = definition.action_for(key)
+            if action is None:
                 continue
-
-            tracked_poll.consumed_actions.add(action)
-            action_requests.append(
+            consumed_key = (poll_id, action)
+            if consumed_key in self._consumed_actions:
+                continue
+            self._consumed_actions.add(consumed_key)
+            requests.append(
                 PollActionRequest(
-                    poll_id=poll_id,
-                    chat_id=tracked_poll.chat_id,
-                    action=action,
+                    poll_id,
+                    stored_poll.chat_id,
+                    action,
+                    stored_poll.context_date,
                 )
             )
-
-        return tuple(action_requests)
+        return tuple(requests)

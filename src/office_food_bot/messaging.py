@@ -15,6 +15,7 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
     ReplyMarkupUnion,
+    ReplyParameters,
 )
 
 
@@ -41,8 +42,40 @@ class BotMessenger:
         text: str,
         *,
         reply_markup: ReplyMarkupUnion | None = None,
+        reply_to_message_id: int | None = None,
     ) -> Message:
-        return await bot.send_message(chat_id, text, reply_markup=reply_markup)
+        reply_parameters = None
+        if reply_to_message_id is not None:
+            reply_parameters = ReplyParameters(message_id=reply_to_message_id)
+        return await bot.send_message(
+            chat_id,
+            text,
+            reply_markup=reply_markup,
+            reply_parameters=reply_parameters,
+        )
+
+    async def edit_or_send(
+        self,
+        bot: Bot,
+        chat_id: int,
+        message_id: int | None,
+        text: str,
+        *,
+        reply_markup: InlineKeyboardMarkup | None = None,
+    ) -> Message:
+        if message_id is not None:
+            try:
+                edited = await bot.edit_message_text(
+                    text=text,
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    reply_markup=reply_markup,
+                )
+                if isinstance(edited, Message):
+                    return edited
+            except TelegramAPIError:
+                pass
+        return await self.send(bot, chat_id, text, reply_markup=reply_markup)
 
     async def reply_with_choices(
         self,
@@ -159,9 +192,16 @@ class BotMessenger:
         text: str,
         *,
         reply_markup: ReplyMarkupUnion | None = None,
+        reply_to_message_id: int | None = None,
     ) -> bool:
         try:
-            await self.send(bot, chat_id, text, reply_markup=reply_markup)
+            await self.send(
+                bot,
+                chat_id,
+                text,
+                reply_markup=reply_markup,
+                reply_to_message_id=reply_to_message_id,
+            )
         except TelegramAPIError:
             return False
         return True

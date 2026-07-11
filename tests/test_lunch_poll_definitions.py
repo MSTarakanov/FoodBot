@@ -2,6 +2,7 @@ from datetime import date
 
 import pytest
 
+from office_food_bot.models import PollOptionKey
 from office_food_bot.services.lunch_polls import (
     LUNCH_PLACE_OTHER_OPTION,
     ROSE_LUNCH_POLLS,
@@ -10,17 +11,14 @@ from office_food_bot.services.lunch_polls import (
     LunchPollCatalog,
     parse_lunch_office_selection,
 )
-from office_food_bot.services.poll_tracking import PollAction
+from office_food_bot.services.polls import PollAction
 
 
 def test_skyline_place_poll_maps_other_option_to_follow_up_action() -> None:
-    other_option_index = SKYLINE_LUNCH_POLLS.place.options.index(
-        LUNCH_PLACE_OTHER_OPTION
+    assert (
+        SKYLINE_LUNCH_POLLS.place.action_for(PollOptionKey.LUNCH_PLACE_OTHER)
+        == PollAction.LUNCH_OTHER_FOOD_POLL
     )
-
-    assert SKYLINE_LUNCH_POLLS.place.option_actions_by_index() == {
-        other_option_index: PollAction.LUNCH_OTHER_FOOD_POLL,
-    }
 
 
 def test_lunch_poll_catalog_uses_skyline_outside_tuesday() -> None:
@@ -87,7 +85,7 @@ def test_lunch_office_selection_parser_rejects_unknown_argument() -> None:
 
 def test_rose_poll_definitions_have_office_specific_options() -> None:
     assert ROSE_LUNCH_POLLS.lunch.options == SKYLINE_LUNCH_POLLS.lunch.options
-    assert ROSE_LUNCH_POLLS.lunch.options == (
+    assert ROSE_LUNCH_POLLS.lunch.option_texts() == (
         "са собом",
         "кушаю в офисе",
         "заказал бы что-то",
@@ -96,16 +94,14 @@ def test_rose_poll_definitions_have_office_specific_options() -> None:
         "не решил еще",
         "ахахахахаххаахаха",
     )
-    assert ROSE_LUNCH_POLLS.place.options == (
+    assert ROSE_LUNCH_POLLS.place.option_texts() == (
         "березка",
         "салатница",
         "сходил бы куда-то поесть рядом",
         LUNCH_PLACE_OTHER_OPTION,
         "посмотреть результаты",
     )
-    other_option_index = ROSE_LUNCH_POLLS.place.options.index(
-        LUNCH_PLACE_OTHER_OPTION
+    assert (
+        ROSE_LUNCH_POLLS.place.action_for(PollOptionKey.LUNCH_PLACE_OTHER)
+        == PollAction.LUNCH_OTHER_FOOD_POLL
     )
-    assert ROSE_LUNCH_POLLS.place.option_actions_by_index() == {
-        other_option_index: PollAction.LUNCH_OTHER_FOOD_POLL,
-    }
