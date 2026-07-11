@@ -3029,7 +3029,7 @@ async def test_repeated_coffee_join_is_idempotent_and_does_not_edit_card(
 
     assert session.sent_messages == []
     assert session.edited_messages == []
-    assert session.callback_answers[-1].text == "Ты уже идешь на кофе."
+    assert session.callback_answers[-1].text is None
 
 
 async def test_coffee_completion_exhausts_retries_and_marks_failed(

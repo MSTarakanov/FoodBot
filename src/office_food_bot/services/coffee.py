@@ -41,7 +41,7 @@ class CoffeeUserAccess:
 
 @dataclass(frozen=True, slots=True)
 class CoffeeParticipationResult:
-    text: str
+    text: str | None
     show_alert: bool
 
 
@@ -209,12 +209,12 @@ class CoffeeService:
             was_participant = user.id in participant_ids
             if callback.action == CoffeeParticipantAction.JOIN:
                 if was_participant:
-                    return CoffeeParticipationResult("Ты уже идешь на кофе.", False)
+                    return CoffeeParticipationResult(None, False)
                 self._sessions.join(current.id, user.id)
                 reply = "Ты идешь на кофе."
             else:
                 if not was_participant:
-                    return CoffeeParticipationResult("Ты и так не идешь на кофе.", False)
+                    return CoffeeParticipationResult(None, False)
                 self._sessions.leave(current.id, user.id)
                 reply = "Ты больше не идешь на кофе."
             try:
