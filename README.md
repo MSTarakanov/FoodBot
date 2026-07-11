@@ -33,6 +33,9 @@ Group chat commands:
   date, or disables vacation with `0`/`off`.
 - `/lunch [rose|роза|skyline|скайлайн]` - creates lunch polls. Without an office argument,
   Tuesday uses Rose and every other day uses Skyline.
+- `/coffee <minutes|HH:MM>` - creates or reschedules the chat's current coffee meeting.
+  `/coffee` shows invitation settings, usage, and the current meeting; `/coffee on` and
+  `/coffee off` control whether lunch attendees are mentioned in future coffee invitations.
 - `/lunch_auto_on` - admin-only: enables automatic lunch polls for the current group chat.
 - `/lunch_auto_off` - admin-only: disables automatic lunch polls for the current group chat.
 - `/lunch_auto_status` - admin-only: shows whether automatic lunch polls are enabled.
@@ -41,6 +44,11 @@ Use `20` for an exact offset in minutes or `20-30` for a minute range.
 Automatic lunch polls are sent at 11:30 in `FOODBOT_TIMEZONE` on Serbian working days.
 Users with an active vacation are not tagged in lunch announcements. If all active users are on
 vacation, lunch polls are not sent.
+
+Coffee meetings use one live message per chat with `Пойду` and `Не пойду` inline buttons. A new
+`/coffee` time edits the existing meeting and keeps its participants. At the chosen time the bot
+mentions current participants; an empty meeting completes silently. Meeting state and known lunch
+poll votes are stored in SQLite, so scheduled coffee jobs are restored after a bot restart.
 
 Admin private commands:
 
@@ -121,6 +129,10 @@ database starts at version `0`; on startup the runner applies every migration wi
 than the current one, checks foreign keys, and then updates `user_version` to the migration version.
 If the database version is newer than the code knows about, startup fails instead of running with an
 unknown schema.
+
+Poll rows store versioned `PollKind` and stable `PollOptionKey` values rather than visible option
+text. Renaming an option therefore does not change its meaning; adding, removing, or reordering
+options requires a new poll kind version.
 
 You can inspect the local database version with:
 
