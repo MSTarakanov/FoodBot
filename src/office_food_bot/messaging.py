@@ -30,6 +30,12 @@ class LiveMessageReference:
     message_id: int
 
 
+EDIT_TARGET_UNAVAILABLE_MESSAGES = (
+    "message to edit not found",
+    "message can't be edited",
+)
+
+
 class BotMessenger:
     async def reply(
         self,
@@ -82,8 +88,8 @@ class BotMessenger:
             except TelegramBadRequest as error:
                 if "message is not modified" in str(error).casefold():
                     return LiveMessageReference(message_id)
-            except TelegramAPIError:
-                pass
+                if not _is_edit_target_unavailable(error):
+                    raise
         sent = await self.send(bot, chat_id, text, reply_markup=reply_markup)
         return LiveMessageReference(sent.message_id)
 
@@ -321,6 +327,14 @@ def _poll_options(options: Sequence[str]) -> list[InputPollOptionUnion]:
         InputPollOption(text=option)
         for option in _text_options(options, minimum=2, maximum=10)
     ]
+
+
+def _is_edit_target_unavailable(error: TelegramBadRequest) -> bool:
+    error_text = str(error).casefold()
+    return any(
+        message in error_text
+        for message in EDIT_TARGET_UNAVAILABLE_MESSAGES
+    )
 
 
 def _text_options(

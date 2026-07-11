@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from aiogram import Bot
 from aiogram.client.session.base import BaseSession
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.methods import (
     EditMessageText,
     PinChatMessage,
@@ -174,7 +174,10 @@ async def test_edit_or_send_edits_existing_message() -> None:
 
 
 async def test_edit_or_send_falls_back_to_new_message() -> None:
-    session = RecordingSession(fail_method_name="EditMessageText")
+    session = RecordingSession(
+        fail_method_name="EditMessageText",
+        failure_message="Bad Request: message to edit not found",
+    )
     bot = Bot(token="123456:test-token", session=session)
 
     message = await BotMessenger().edit_or_send(bot, 42, 100, "Новая карточка")
@@ -194,6 +197,38 @@ async def test_edit_or_send_does_not_duplicate_unmodified_message() -> None:
     message = await BotMessenger().edit_or_send(bot, 42, 100, "Тот же текст")
 
     assert message.message_id == 100
+    assert session.requests == []
+
+
+class NetworkFailureSession(RecordingSession):
+    async def make_request(
+        self,
+        bot: Bot,
+        method: TelegramMethod[Any],
+        timeout: int | None = None,
+    ) -> Message:
+        if isinstance(method, EditMessageText):
+            raise TelegramNetworkError(method=method, message="Request timeout")
+        return await super().make_request(bot, method, timeout)
+
+
+async def test_edit_or_send_does_not_replace_message_after_network_error() -> None:
+    session = NetworkFailureSession()
+    bot = Bot(token="123456:test-token", session=session)
+
+    with pytest.raises(TelegramNetworkError):
+        await BotMessenger().edit_or_send(bot, 42, 100, "Новое время")
+
+    assert session.requests == []
+
+
+async def test_edit_or_send_does_not_replace_message_after_unknown_bad_request() -> None:
+    session = RecordingSession(fail_method_name="EditMessageText")
+    bot = Bot(token="123456:test-token", session=session)
+
+    with pytest.raises(TelegramBadRequest):
+        await BotMessenger().edit_or_send(bot, 42, 100, "Новое время")
+
     assert session.requests == []
 
 
