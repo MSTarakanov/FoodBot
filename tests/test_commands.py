@@ -3086,7 +3086,7 @@ async def test_coffee_completion_unpins_card_and_calls_participants(
     assert sent_texts(session) == ["☕ Пора идти за кофе!\n@misha"]
 
 
-def test_coffee_recovery_expires_session_older_than_grace_period(
+async def test_coffee_recovery_expires_session_older_than_grace_period(
     tmp_path: Path,
 ) -> None:
     database = make_database(tmp_path)
@@ -3107,7 +3107,34 @@ def test_coffee_recovery_expires_session_older_than_grace_period(
     )
     bot = Bot(token="123456:test-token", session=RecordingSession())
 
-    services.coffee.restore_jobs(bot)
+    await services.coffee.restore_jobs(bot)
 
     expired = sessions.require(coffee_session.id)
     assert expired.status == CoffeeSessionStatus.EXPIRED
+
+
+async def test_coffee_recovery_repins_active_card(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    users = UserRepository(database)
+    user = users.get_by_telegram_id(42)
+    assert user is not None
+    sessions = CoffeeSessionRepository(database)
+    coffee_session = sessions.create(
+        -100,
+        user.id,
+        datetime(2026, 6, 30, 13, tzinfo=UTC),
+    )
+    sessions.activate(coffee_session.id, 77)
+    services = make_test_services(
+        database,
+        clock=lambda: datetime(2026, 6, 30, 12, tzinfo=UTC),
+    )
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+
+    await services.coffee.restore_jobs(bot)
+
+    assert len(session.pin_requests) == 1
+    assert session.pin_requests[0].message_id == 77
+    assert session.pin_requests[0].disable_notification is True

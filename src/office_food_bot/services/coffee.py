@@ -234,7 +234,7 @@ class CoffeeService:
                 raise
             return CoffeeParticipationResult(reply, False)
 
-    def restore_jobs(self, bot: Bot) -> None:
+    async def restore_jobs(self, bot: Bot) -> None:
         now = self._clock()
         for session in self._sessions.list_recoverable():
             if session.status == CoffeeSessionStatus.CREATING:
@@ -256,6 +256,12 @@ class CoffeeService:
                         now,
                     )
                     continue
+                if session.message_id is not None:
+                    await self._messenger.try_pin_chat_message(
+                        bot,
+                        session.chat_id,
+                        session.message_id,
+                    )
                 run_at = max(session.scheduled_at, now)
             else:
                 if session.retry_until is not None and session.retry_until < now:

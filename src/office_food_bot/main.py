@@ -32,7 +32,7 @@ async def main() -> None:
         dispatcher = create_dispatcher(services)
         await setup_bot_commands(bot, services.command_access)
         services.lunch_scheduler.register_job(bot)
-        services.coffee.restore_jobs(bot)
+        await services.coffee.restore_jobs(bot)
         services.job_scheduler.start()
         logger.info(
             "Bot started: username=@%s, environment=%s, database=%s, "
