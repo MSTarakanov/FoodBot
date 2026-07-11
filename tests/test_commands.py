@@ -3012,6 +3012,26 @@ async def test_coffee_callback_rejects_unregistered_user_with_alert(
     assert session.callback_answers[-1].text == "Сначала зарегистрируйся: /register"
 
 
+async def test_repeated_coffee_join_is_idempotent_and_does_not_edit_card(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    dispatcher = create_dispatcher(services)
+    await dispatcher.feed_update(bot, make_update("/coffee 15", chat_type="group"))
+    callback_data = inline_callback_data(session.sent_messages[0])["Пойду"]
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_callback_update(callback_data))
+
+    assert session.sent_messages == []
+    assert session.edited_messages == []
+    assert session.callback_answers[-1].text == "Ты уже идешь на кофе."
+
+
 async def test_coffee_completion_exhausts_retries_and_marks_failed(
     tmp_path: Path,
 ) -> None:

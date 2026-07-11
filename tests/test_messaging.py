@@ -22,9 +22,14 @@ from office_food_bot.messaging import BotMessenger, InlineChoice
 
 
 class RecordingSession(BaseSession):
-    def __init__(self, fail_method_name: str | None = None) -> None:
+    def __init__(
+        self,
+        fail_method_name: str | None = None,
+        failure_message: str = "Bad Request",
+    ) -> None:
         super().__init__()
         self._fail_method_name = fail_method_name
+        self._failure_message = failure_message
         self.requests: list[TelegramMethod[Any]] = []
 
     async def close(self) -> None:
@@ -37,7 +42,7 @@ class RecordingSession(BaseSession):
         timeout: int | None = None,
     ) -> Message:
         if type(method).__name__ == self._fail_method_name:
-            raise TelegramBadRequest(method=method, message="Bad Request")
+            raise TelegramBadRequest(method=method, message=self._failure_message)
 
         self.requests.append(method)
         if isinstance(method, PinChatMessage | UnpinChatMessage):
@@ -177,6 +182,19 @@ async def test_edit_or_send_falls_back_to_new_message() -> None:
     assert message.message_id == 1
     assert len(session.requests) == 1
     assert isinstance(session.requests[0], SendMessage)
+
+
+async def test_edit_or_send_does_not_duplicate_unmodified_message() -> None:
+    session = RecordingSession(
+        fail_method_name="EditMessageText",
+        failure_message="Bad Request: message is not modified",
+    )
+    bot = Bot(token="123456:test-token", session=session)
+
+    message = await BotMessenger().edit_or_send(bot, 42, 100, "Тот же текст")
+
+    assert message.message_id == 100
+    assert session.requests == []
 
 
 async def test_try_unpin_chat_message_uses_message_id() -> None:

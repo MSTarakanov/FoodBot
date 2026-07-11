@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -23,6 +23,11 @@ from aiogram.types import (
 class InlineChoice:
     text: str
     callback_data: str
+
+
+@dataclass(frozen=True, slots=True)
+class LiveMessageReference:
+    message_id: int
 
 
 class BotMessenger:
@@ -62,7 +67,7 @@ class BotMessenger:
         text: str,
         *,
         reply_markup: InlineKeyboardMarkup | None = None,
-    ) -> Message:
+    ) -> LiveMessageReference:
         if message_id is not None:
             try:
                 edited = await bot.edit_message_text(
@@ -72,10 +77,15 @@ class BotMessenger:
                     reply_markup=reply_markup,
                 )
                 if isinstance(edited, Message):
-                    return edited
+                    return LiveMessageReference(edited.message_id)
+                return LiveMessageReference(message_id)
+            except TelegramBadRequest as error:
+                if "message is not modified" in str(error).casefold():
+                    return LiveMessageReference(message_id)
             except TelegramAPIError:
                 pass
-        return await self.send(bot, chat_id, text, reply_markup=reply_markup)
+        sent = await self.send(bot, chat_id, text, reply_markup=reply_markup)
+        return LiveMessageReference(sent.message_id)
 
     async def reply_with_choices(
         self,
