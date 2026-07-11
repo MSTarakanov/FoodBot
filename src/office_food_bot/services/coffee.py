@@ -178,8 +178,14 @@ class CoffeeService:
                     raise RuntimeError(msg)
                 session = self._sessions.activate(session.id, session.message_id)
             self._schedule_completion(bot, session)
+            await self._replace_pin(bot, previous_session, session)
             if is_new:
                 await self._send_shout(bot, session)
+            elif (
+                previous_session is not None
+                and previous_session.scheduled_at != session.scheduled_at
+            ):
+                await self._send_reschedule_notification(bot, user, session)
         return None
 
     async def update_participation(
@@ -218,7 +224,8 @@ class CoffeeService:
                 self._sessions.leave(current.id, user.id)
                 reply = "Ты больше не идешь на кофе."
             try:
-                await self._update_card(bot, current)
+                updated = await self._update_card(bot, current)
+                await self._replace_pin(bot, current, updated)
             except Exception:
                 if was_participant:
                     self._sessions.join(current.id, user.id)
@@ -288,6 +295,7 @@ class CoffeeService:
                     msg = "Recovered coffee card has no message id"
                     raise RuntimeError(msg)
                 current = self._sessions.activate(current.id, current.message_id)
+                await self._replace_pin(bot, None, current)
                 self._schedule_completion(bot, current)
 
         self._scheduler.add_date(f"coffee_recovery:{session_id}", run, run_at)
@@ -304,6 +312,12 @@ class CoffeeService:
             }:
                 return
             now = self._clock()
+            if session.message_id is not None:
+                await self._messenger.try_unpin_chat_message(
+                    bot,
+                    session.chat_id,
+                    session.message_id,
+                )
             if session.status == CoffeeSessionStatus.ACTIVE:
                 session = self._sessions.mark_completing(
                     session.id,
@@ -405,6 +419,50 @@ class CoffeeService:
             session.chat_id,
             f"{references}, присоединяйтесь на кофе.",
             reply_to_message_id=session.message_id,
+        )
+
+    async def _send_reschedule_notification(
+        self,
+        bot: Bot,
+        proposer: RegisteredUser,
+        session: CoffeeSession,
+    ) -> None:
+        if session.message_id is None:
+            return
+        local_time = session.scheduled_at.astimezone(self._timezone).strftime("%H:%M")
+        await self._messenger.try_send(
+            bot,
+            session.chat_id,
+            f"{proposer.display_name} предлагает новое время кофе: {local_time}.",
+            reply_to_message_id=session.message_id,
+        )
+
+    async def _replace_pin(
+        self,
+        bot: Bot,
+        previous_session: CoffeeSession | None,
+        current_session: CoffeeSession,
+    ) -> None:
+        if current_session.message_id is None:
+            return
+        previous_message_id = None
+        if previous_session is not None:
+            previous_message_id = previous_session.message_id
+        if previous_message_id == current_session.message_id:
+            return
+        if (
+            previous_message_id is not None
+            and previous_message_id != current_session.message_id
+        ):
+            await self._messenger.try_unpin_chat_message(
+                bot,
+                current_session.chat_id,
+                previous_message_id,
+            )
+        await self._messenger.try_pin_chat_message(
+            bot,
+            current_session.chat_id,
+            current_session.message_id,
         )
 
     def _schedule_completion(self, bot: Bot, session: CoffeeSession) -> None:

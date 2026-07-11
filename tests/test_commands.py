@@ -2846,6 +2846,9 @@ async def test_coffee_creates_card_and_persists_session(tmp_path: Path) -> None:
         "Пойду",
         "Не пойду",
     }
+    assert len(session.pin_requests) == 1
+    assert session.pin_requests[0].message_id == 1
+    assert session.pin_requests[0].disable_notification is True
     coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
     assert coffee_session is not None
     assert coffee_session.message_id == 1
@@ -2875,7 +2878,12 @@ async def test_coffee_reschedule_edits_card_and_keeps_participants(tmp_path: Pat
         ),
     )
 
-    assert len(session.sent_messages) == 1
+    assert len(session.sent_messages) == 2
+    assert session.sent_messages[1].text == (
+        "Анна предлагает новое время кофе: 12:45."
+    )
+    assert session.sent_messages[1].reply_parameters is not None
+    assert session.sent_messages[1].reply_parameters.message_id == 1
     assert len(session.edited_messages) == 1
     assert session.edited_messages[0].text == (
         "☕ Анна предлагает кофе\nВремя: 12:45\n\n"
@@ -2886,6 +2894,7 @@ async def test_coffee_reschedule_edits_card_and_keeps_participants(tmp_path: Pat
     assert [user.display_name for user in CoffeeSessionRepository(database).list_participants(
         coffee_session.id
     )] == ["Максим", "Анна"]
+    assert len(session.pin_requests) == 1
 
 
 async def test_concurrent_coffee_reschedules_are_serialized(tmp_path: Path) -> None:
@@ -2987,6 +2996,8 @@ async def test_coffee_leave_button_makes_empty_session_complete_silently(
     await services.coffee.complete(bot, coffee_session.id)
 
     assert sent_texts(session) == []
+    assert len(session.unpin_requests) == 1
+    assert session.unpin_requests[0].message_id == coffee_session.message_id
     completed = CoffeeSessionRepository(database).require(coffee_session.id)
     assert completed.status == CoffeeSessionStatus.COMPLETED
 
@@ -3053,6 +3064,26 @@ async def test_coffee_completion_exhausts_retries_and_marks_failed(
     failed = CoffeeSessionRepository(database).require(coffee_session.id)
     assert failed.status == CoffeeSessionStatus.FAILED
     assert failed.notification_attempts == 3
+
+
+async def test_coffee_completion_unpins_card_and_calls_participants(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    await services.coffee.create_or_reschedule(bot, -100, 42, "15")
+    coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
+    assert coffee_session is not None
+    session.clear_messages()
+
+    await services.coffee.complete(bot, coffee_session.id)
+
+    assert len(session.unpin_requests) == 1
+    assert session.unpin_requests[0].message_id == coffee_session.message_id
+    assert sent_texts(session) == ["☕ Пора идти за кофе!\n@misha"]
 
 
 def test_coffee_recovery_expires_session_older_than_grace_period(

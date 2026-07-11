@@ -46,9 +46,10 @@ Users with an active vacation are not tagged in lunch announcements. If all acti
 vacation, lunch polls are not sent.
 
 Coffee meetings use one live message per chat with `Пойду` and `Не пойду` inline buttons. A new
-`/coffee` time edits the existing meeting and keeps its participants. At the chosen time the bot
-mentions current participants; an empty meeting completes silently. Meeting state and known lunch
-poll votes are stored in SQLite, so scheduled coffee jobs are restored after a bot restart.
+`/coffee` time edits the existing meeting, keeps its participants, and announces who changed the
+time. The live card is pinned silently. At the chosen time the bot unpins it and mentions current
+participants; an empty meeting completes silently. Meeting state and known lunch poll votes are
+stored in SQLite, so scheduled coffee jobs are restored after a bot restart.
 
 Admin private commands:
 
