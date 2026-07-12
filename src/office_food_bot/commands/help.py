@@ -25,7 +25,7 @@ async def help_command(
     await messenger.reply(
         message,
         HELP_RENDERER.render(
-            services.command_access.visible_commands(
+            services.command_access.visible_help_entries(
                 str(message.chat.type),
                 telegram_user_id,
             )

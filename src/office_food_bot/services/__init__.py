@@ -8,6 +8,7 @@ from office_food_bot.services.command_access import (
 from office_food_bot.services.container import BotServices
 from office_food_bot.services.debug import DebugService
 from office_food_bot.services.factory import build_services
+from office_food_bot.services.invitations import InvitationPreferenceService
 from office_food_bot.services.lunch import LunchService
 from office_food_bot.services.lunch_auto import (
     LunchAutoChatService,
@@ -48,6 +49,7 @@ __all__ = [
     "CommandAccessService",
     "DebugService",
     "LunchService",
+    "InvitationPreferenceService",
     "LunchAutoChatService",
     "LunchPinService",
     "LunchPollPublisher",

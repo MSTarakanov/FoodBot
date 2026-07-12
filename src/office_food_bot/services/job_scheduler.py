@@ -16,7 +16,7 @@ class JobScheduler:
         self._timezone = ZoneInfo(timezone_name)
         self._scheduler = AsyncIOScheduler(timezone=self._timezone)  # type: ignore[no-any-unimported]
 
-    def add_weekday_cron(
+    def add_daily_cron(
         self,
         job_id: str,
         callback: AsyncJob,
@@ -27,7 +27,6 @@ class JobScheduler:
         self._scheduler.add_job(
             callback,
             trigger=CronTrigger(
-                day_of_week="mon-fri",
                 hour=hour,
                 minute=minute,
                 timezone=self._timezone,

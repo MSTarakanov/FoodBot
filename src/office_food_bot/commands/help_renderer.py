@@ -1,26 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
 from html import escape
 
-from office_food_bot.commands.definitions import CommandDefinition, HelpSection
-
-
-@dataclass(frozen=True, slots=True)
-class HelpLine:
-    section: HelpSection
-    usage: str
-    description: str
+from office_food_bot.commands.definitions import HelpSection, VisibleCommandHelpEntry
 
 
 class HelpRenderer:
-    def render(self, definitions: Iterable[CommandDefinition]) -> str:
-        lines = tuple(
-            line
-            for definition in definitions
-            for line in self._definition_lines(definition)
-        )
+    def render(self, entries: Iterable[VisibleCommandHelpEntry]) -> str:
+        lines = tuple(entries)
         sections = tuple(
             self._render_section(section, lines)
             for section in HelpSection
@@ -28,32 +16,13 @@ class HelpRenderer:
         )
         return "<b>Команды:</b>\n\n" + "\n\n".join(sections)
 
-    def _definition_lines(
-        self,
-        definition: CommandDefinition,
-    ) -> tuple[HelpLine, ...]:
-        primary = HelpLine(
-            definition.help_section,
-            self._usage_with_aliases(definition, definition.usage),
-            definition.description,
-        )
-        additional = tuple(
-            HelpLine(
-                entry.section,
-                self._usage_with_aliases(definition, entry.usage),
-                entry.description,
-            )
-            for entry in definition.additional_help
-        )
-        return (primary, *additional)
-
     def _render_section(
         self,
         section: HelpSection,
-        lines: tuple[HelpLine, ...],
+        lines: tuple[VisibleCommandHelpEntry, ...],
     ) -> str:
         entries = "\n".join(
-            f"{escape(line.usage)} - {escape(line.description)}"
+            f"{escape(self._usage_with_aliases(line))} - {escape(line.description)}"
             for line in lines
             if line.section == section
         )
@@ -61,16 +30,15 @@ class HelpRenderer:
 
     def _usage_with_aliases(
         self,
-        definition: CommandDefinition,
-        usage: str,
+        entry: VisibleCommandHelpEntry,
     ) -> str:
         alias_usages = tuple(
-            usage.replace(f"/{definition.name}", f"/{alias}")
-            for alias in definition.text_aliases
+            entry.usage.replace(f"/{entry.command_name}", f"/{alias}")
+            for alias in entry.text_aliases
         )
         if not alias_usages:
-            return usage
-        return f"{usage} (также {'; '.join(alias_usages)})"
+            return entry.usage
+        return f"{entry.usage} (также {'; '.join(alias_usages)})"
 
 
 HELP_RENDERER = HelpRenderer()

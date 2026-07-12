@@ -7,6 +7,7 @@ from office_food_bot.services.business_calendar import BusinessCalendarService
 from office_food_bot.services.coffee import CoffeeService
 from office_food_bot.services.command_access import CommandAccessService
 from office_food_bot.services.debug import DebugService
+from office_food_bot.services.invitations import InvitationPreferenceService
 from office_food_bot.services.job_scheduler import JobScheduler
 from office_food_bot.services.lunch import LunchService
 from office_food_bot.services.lunch_attendance import LunchAttendanceService
@@ -31,6 +32,7 @@ class BotServices:
     registration: RegistrationService
     debug: DebugService
     command_access: CommandAccessService
+    invitations: InvitationPreferenceService
     coffee: CoffeeService
     business_calendar: BusinessCalendarService
     presence: PresenceService

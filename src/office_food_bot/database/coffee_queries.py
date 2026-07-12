@@ -1,17 +1,3 @@
-GET_COFFEE_PREFERENCE_SQL = """
-SELECT invitations_enabled
-FROM coffee_preferences
-WHERE user_id = ?
-"""
-
-UPSERT_COFFEE_PREFERENCE_SQL = """
-INSERT INTO coffee_preferences (user_id, invitations_enabled, updated_at)
-VALUES (?, ?, CURRENT_TIMESTAMP)
-ON CONFLICT(user_id) DO UPDATE SET
-    invitations_enabled = excluded.invitations_enabled,
-    updated_at = CURRENT_TIMESTAMP
-"""
-
 CREATE_COFFEE_SESSION_SQL = """
 INSERT INTO coffee_sessions (
     chat_id,

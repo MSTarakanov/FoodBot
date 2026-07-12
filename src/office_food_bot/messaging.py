@@ -111,6 +111,27 @@ class BotMessenger:
         )
         return LiveMessageReference(sent.message_id)
 
+    async def try_edit_message(
+        self,
+        bot: Bot,
+        chat_id: int,
+        message_id: int,
+        text: str,
+        *,
+        parse_mode: ParseMode | None = None,
+    ) -> bool:
+        try:
+            await bot.edit_message_text(
+                text=text,
+                chat_id=chat_id,
+                message_id=message_id,
+                reply_markup=None,
+                parse_mode=parse_mode,
+            )
+        except TelegramAPIError:
+            return False
+        return True
+
     async def reply_with_choices(
         self,
         message: Message,

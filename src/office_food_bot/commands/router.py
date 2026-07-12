@@ -29,9 +29,13 @@ from office_food_bot.commands.register import (
     confirm_reregistration_message,
     confirm_reregistration_unknown_message,
     quit_command,
+    register_coffee_preference_message,
     register_command,
+    register_lunch_preference_message,
     register_name_message,
     register_splitwise_email_message,
+    registration_waiting_for_coffee_preference_unknown_message,
+    registration_waiting_for_lunch_preference_unknown_message,
     registration_waiting_for_name_unknown_message,
     registration_waiting_for_splitwise_unknown_message,
     request_register_command,
@@ -74,6 +78,16 @@ def create_command_router(services: BotServices, messenger: BotMessenger) -> Rou
         F.text,
     )
     router.message.register(
+        register_lunch_preference_message,
+        RegistrationFlow.waiting_for_lunch_preference,
+        F.text,
+    )
+    router.message.register(
+        register_coffee_preference_message,
+        RegistrationFlow.waiting_for_coffee_preference,
+        F.text,
+    )
+    router.message.register(
         confirm_reregistration_message,
         RegistrationFlow.confirming_reregistration,
         F.text,
@@ -89,5 +103,13 @@ def create_command_router(services: BotServices, messenger: BotMessenger) -> Rou
     router.message.register(
         registration_waiting_for_splitwise_unknown_message,
         RegistrationFlow.waiting_for_splitwise_email,
+    )
+    router.message.register(
+        registration_waiting_for_lunch_preference_unknown_message,
+        RegistrationFlow.waiting_for_lunch_preference,
+    )
+    router.message.register(
+        registration_waiting_for_coffee_preference_unknown_message,
+        RegistrationFlow.waiting_for_coffee_preference,
     )
     return router

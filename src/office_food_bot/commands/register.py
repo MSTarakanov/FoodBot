@@ -11,6 +11,7 @@ from aiogram.types import Message
 from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import (
+    InvitationPreferences,
     RegisteredUser,
     RegistrationDetails,
     RegistrationKind,
@@ -37,12 +38,20 @@ SPLITWISE_SKIP_WARNING_TEXT = (
     "Splitwise не указан. Когда /balance будет подключен, она не сможет учитывать тебя "
     "без привязки."
 )
-REQUEST_REGISTER_REPLY_TEXT = "Запрос на регистрацию отправлен админам."
+REQUEST_REGISTER_REPLY_TEXT = (
+    "Запрос на регистрацию отправлен админам. "
+    "Теперь администратор сможет зарегистрировать тебя."
+)
 REGISTER_TARGET_USAGE_TEXT = "Telegram ID должен быть числом: /register 123456789"
 QUIT_SUCCESS_TEXT = "Вы отрегистрированы. Если захотите вернуться, отправьте /request_register."
 QUIT_NOT_FOUND_TEXT = "Я не нашел вашу регистрацию."
 SPLITWISE_SKIP_CHOICES = ("Пропустить",)
 SPLITWISE_SKIP_ANSWERS = {"пропустить", "skip"}
+PREFERENCE_CHOICES = ("Да", "Нет")
+LUNCH_PREFERENCE_PROMPT = "Звать тебя на ланч упоминанием в общем чате?"
+COFFEE_PREFERENCE_PROMPT = (
+    "Звать тебя на кофе, если ты отметил в опросе, что находишься в офисе?"
+)
 
 
 class RegistrationStateData(Protocol):
@@ -72,10 +81,18 @@ class RegistrationStateData(Protocol):
         ],
     ) -> int | None: ...
 
+    @overload
+    def get(
+        self,
+        key: Literal["lunch_invitations_enabled"],
+    ) -> bool | None: ...
+
 
 class RegistrationFlow(StatesGroup):
     waiting_for_name = State()
     waiting_for_splitwise_email = State()
+    waiting_for_lunch_preference = State()
+    waiting_for_coffee_preference = State()
     confirming_reregistration = State()
 
 
@@ -278,7 +295,7 @@ async def register_splitwise_email_message(
         return
 
     if _is_splitwise_skip(raw_answer):
-        await _complete_registration(
+        await _continue_registration_after_splitwise(
             state,
             message,
             bot,
@@ -291,7 +308,7 @@ async def register_splitwise_email_message(
 
     result = await services.splitwise.find_member_by_email(raw_answer)
     if result.kind == SplitwiseLookupKind.FOUND and result.member is not None:
-        await _complete_registration(
+        await _continue_registration_after_splitwise(
             state,
             message,
             bot,
@@ -325,6 +342,119 @@ async def register_splitwise_email_message(
     )
 
 
+async def _continue_registration_after_splitwise(
+    state: FSMContext,
+    message: Message,
+    bot: Bot,
+    messenger: BotMessenger,
+    services: BotServices,
+    requested_display_name: str,
+    *,
+    splitwise_member: SplitwiseMember | None,
+) -> None:
+    profile = await _target_profile_from_state(state, messenger, message)
+    if profile is None:
+        return
+    if not services.registration.should_ask_initial_preferences(
+        profile.telegram_user_id
+    ):
+        await _complete_registration(
+            state,
+            message,
+            bot,
+            messenger,
+            services,
+            requested_display_name,
+            splitwise_member=splitwise_member,
+        )
+        return
+
+    await state.update_data(
+        requested_splitwise_user_id=_splitwise_user_id(splitwise_member),
+        requested_splitwise_first_name=_splitwise_first_name(splitwise_member),
+        requested_splitwise_last_name=_splitwise_last_name(splitwise_member),
+        requested_splitwise_email=_splitwise_email(splitwise_member),
+    )
+    await state.set_state(RegistrationFlow.waiting_for_lunch_preference)
+    splitwise_text = SPLITWISE_SKIP_WARNING_TEXT
+    if splitwise_member is not None:
+        splitwise_text = (
+            f"Splitwise найден: {splitwise_member.email} "
+            f"(ID {splitwise_member.splitwise_user_id})."
+        )
+    await messenger.reply_with_choices(
+        message,
+        f"{splitwise_text}\n\n{LUNCH_PREFERENCE_PROMPT}",
+        PREFERENCE_CHOICES,
+    )
+
+
+async def register_lunch_preference_message(
+    message: Message,
+    messenger: BotMessenger,
+    state: FSMContext,
+) -> None:
+    enabled = _parse_yes_no(message.text)
+    if enabled is None:
+        await messenger.reply_with_choices(
+            message,
+            LUNCH_PREFERENCE_PROMPT,
+            PREFERENCE_CHOICES,
+        )
+        return
+    await state.update_data(lunch_invitations_enabled=enabled)
+    await state.set_state(RegistrationFlow.waiting_for_coffee_preference)
+    await messenger.reply_with_choices(
+        message,
+        COFFEE_PREFERENCE_PROMPT,
+        PREFERENCE_CHOICES,
+    )
+
+
+async def register_coffee_preference_message(
+    message: Message,
+    bot: Bot,
+    messenger: BotMessenger,
+    services: BotServices,
+    state: FSMContext,
+) -> None:
+    coffee_enabled = _parse_yes_no(message.text)
+    if coffee_enabled is None:
+        await messenger.reply_with_choices(
+            message,
+            COFFEE_PREFERENCE_PROMPT,
+            PREFERENCE_CHOICES,
+        )
+        return
+    requested_display_name = await _requested_display_name_from_state(
+        state,
+        messenger,
+        message,
+    )
+    if requested_display_name is None:
+        return
+    data = await state.get_data()
+    lunch_enabled = data.get("lunch_invitations_enabled")
+    if not isinstance(lunch_enabled, bool):
+        await state.clear()
+        await messenger.reply(
+            message,
+            "Не нашел настройки приглашений. Запусти /register заново.",
+            reply_markup=messenger.remove_keyboard(),
+        )
+        return
+    await _complete_registration(
+        state,
+        message,
+        bot,
+        messenger,
+        services,
+        requested_display_name,
+        splitwise_member=_splitwise_member_from_state_data(data),
+        preferences=InvitationPreferences(lunch_enabled, coffee_enabled),
+    )
+
+
 async def registration_waiting_for_splitwise_unknown_message(
     message: Message,
     messenger: BotMessenger,
@@ -335,6 +465,28 @@ async def registration_waiting_for_splitwise_unknown_message(
         SPLITWISE_SKIP_CHOICES,
         columns=1,
         one_time_keyboard=False,
+    )
+
+
+async def registration_waiting_for_lunch_preference_unknown_message(
+    message: Message,
+    messenger: BotMessenger,
+) -> None:
+    await messenger.reply_with_choices(
+        message,
+        LUNCH_PREFERENCE_PROMPT,
+        PREFERENCE_CHOICES,
+    )
+
+
+async def registration_waiting_for_coffee_preference_unknown_message(
+    message: Message,
+    messenger: BotMessenger,
+) -> None:
+    await messenger.reply_with_choices(
+        message,
+        COFFEE_PREFERENCE_PROMPT,
+        PREFERENCE_CHOICES,
     )
 
 
@@ -421,12 +573,16 @@ async def _complete_registration(
     raw_display_name: str,
     *,
     splitwise_member: SplitwiseMember | None,
+    preferences: InvitationPreferences | None = None,
 ) -> None:
     profile = await _target_profile_from_state(state, messenger, message)
     if profile is None:
         return
 
     result = services.registration.register(profile, raw_display_name, splitwise_member)
+
+    if preferences is not None and result.kind == RegistrationKind.CREATED:
+        services.invitations.save_initial(result.user.id, preferences)
 
     if result.kind == RegistrationKind.CREATED:
         await state.clear()
@@ -435,6 +591,7 @@ async def _complete_registration(
             _registration_reply_text(
                 "Заявка на регистрацию отправлена. Жду аппрув.",
                 splitwise_member,
+                preferences,
             ),
             reply_markup=messenger.remove_keyboard(),
         )
@@ -446,6 +603,7 @@ async def _complete_registration(
             title="Новая регистрация:",
             splitwise_member=splitwise_member,
             previous_details=None,
+            preferences=preferences,
         )
         return
 
@@ -522,6 +680,7 @@ async def _notify_admins_about_registration(
     title: str,
     splitwise_member: SplitwiseMember | None,
     previous_details: RegistrationDetails | None,
+    preferences: InvitationPreferences | None = None,
 ) -> None:
     current_details = _registration_details_from_user(registered_user, splitwise_member)
     for admin_id in services.registration.admin_ids:
@@ -533,6 +692,7 @@ async def _notify_admins_about_registration(
                 telegram_user_id=registered_user.telegram_user_id,
                 current_details=current_details,
                 previous_details=previous_details,
+                preferences=preferences,
             ),
         )
 
@@ -644,14 +804,37 @@ async def _target_profile_from_state(
     return None
 
 
-def _registration_reply_text(base_text: str, splitwise_member: SplitwiseMember | None) -> str:
+def _registration_reply_text(
+    base_text: str,
+    splitwise_member: SplitwiseMember | None,
+    preferences: InvitationPreferences | None = None,
+) -> str:
+    parts = [base_text]
     if splitwise_member is not None:
-        return (
-            f"{base_text}\n\n"
+        parts.append(
             f"Splitwise найден: {splitwise_member.email} "
             f"(ID {splitwise_member.splitwise_user_id})."
         )
-    return f"{base_text}\n\n{SPLITWISE_SKIP_WARNING_TEXT}"
+    else:
+        parts.append(SPLITWISE_SKIP_WARNING_TEXT)
+    if preferences is not None:
+        parts.append(_invitation_preferences_text(preferences))
+    return "\n\n".join(parts)
+
+
+def _invitation_preferences_text(preferences: InvitationPreferences) -> str:
+    lunch = "да" if preferences.lunch_enabled else "нет"
+    coffee = "да" if preferences.coffee_enabled else "нет"
+    return f"Звать на ланч: {lunch}.\nЗвать на кофе: {coffee}."
+
+
+def _parse_yes_no(raw_answer: str | None) -> bool | None:
+    normalized = (raw_answer or "").strip().casefold()
+    if normalized in {"да", "yes", "y"}:
+        return True
+    if normalized in {"нет", "no", "n"}:
+        return False
+    return None
 
 
 def _registration_request_admin_text(profile: TelegramProfile) -> str:
@@ -710,15 +893,19 @@ def _admin_registration_text(
     telegram_user_id: int,
     current_details: RegistrationDetails,
     previous_details: RegistrationDetails | None,
+    preferences: InvitationPreferences | None,
 ) -> str:
     if previous_details is None:
-        return (
-            f"{title}\n"
-            f"Имя: {current_details.display_name}\n"
-            f"Telegram ID: {telegram_user_id}\n"
-            f"{_splitwise_connection_admin_text(current_details.splitwise)}\n"
-            f"Аппрув: /approve {telegram_user_id}"
-        )
+        lines = [
+            title,
+            f"Имя: {current_details.display_name}",
+            f"Telegram ID: {telegram_user_id}",
+            _splitwise_connection_admin_text(current_details.splitwise),
+        ]
+        if preferences is not None:
+            lines.append(_invitation_preferences_text(preferences))
+        lines.append(f"Аппрув: /approve {telegram_user_id}")
+        return "\n".join(lines)
 
     change_lines = _registration_change_lines(previous_details, current_details)
     return "\n".join(

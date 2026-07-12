@@ -33,6 +33,24 @@ async def lunch_command(
         await messenger.reply(message, "Не вижу твой Telegram user id.")
         return
 
+    argument = (command.args or "").strip().casefold()
+    if argument in {"on", "off"}:
+        await messenger.reply(
+            message,
+            services.invitations.set_lunch(
+                profile.telegram_user_id,
+                enabled=argument == "on",
+            ),
+        )
+        return
+
+    if not argument and not _is_group_chat(message):
+        await messenger.reply(
+            message,
+            services.invitations.lunch_status_text(profile.telegram_user_id),
+        )
+        return
+
     block_reason = services.lunch.poll_block_reason(profile.telegram_user_id)
     if block_reason is not None:
         await messenger.reply(message, block_reason)

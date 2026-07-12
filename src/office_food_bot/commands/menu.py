@@ -42,15 +42,18 @@ async def setup_bot_commands(
     access: CommandAccess,
 ) -> None:
     await bot.set_my_commands(
-        _bot_commands(access.visible_commands(PRIVATE_CHAT_TYPE, None)),
+        _bot_commands(access.visible_commands(PRIVATE_CHAT_TYPE, None), PRIVATE_CHAT_TYPE),
         scope=BotCommandScopeDefault(),
     )
     await bot.set_my_commands(
-        _bot_commands(access.visible_commands(PRIVATE_CHAT_TYPE, None)),
+        _bot_commands(access.visible_commands(PRIVATE_CHAT_TYPE, None), PRIVATE_CHAT_TYPE),
         scope=BotCommandScopeAllPrivateChats(),
     )
     await bot.set_my_commands(
-        _bot_commands(access.visible_commands(GROUP_MENU_CHAT_TYPE, None)),
+        _bot_commands(
+            access.visible_commands(GROUP_MENU_CHAT_TYPE, None),
+            GROUP_MENU_CHAT_TYPE,
+        ),
         scope=BotCommandScopeAllGroupChats(),
     )
 
@@ -65,7 +68,10 @@ async def setup_private_admin_commands(
 ) -> None:
     try:
         await bot.set_my_commands(
-            _bot_commands(access.visible_commands(PRIVATE_CHAT_TYPE, admin_id)),
+            _bot_commands(
+                access.visible_commands(PRIVATE_CHAT_TYPE, admin_id),
+                PRIVATE_CHAT_TYPE,
+            ),
             scope=BotCommandScopeChat(chat_id=admin_id),
         )
     except TelegramBadRequest as error:
@@ -73,8 +79,14 @@ async def setup_private_admin_commands(
             raise
 
 
-def _bot_commands(definitions: Iterable[CommandDefinition]) -> list[BotCommand]:
+def _bot_commands(
+    definitions: Iterable[CommandDefinition],
+    chat_type: str,
+) -> list[BotCommand]:
     return [
-        BotCommand(command=definition.name, description=definition.description)
+        BotCommand(
+            command=definition.name,
+            description=definition.menu_description(chat_type),
+        )
         for definition in definitions
     ]

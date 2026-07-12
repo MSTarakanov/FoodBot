@@ -18,6 +18,7 @@ from office_food_bot.repositories import (
     VacationRepository,
 )
 from office_food_bot.services.business_calendar import BusinessCalendarService
+from office_food_bot.services.invitations import InvitationPreferenceService
 from office_food_bot.services.job_scheduler import JobScheduler
 from office_food_bot.services.lunch import lunch_announcement_text
 from office_food_bot.services.lunch_pin import LunchPinService
@@ -30,7 +31,7 @@ AUTO_LUNCH_JOB_ID = "auto_lunch"
 
 class LunchPublishKind(StrEnum):
     PUBLISHED = "published"
-    SKIPPED_ALL_ON_VACATION = "skipped_all_on_vacation"
+    SKIPPED_NO_INVITEES = "skipped_no_invitees"
 
 
 class LunchAutoChatService:
@@ -60,6 +61,7 @@ class LunchPollPublisher:
         poll_tracking: PollTrackingService,
         users: UserRepository,
         vacations: VacationRepository,
+        invitation_preferences: InvitationPreferenceService,
         lunch_pins: LunchPinService,
         poll_catalog: LunchPollCatalog,
         timezone_name: str,
@@ -69,6 +71,7 @@ class LunchPollPublisher:
         self._poll_tracking = poll_tracking
         self._users = users
         self._vacations = vacations
+        self._invitation_preferences = invitation_preferences
         self._lunch_pins = lunch_pins
         self._poll_catalog = poll_catalog
         self._timezone = ZoneInfo(timezone_name)
@@ -86,7 +89,7 @@ class LunchPollPublisher:
         polls = self._poll_catalog.select(office_selection, today)
         active_users = self._active_users_available_for_lunch()
         if not active_users and mode == CommandExecutionMode.AUTOMATIC:
-            return LunchPublishKind.SKIPPED_ALL_ON_VACATION
+            return LunchPublishKind.SKIPPED_NO_INVITEES
 
         await self._messenger.send(
             bot,
@@ -148,6 +151,7 @@ class LunchPollPublisher:
             user
             for user in self._users.list_active_users()
             if user.id not in vacation_user_ids
+            and self._invitation_preferences.for_user(user.id).lunch_enabled
         )
 
 
@@ -174,7 +178,7 @@ class LunchSchedulerService:
         async def run() -> None:
             await self.run_due_lunch(bot)
 
-        self._scheduler.add_weekday_cron(
+        self._scheduler.add_daily_cron(
             AUTO_LUNCH_JOB_ID,
             run,
             hour=11,

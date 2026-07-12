@@ -18,8 +18,35 @@ class HelpSection(StrEnum):
     SERVICE = "Служебные"
 
 
+class CommandArgumentPattern(StrEnum):
+    EMPTY = "empty"
+    TOGGLE = "toggle"
+
+    def matches(self, arguments: str | None) -> bool:
+        normalized = (arguments or "").strip().casefold()
+        if self == CommandArgumentPattern.EMPTY:
+            return not normalized
+        return normalized in {"on", "off"}
+
+
+@dataclass(frozen=True)
+class CommandScopeOverride:
+    pattern: CommandArgumentPattern
+    scope: CommandScope
+
+
 @dataclass(frozen=True)
 class CommandHelpEntry:
+    usage: str
+    description: str
+    section: HelpSection
+    scope: CommandScope | None = None
+
+
+@dataclass(frozen=True)
+class VisibleCommandHelpEntry:
+    command_name: str
+    text_aliases: tuple[str, ...]
     usage: str
     description: str
     section: HelpSection
@@ -35,6 +62,27 @@ class CommandDefinition:
     admin_only: bool = False
     additional_help: tuple[CommandHelpEntry, ...] = ()
     text_aliases: tuple[str, ...] = ()
+    scope_overrides: tuple[CommandScopeOverride, ...] = ()
+    show_in_menu: bool = True
+    private_description: str | None = None
+
+    def scope_for(self, arguments: str | None) -> CommandScope:
+        override = next(
+            (
+                item
+                for item in self.scope_overrides
+                if item.pattern.matches(arguments)
+            ),
+            None,
+        )
+        if override is None:
+            return self.scope
+        return override.scope
+
+    def menu_description(self, chat_type: str) -> str:
+        if chat_type == "private" and self.private_description is not None:
+            return self.private_description
+        return self.description
 
 
 COMMANDS: tuple[CommandDefinition, ...] = (
@@ -70,8 +118,9 @@ COMMANDS: tuple[CommandDefinition, ...] = (
         "request_register",
         "попросить админа зарегистрировать вас",
         "/request_register",
-        CommandScope.PRIVATE,
+        CommandScope.ANY,
         HelpSection.PROFILE_SETTINGS,
+        show_in_menu=False,
     ),
     CommandDefinition(
         "quit",
@@ -157,6 +206,31 @@ COMMANDS: tuple[CommandDefinition, ...] = (
         "/lunch [rose|роза|skyline|скайлайн]",
         CommandScope.GROUP,
         HelpSection.MAIN,
+        additional_help=(
+            CommandHelpEntry(
+                "/lunch",
+                "показать настройки приглашений на ланч",
+                HelpSection.PROFILE_SETTINGS,
+                CommandScope.PRIVATE,
+            ),
+            CommandHelpEntry(
+                "/lunch on",
+                "включить приглашения",
+                HelpSection.PROFILE_SETTINGS,
+                CommandScope.ANY,
+            ),
+            CommandHelpEntry(
+                "/lunch off",
+                "выключить приглашения",
+                HelpSection.PROFILE_SETTINGS,
+                CommandScope.ANY,
+            ),
+        ),
+        scope_overrides=(
+            CommandScopeOverride(CommandArgumentPattern.EMPTY, CommandScope.ANY),
+            CommandScopeOverride(CommandArgumentPattern.TOGGLE, CommandScope.ANY),
+        ),
+        private_description="настроить приглашения на ланч",
     ),
     CommandDefinition(
         "coffee",
@@ -166,17 +240,30 @@ COMMANDS: tuple[CommandDefinition, ...] = (
         HelpSection.MAIN,
         additional_help=(
             CommandHelpEntry(
+                "/coffee",
+                "показать настройки приглашений на кофе",
+                HelpSection.PROFILE_SETTINGS,
+                CommandScope.PRIVATE,
+            ),
+            CommandHelpEntry(
                 "/coffee on",
                 "включить приглашения",
                 HelpSection.PROFILE_SETTINGS,
+                CommandScope.ANY,
             ),
             CommandHelpEntry(
                 "/coffee off",
                 "выключить приглашения",
                 HelpSection.PROFILE_SETTINGS,
+                CommandScope.ANY,
             ),
         ),
         text_aliases=("кофе",),
+        scope_overrides=(
+            CommandScopeOverride(CommandArgumentPattern.EMPTY, CommandScope.ANY),
+            CommandScopeOverride(CommandArgumentPattern.TOGGLE, CommandScope.ANY),
+        ),
+        private_description="настроить приглашения на кофе",
     ),
     CommandDefinition(
         "lunch_auto_on",

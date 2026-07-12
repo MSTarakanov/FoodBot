@@ -13,14 +13,20 @@ Private chat commands:
 - `/help` - shows available commands.
 - `/hi` - replies with a short greeting.
 - `/register` - starts guided registration: the bot asks for a display name, then asks for a
-  Splitwise email or lets the user skip Splitwise linking. A new registration overwrites an
-  existing pending request for the same Telegram user.
+  Splitwise email or lets the user skip Splitwise linking. On a first registration or after
+  returning from `/quit`, it also asks whether to mention the user in lunch and coffee calls.
+  A new registration overwrites an existing pending request for the same Telegram user.
   Already approved users see their current data and choose whether to send a
   re-registration request back to the pending approval list.
-- `/request_register` - asks admins to start registration for the current Telegram user.
 - `/quit` - unregisters the current Telegram user. The row stays in the database with an
   abandoned status, but the bot treats the user as not registered.
-- `/balance` - placeholder for the upcoming Splitwise balance view.
+- `/balance` - shows Splitwise balances.
+- `/lunch`, `/lunch on`, `/lunch off` - show or change personal lunch-call settings.
+- `/coffee`, `/coffee on`, `/coffee off` - show or change personal coffee-call settings.
+
+`/request_register` works in both private and group chats and asks an administrator to perform the
+guided registration for the user. It is intentionally hidden from Telegram's native slash menu,
+but remains documented in `/help`.
 
 Group chat commands:
 
@@ -32,7 +38,8 @@ Group chat commands:
 - `/vacation` - shows the current vacation status and usage. Use `/vacation <days|date>` to go on
   vacation until the end of the given date, or `/vacation 0`/`/vacation off` to leave vacation.
 - `/lunch [rose|роза|skyline|скайлайн]` - creates lunch polls. Without an office argument,
-  Tuesday uses Rose and every other day uses Skyline.
+  Tuesday uses Rose and every other day uses Skyline. `/lunch on` and `/lunch off` control whether
+  the user is mentioned in lunch announcements; they do not prevent a manual lunch poll.
 - `/coffee <minutes|HH:MM>` - creates or reschedules the chat's current coffee meeting. The
   text alias `/кофе` supports the same arguments, but is not shown in Telegram's native slash menu
   because Telegram command names only support Latin letters, digits, and underscores.
@@ -43,15 +50,17 @@ Group chat commands:
 - `/lunch_auto_status` - admin-only: shows whether automatic lunch polls are enabled.
 
 Use `20` for an exact offset in minutes or `20-30` for a minute range.
-Automatic lunch polls are sent at 11:30 in `FOODBOT_TIMEZONE` on Serbian working days.
-Users with an active vacation are not tagged in lunch announcements. If all active users are on
-vacation, lunch polls are not sent.
+The automatic lunch job runs every day at 11:30 in `FOODBOT_TIMEZONE`. It first clears the previous
+lunch pin, then publishes new polls only on Serbian working days. Users with an active vacation or
+disabled lunch invitations are not tagged. If no active user is available for lunch calls, the
+automatic polls are skipped; a manually requested `/lunch` still publishes without mentions.
 
 Coffee meetings use one live message per chat with `Пойду` and `Не пойду` inline buttons. A new
 `/coffee` time edits the existing meeting, keeps its participants, and announces who changed the
 time. The live card is pinned silently. At the chosen time the bot unpins it and mentions current
 participants; an empty meeting completes silently. Meeting state and known lunch poll votes are
-stored in SQLite, so scheduled coffee jobs are restored after a bot restart.
+stored in SQLite, so scheduled coffee jobs are restored after a bot restart. When the meeting time
+arrives, the live card replaces its countdown with `Встреча прошла` and removes its buttons.
 
 Admin private commands:
 

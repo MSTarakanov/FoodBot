@@ -5,10 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from office_food_bot.coffee_repositories import (
-    CoffeePreferenceRepository,
-    CoffeeSessionRepository,
-)
+from office_food_bot.coffee_repositories import CoffeeSessionRepository
 from office_food_bot.database import Database
 from office_food_bot.models import CoffeeSessionStatus, TelegramProfile
 from office_food_bot.repositories import UserRepository
@@ -20,20 +17,6 @@ def create_user(users: UserRepository, telegram_user_id: int, name: str) -> int:
         name,
     )
     return user.id
-
-
-def test_coffee_preferences_default_to_enabled_and_persist(database: Database) -> None:
-    users = UserRepository(database)
-    user_id = create_user(users, 42, "Максим")
-    preferences = CoffeePreferenceRepository(database)
-
-    assert preferences.invitations_enabled(user_id)
-
-    preferences.set_invitations_enabled(user_id, False)
-    assert not CoffeePreferenceRepository(database).invitations_enabled(user_id)
-
-    preferences.set_invitations_enabled(user_id, True)
-    assert preferences.invitations_enabled(user_id)
 
 
 def test_coffee_session_persists_participants_and_history(database: Database) -> None:
@@ -84,8 +67,8 @@ def test_fresh_database_contains_poll_and_coffee_tables(database: Database) -> N
     assert {
         "polls",
         "poll_selected_options",
-        "coffee_preferences",
+        "user_invitation_preferences",
         "coffee_sessions",
         "coffee_session_participants",
     } <= table_names
-    assert database.schema_version() == 13
+    assert database.schema_version() == 14

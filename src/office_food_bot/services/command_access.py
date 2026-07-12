@@ -6,7 +6,9 @@ from enum import StrEnum
 from office_food_bot.commands.definitions import (
     COMMANDS,
     CommandDefinition,
+    CommandHelpEntry,
     CommandScope,
+    VisibleCommandHelpEntry,
     command_definition,
 )
 from office_food_bot.services.debug import DebugService
@@ -45,19 +47,19 @@ class CommandAccessService:
         command_name: str,
         chat_type: str,
         telegram_user_id: int | None,
+        arguments: str | None = None,
     ) -> CommandAccessResult:
         definition = command_definition(command_name)
         if definition is None:
             return _allowed()
 
-        if definition.scope == CommandScope.PRIVATE and chat_type != PRIVATE_CHAT_TYPE:
-            return _denied(CommandAccessDenialReason.PRIVATE_ONLY)
-
-        if (
-            definition.scope == CommandScope.GROUP
-            and not self._can_run_group_command_in_chat(chat_type, telegram_user_id)
-        ):
-            return _denied(CommandAccessDenialReason.GROUP_ONLY)
+        denial = self._scope_denial(
+            definition.scope_for(arguments),
+            chat_type,
+            telegram_user_id,
+        )
+        if denial is not None:
+            return _denied(denial)
 
         if definition.admin_only and not self.is_admin(telegram_user_id):
             return _denied(CommandAccessDenialReason.ADMIN_ONLY)
@@ -72,7 +74,26 @@ class CommandAccessService:
         return tuple(
             definition
             for definition in COMMANDS
-            if self.can_run(definition.name, chat_type, telegram_user_id).allowed
+            if definition.show_in_menu
+            and self._definition_visible(definition, chat_type, telegram_user_id)
+        )
+
+    def visible_help_entries(
+        self,
+        chat_type: str,
+        telegram_user_id: int | None,
+    ) -> tuple[VisibleCommandHelpEntry, ...]:
+        return tuple(
+            self._visible_help_entry(definition, entry)
+            for definition in COMMANDS
+            if not definition.admin_only or self.is_admin(telegram_user_id)
+            for entry in self._help_entries(definition)
+            if self._scope_denial(
+                entry.scope or definition.scope,
+                chat_type,
+                telegram_user_id,
+            )
+            is None
         )
 
     def admin_chat_ids_for_menu(self) -> tuple[int, ...]:
@@ -99,6 +120,60 @@ class CommandAccessService:
             chat_type == PRIVATE_CHAT_TYPE
             and self.is_admin(telegram_user_id)
             and self.is_debug_enabled(telegram_user_id)
+        )
+
+    def _definition_visible(
+        self,
+        definition: CommandDefinition,
+        chat_type: str,
+        telegram_user_id: int | None,
+    ) -> bool:
+        if definition.admin_only and not self.is_admin(telegram_user_id):
+            return False
+        scopes = {definition.scope, *(item.scope for item in definition.scope_overrides)}
+        return any(
+            self._scope_denial(scope, chat_type, telegram_user_id) is None
+            for scope in scopes
+        )
+
+    def _scope_denial(
+        self,
+        scope: CommandScope,
+        chat_type: str,
+        telegram_user_id: int | None,
+    ) -> CommandAccessDenialReason | None:
+        if scope == CommandScope.PRIVATE and chat_type != PRIVATE_CHAT_TYPE:
+            return CommandAccessDenialReason.PRIVATE_ONLY
+        if (
+            scope == CommandScope.GROUP
+            and not self._can_run_group_command_in_chat(chat_type, telegram_user_id)
+        ):
+            return CommandAccessDenialReason.GROUP_ONLY
+        return None
+
+    def _help_entries(
+        self,
+        definition: CommandDefinition,
+    ) -> tuple[CommandHelpEntry, ...]:
+        primary = CommandHelpEntry(
+            definition.usage,
+            definition.description,
+            definition.help_section,
+            definition.scope,
+        )
+        return (primary, *definition.additional_help)
+
+    def _visible_help_entry(
+        self,
+        definition: CommandDefinition,
+        entry: CommandHelpEntry,
+    ) -> VisibleCommandHelpEntry:
+        return VisibleCommandHelpEntry(
+            command_name=definition.name,
+            text_aliases=definition.text_aliases,
+            usage=entry.usage,
+            description=entry.description,
+            section=entry.section,
         )
 
 

@@ -53,8 +53,10 @@ from office_food_bot.commands.errors import UNHANDLED_ERROR_REPLY_TEXT
 from office_food_bot.commands.menu import setup_bot_commands
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
+from office_food_bot.invitation_repositories import InvitationPreferenceRepository
 from office_food_bot.models import (
     CoffeeSessionStatus,
+    InvitationPreferences,
     PollKind,
     SplitwiseBalance,
     SplitwiseMember,
@@ -93,7 +95,13 @@ PRIVATE_HELP_TEXT = (
     "<b>Профиль и настройки:</b>\n"
     "/register - пройти регистрацию\n"
     "/request_register - попросить админа зарегистрировать вас\n"
-    "/quit - отрегистрироваться\n\n"
+    "/quit - отрегистрироваться\n"
+    "/lunch - показать настройки приглашений на ланч\n"
+    "/lunch on - включить приглашения\n"
+    "/lunch off - выключить приглашения\n"
+    "/coffee (также /кофе) - показать настройки приглашений на кофе\n"
+    "/coffee on (также /кофе on) - включить приглашения\n"
+    "/coffee off (также /кофе off) - выключить приглашения\n\n"
     "<b>Служебные:</b>\n"
     "/start - показать приветствие\n"
     "/help - показать список команд\n"
@@ -107,7 +115,13 @@ ADMIN_PRIVATE_HELP_TEXT = (
     "<b>Профиль и настройки:</b>\n"
     "/register - пройти регистрацию\n"
     "/request_register - попросить админа зарегистрировать вас\n"
-    "/quit - отрегистрироваться\n\n"
+    "/quit - отрегистрироваться\n"
+    "/lunch - показать настройки приглашений на ланч\n"
+    "/lunch on - включить приглашения\n"
+    "/lunch off - выключить приглашения\n"
+    "/coffee (также /кофе) - показать настройки приглашений на кофе\n"
+    "/coffee on (также /кофе on) - включить приглашения\n"
+    "/coffee off (также /кофе off) - выключить приглашения\n\n"
     "<b>Администрирование:</b>\n"
     "/approve 123456789 - подтвердить регистрацию\n"
     "/register_requests_list - показать заявки на регистрацию\n"
@@ -128,9 +142,12 @@ GROUP_HELP_MAIN_AND_SETTINGS = (
     "/coffee 15 или /coffee 16:30 "
     "(также /кофе 15 или /кофе 16:30) - позвать на кофе\n\n"
     "<b>Профиль и настройки:</b>\n"
+    "/request_register - попросить админа зарегистрировать вас\n"
     "/vacation - показать статус отпуска\n"
     "/vacation 2 или /vacation 20.07 - уйти в отпуск\n"
     "/vacation 0 или /vacation off - выйти из отпуска\n"
+    "/lunch on - включить приглашения\n"
+    "/lunch off - выключить приглашения\n"
     "/coffee on (также /кофе on) - включить приглашения\n"
     "/coffee off (также /кофе off) - выключить приглашения"
 )
@@ -596,6 +613,18 @@ async def submit_registration(
         bot,
         make_update(splitwise_answer, user_id=user_id, first_name=first_name, username=username),
     )
+    if sent_texts(session)[-1].endswith(
+        "Звать тебя на ланч упоминанием в общем чате?"
+    ):
+        await dispatcher.feed_update(
+            bot,
+            make_update("Да", user_id=user_id, first_name=first_name, username=username),
+        )
+        session.clear_messages()
+        await dispatcher.feed_update(
+            bot,
+            make_update("Да", user_id=user_id, first_name=first_name, username=username),
+        )
 
 
 @pytest.mark.parametrize(
@@ -809,10 +838,11 @@ async def test_setup_bot_commands_registers_telegram_menu() -> None:
         "help",
         "hi",
         "register",
-        "request_register",
         "quit",
         "cancel",
         "balance",
+        "lunch",
+        "coffee",
     ]
 
     private_menu = bot.command_menus[1]
@@ -822,10 +852,11 @@ async def test_setup_bot_commands_registers_telegram_menu() -> None:
         "help",
         "hi",
         "register",
-        "request_register",
         "quit",
         "cancel",
         "balance",
+        "lunch",
+        "coffee",
     ]
 
     group_menu = bot.command_menus[2]
@@ -854,13 +885,14 @@ async def test_setup_bot_commands_registers_telegram_menu() -> None:
         "help",
         "hi",
         "register",
-        "request_register",
         "quit",
         "cancel",
         "approve",
         "register_requests_list",
         "debug",
         "balance",
+        "lunch",
+        "coffee",
     ]
 
     database.close()
@@ -879,7 +911,7 @@ async def test_setup_bot_commands_uses_debug_menu_for_admin_chat() -> None:
     assert admin_menu.scope_name == "chat"
     assert admin_menu.chat_id == 7
     assert _command_names(admin_menu.commands) == [
-        definition.name for definition in COMMANDS
+        definition.name for definition in COMMANDS if definition.show_in_menu
     ]
 
     database.close()
@@ -916,10 +948,21 @@ async def test_register_creates_pending_user_and_notifies_admin(tmp_path: Path) 
     session.clear_messages()
     await dispatcher.feed_update(bot, make_update("MAX@example.com"))
 
+    assert sent_texts(session) == [
+        "Splitwise найден: max@example.com (ID 1001).\n\n"
+        "Звать тебя на ланч упоминанием в общем чате?"
+    ]
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Да"))
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Да"))
+
     texts = sent_texts(session)
     assert texts[0] == (
         "Заявка на регистрацию отправлена. Жду аппрув.\n\n"
-        "Splitwise найден: max@example.com (ID 1001)."
+            "Splitwise найден: max@example.com (ID 1001).\n\n"
+            "Звать на ланч: да.\n"
+            "Звать на кофе: да."
     )
     assert "Новая регистрация" in texts[1]
     assert "Имя: Максим" in texts[1]
@@ -970,7 +1013,8 @@ async def test_request_register_notifies_admin_with_register_command(tmp_path: P
     )
 
     assert sent_texts(session) == [
-        "Запрос на регистрацию отправлен админам.",
+        "Запрос на регистрацию отправлен админам. "
+        "Теперь администратор сможет зарегистрировать тебя.",
         "Запрос на регистрацию:\n"
         "Telegram ID: 42\n"
         "Username: @misha\n"
@@ -1015,6 +1059,8 @@ async def test_lunch_tags_user_registered_from_request_register(
     await dispatcher.feed_update(bot, make_update("Максим", user_id=7))
     session.clear_messages()
     await dispatcher.feed_update(bot, make_update("Пропустить", user_id=7))
+    await dispatcher.feed_update(bot, make_update("Да", user_id=7))
+    await dispatcher.feed_update(bot, make_update("Да", user_id=7))
     await dispatcher.feed_update(bot, make_update("/approve 42", user_id=7))
     session.clear_messages()
 
@@ -1177,7 +1223,8 @@ async def test_request_register_after_quit_notifies_admin_again(tmp_path: Path) 
     await dispatcher.feed_update(bot, make_update("/request_register"))
 
     assert sent_texts(session) == [
-        "Запрос на регистрацию отправлен админам.",
+        "Запрос на регистрацию отправлен админам. "
+        "Теперь администратор сможет зарегистрировать тебя.",
         "Запрос на регистрацию:\n"
         "Telegram ID: 42\n"
         "Username: @misha\n"
@@ -1255,6 +1302,9 @@ async def test_admin_registers_another_user_by_id(tmp_path: Path) -> None:
     await dispatcher.feed_update(bot, make_update("Максим", user_id=7, first_name="Admin"))
     session.clear_messages()
     await dispatcher.feed_update(bot, make_update("Пропустить", user_id=7, first_name="Admin"))
+    await dispatcher.feed_update(bot, make_update("Да", user_id=7, first_name="Admin"))
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Да", user_id=7, first_name="Admin"))
 
     texts = sent_texts(session)
     assert texts[0].startswith("Заявка на регистрацию отправлена. Жду аппрув.")
@@ -1334,11 +1384,25 @@ async def test_register_flow_creates_pending_user_from_next_message(tmp_path: Pa
     session.clear_messages()
     await dispatcher.feed_update(bot, make_update("Пропустить"))
 
+    assert sent_texts(session) == [
+        "Splitwise не указан. Когда /balance будет подключен, она не сможет учитывать тебя "
+        "без привязки.\n\n"
+        "Звать тебя на ланч упоминанием в общем чате?"
+    ]
+    assert UserRepository(database).get_by_telegram_id(42) is None
+
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Да"))
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Да"))
+
     texts = sent_texts(session)
     assert texts[0] == (
         "Заявка на регистрацию отправлена. Жду аппрув.\n\n"
         "Splitwise не указан. Когда /balance будет подключен, она не сможет учитывать тебя "
-        "без привязки."
+        "без привязки.\n\n"
+        "Звать на ланч: да.\n"
+        "Звать на кофе: да."
     )
     assert "Новая регистрация" in texts[1]
     assert "Splitwise: не указан" in texts[1]
@@ -1387,6 +1451,10 @@ async def test_register_flow_keeps_user_in_state_until_valid_name(tmp_path: Path
     session.clear_messages()
     await dispatcher.feed_update(bot, make_update("Пропустить"))
 
+    await dispatcher.feed_update(bot, make_update("Да"))
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Да"))
+
     assert sent_texts(session)[0].startswith("Заявка на регистрацию отправлена.")
     user = UserRepository(database).get_by_telegram_id(42)
     assert user is not None
@@ -1418,6 +1486,10 @@ async def test_register_flow_keeps_user_in_splitwise_step_when_email_not_found(
     session.clear_messages()
     await dispatcher.feed_update(bot, make_update("Пропустить"))
 
+    await dispatcher.feed_update(bot, make_update("Да"))
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Да"))
+
     assert sent_texts(session)[0].startswith("Заявка на регистрацию отправлена.")
     assert UserRepository(database).get_by_telegram_id(42) is not None
 
@@ -1446,6 +1518,10 @@ async def test_register_flow_keeps_user_in_splitwise_step_when_check_is_unavaila
 
     session.clear_messages()
     await dispatcher.feed_update(bot, make_update("Пропустить"))
+
+    await dispatcher.feed_update(bot, make_update("Да"))
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Да"))
 
     assert sent_texts(session)[0].startswith("Заявка на регистрацию отправлена.")
     assert UserRepository(database).get_by_telegram_id(42) is not None
@@ -2714,7 +2790,10 @@ async def test_admin_debug_allows_group_only_command_in_private_chat(
     await dispatcher.feed_update(bot, make_update("/approve 7", user_id=7, first_name="Admin"))
     session.clear_messages()
 
-    await dispatcher.feed_update(bot, make_update("/lunch", user_id=7, first_name="Admin"))
+    await dispatcher.feed_update(
+        bot,
+        make_update("/lunch rose", user_id=7, first_name="Admin"),
+    )
 
     assert sent_texts(session) == ["Команда доступна только в групповом чате."]
     assert session.sent_polls == []
@@ -2725,11 +2804,14 @@ async def test_admin_debug_allows_group_only_command_in_private_chat(
     assert sent_texts(session) == ["Debug включен. В личке доступны все команды."]
     assert len(session.set_command_requests) == 1
     assert _command_names(tuple(session.set_command_requests[0].commands)) == [
-        definition.name for definition in COMMANDS
+        definition.name for definition in COMMANDS if definition.show_in_menu
     ]
 
     session.clear_messages()
-    await dispatcher.feed_update(bot, make_update("/lunch", user_id=7, first_name="Admin"))
+    await dispatcher.feed_update(
+        bot,
+        make_update("/lunch rose", user_id=7, first_name="Admin"),
+    )
 
     assert sent_texts(session) == ["Время обедать! @admin"]
     assert len(session.sent_polls) == 2
@@ -2741,7 +2823,10 @@ async def test_admin_debug_allows_group_only_command_in_private_chat(
     assert len(session.set_command_requests) == 2
 
     session.clear_messages()
-    await dispatcher.feed_update(bot, make_update("/lunch", user_id=7, first_name="Admin"))
+    await dispatcher.feed_update(
+        bot,
+        make_update("/lunch rose", user_id=7, first_name="Admin"),
+    )
 
     assert sent_texts(session) == ["Команда доступна только в групповом чате."]
     assert session.sent_polls == []
@@ -3249,7 +3334,11 @@ async def test_coffee_callback_rejects_unregistered_user_with_alert(
     )
 
     assert session.callback_answers[-1].show_alert is True
-    assert session.callback_answers[-1].text == "Сначала зарегистрируйся: /register"
+    assert session.callback_answers[-1].text == (
+        "Чтобы пользоваться этой функцией, сначала зарегистрируйся.\n"
+        "В личном чате с ботом запусти /register и пройди регистрацию сам "
+        "или отправь /request_register, чтобы тебя зарегистрировал администратор."
+    )
 
 
 async def test_repeated_coffee_join_is_idempotent_and_does_not_edit_card(
@@ -3312,6 +3401,10 @@ async def test_coffee_completion_unpins_card_and_calls_participants(
 
     assert len(session.unpin_requests) == 1
     assert session.unpin_requests[0].message_id == coffee_session.message_id
+    assert len(session.edited_messages) == 1
+    assert "Встреча прошла" in session.edited_messages[0].text
+    assert "Через:" not in session.edited_messages[0].text
+    assert session.edited_messages[0].reply_markup is None
     assert sent_texts(session) == ["☕ Пора идти за кофе!\n@misha"]
 
 
@@ -3341,6 +3434,128 @@ async def test_coffee_recovery_expires_session_older_than_grace_period(
     expired = sessions.require(coffee_session.id)
     assert expired.status == CoffeeSessionStatus.EXPIRED
 
+
+async def test_request_register_works_in_group_but_is_hidden_from_group_menu(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    dispatcher = create_dispatcher(services)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/request_register", chat_type="group"),
+    )
+
+    assert sent_texts(session)[0] == (
+        "Запрос на регистрацию отправлен админам. "
+        "Теперь администратор сможет зарегистрировать тебя."
+    )
+    assert "request_register" not in {
+        command.name
+        for command in services.command_access.visible_commands("group", 42)
+    }
+
+
+async def test_registration_saves_initial_lunch_and_coffee_preferences(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register"))
+    await dispatcher.feed_update(bot, make_update("Максим"))
+    await dispatcher.feed_update(bot, make_update("Пропустить"))
+    await dispatcher.feed_update(bot, make_update("Нет"))
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("Да"))
+
+    user = UserRepository(database).get_by_telegram_id(42)
+    assert user is not None
+    assert InvitationPreferenceRepository(database).get(user.id) == InvitationPreferences(
+        lunch_enabled=False,
+        coffee_enabled=True,
+    )
+    assert "Звать на ланч: нет.\nЗвать на кофе: да." in sent_texts(session)[0]
+
+
+async def test_lunch_invitation_setting_works_in_private_and_filters_mentions(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/lunch off"))
+    assert sent_texts(session) == ["Приглашения на ланч выключены."]
+
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("/lunch"))
+    assert sent_texts(session) == [
+        "Приглашения на ланч: выключены.\n\n"
+        "Изменить настройку: /lunch on или /lunch off."
+    ]
+
+    session.clear_messages()
+    await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
+    assert sent_texts(session) == ["Время обедать!"]
+    assert len(session.sent_polls) == 2
+
+
+async def test_scheduled_lunch_skips_when_everyone_disabled_lunch_invitations(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    user = UserRepository(database).get_by_telegram_id(42)
+    assert user is not None
+    InvitationPreferenceRepository(database).set_lunch_enabled(user.id, False)
+    LunchPinRepository(database).upsert(-100, 10, date(2026, 6, 29))
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    services.lunch_auto_chats.enable(-100, "Office")
+
+    await services.lunch_scheduler.run_due_lunch(bot)
+
+    assert sent_texts(session) == []
+    assert session.sent_polls == []
+    assert [request.message_id for request in session.unpin_requests] == [10]
+    assert LunchPinRepository(database).get(-100) is None
+
+
+async def test_coffee_shout_ignores_user_with_disabled_coffee_invitations(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    activate_user(database, 43, "Анна", "anna")
+    anna = UserRepository(database).get_by_telegram_id(43)
+    assert anna is not None
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    dispatcher = create_dispatcher(services)
+
+    await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
+    attendance_poll_id = session.sent_poll_ids[0]
+    await dispatcher.feed_update(
+        bot,
+        make_poll_answer_update(attendance_poll_id, (1,), user_id=43, username="anna"),
+    )
+    InvitationPreferenceRepository(database).set_coffee_enabled(anna.id, False)
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/coffee 15", chat_type="group"))
+
+    assert len(session.sent_messages) == 1
+    assert "присоединяйтесь на кофе" not in sent_texts(session)[0]
 
 async def test_coffee_recovery_repins_active_card(tmp_path: Path) -> None:
     database = make_database(tmp_path)

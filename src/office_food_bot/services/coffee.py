@@ -14,13 +14,14 @@ from aiogram import Bot
 from aiogram.enums import ParseMode
 
 from office_food_bot.coffee_callbacks import CoffeeCallbackData, CoffeeParticipantAction
-from office_food_bot.coffee_repositories import (
-    CoffeePreferenceRepository,
-    CoffeeSessionRepository,
-)
+from office_food_bot.coffee_repositories import CoffeeSessionRepository
 from office_food_bot.messaging import BotMessenger, InlineChoice
 from office_food_bot.models import CoffeeSession, CoffeeSessionStatus, RegisteredUser, UserStatus
 from office_food_bot.repositories import UserRepository
+from office_food_bot.services.invitations import (
+    InvitationPreferenceService,
+    registration_required_text,
+)
 from office_food_bot.services.job_scheduler import JobScheduler
 from office_food_bot.services.lunch_attendance import LunchAttendanceService
 from office_food_bot.services.user_references import format_user_reference
@@ -65,9 +66,29 @@ class CoffeeCardRenderer:
             f"☕ {escape(proposer.display_name)} предлагает кофе",
             f"Время: <b>{local_time}</b>",
             f"Через: <b>{countdown}</b>",
-            "",
-            f"Идут ({len(participants)}):",
         ]
+        return self._with_participants(lines, participants)
+
+    def render_completed(
+        self,
+        session: CoffeeSession,
+        proposer: RegisteredUser,
+        participants: Sequence[RegisteredUser],
+    ) -> str:
+        local_time = session.scheduled_at.astimezone(self._timezone).strftime("%H:%M")
+        lines = [
+            f"☕ {escape(proposer.display_name)} предлагает кофе",
+            f"Время: <b>{local_time}</b>",
+            "Встреча прошла",
+        ]
+        return self._with_participants(lines, participants)
+
+    def _with_participants(
+        self,
+        lines: list[str],
+        participants: Sequence[RegisteredUser],
+    ) -> str:
+        lines.extend(("", f"Идут ({len(participants)}):"))
         if participants:
             lines.extend(f"• {escape(user.display_name)}" for user in participants)
         else:
@@ -79,7 +100,7 @@ class CoffeeService:
     def __init__(
         self,
         users: UserRepository,
-        preferences: CoffeePreferenceRepository,
+        preferences: InvitationPreferenceService,
         sessions: CoffeeSessionRepository,
         attendance: LunchAttendanceService,
         messenger: BotMessenger,
@@ -103,7 +124,11 @@ class CoffeeService:
         if access.user is None:
             return access.denial_text or "Регистрация сейчас неактивна."
         user = access.user
-        invitations = "включены" if self._preferences.invitations_enabled(user.id) else "выключены"
+        invitations = (
+            "включены"
+            if self._preferences.for_user(user.id).coffee_enabled
+            else "выключены"
+        )
         session = self._sessions.get_open_for_chat(chat_id)
         lines = [
             f"Приглашения на кофе: {invitations}.",
@@ -125,10 +150,7 @@ class CoffeeService:
         access = self._active_user(telegram_user_id)
         if access.user is None:
             return access.denial_text or "Регистрация сейчас неактивна."
-        user = access.user
-        self._preferences.set_invitations_enabled(user.id, enabled)
-        state = "включены" if enabled else "выключены"
-        return f"Приглашения на кофе {state}."
+        return self._preferences.set_coffee(telegram_user_id, enabled)
 
     async def create_or_reschedule(
         self,
@@ -340,6 +362,7 @@ class CoffeeService:
                     session.scheduled_at + RETRY_DELAYS[-1],
                 )
             participants = self._sessions.list_participants(session.id)
+            await self._mark_card_completed(bot, session, participants)
             if not participants:
                 self._sessions.mark_terminal(
                     session.id,
@@ -423,6 +446,25 @@ class CoffeeService:
             return self._sessions.update_message(session.id, message.message_id)
         return session
 
+    async def _mark_card_completed(
+        self,
+        bot: Bot,
+        session: CoffeeSession,
+        participants: Sequence[RegisteredUser],
+    ) -> None:
+        if session.message_id is None:
+            return
+        proposer = self._users.get_by_id(session.last_proposer_user_id)
+        if proposer is None:
+            return
+        await self._messenger.try_edit_message(
+            bot,
+            session.chat_id,
+            session.message_id,
+            self._renderer.render_completed(session, proposer, participants),
+            parse_mode=ParseMode.HTML,
+        )
+
     async def _send_shout(self, bot: Bot, session: CoffeeSession) -> None:
         participants = self._sessions.list_participants(session.id)
         participant_ids = {participant.id for participant in participants}
@@ -431,7 +473,7 @@ class CoffeeService:
             user
             for user in self._attendance.list_office_users(session.chat_id, today)
             if user.id not in participant_ids
-            and self._preferences.invitations_enabled(user.id)
+            and self._preferences.for_user(user.id).coffee_enabled
         )
         if not invitees or session.message_id is None:
             return
@@ -528,7 +570,7 @@ class CoffeeService:
     def _active_user(self, telegram_user_id: int) -> CoffeeUserAccess:
         user = self._users.get_by_telegram_id(telegram_user_id)
         if user is None:
-            return CoffeeUserAccess(None, "Сначала зарегистрируйся: /register")
+            return CoffeeUserAccess(None, registration_required_text())
         if user.status == UserStatus.PENDING:
             return CoffeeUserAccess(None, "Регистрация еще ждет аппрува.")
         if user.status != UserStatus.ACTIVE:
