@@ -7,6 +7,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 from html import escape
+from math import ceil
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot
@@ -56,11 +57,14 @@ class CoffeeCardRenderer:
         session: CoffeeSession,
         proposer: RegisteredUser,
         participants: Sequence[RegisteredUser],
+        now: datetime,
     ) -> str:
         local_time = session.scheduled_at.astimezone(self._timezone).strftime("%H:%M")
+        countdown = coffee_countdown_text(session.scheduled_at, now)
         lines = [
             f"☕ {escape(proposer.display_name)} предлагает кофе",
             f"Время: <b>{local_time}</b>",
+            f"Через: <b>{countdown}</b>",
             "",
             f"Идут ({len(participants)}):",
         ]
@@ -180,6 +184,7 @@ class CoffeeService:
                     raise RuntimeError(msg)
                 session = self._sessions.activate(session.id, session.message_id)
             self._schedule_completion(bot, session)
+            self._schedule_countdown(bot, session)
             await self._replace_pin(bot, previous_session, session)
             if is_new:
                 await self._send_shout(bot, session)
@@ -264,6 +269,7 @@ class CoffeeService:
                         session.chat_id,
                         session.message_id,
                     )
+                self._schedule_countdown(bot, session)
                 run_at = max(session.scheduled_at, now)
             else:
                 if session.retry_until is not None and session.retry_until < now:
@@ -305,6 +311,7 @@ class CoffeeService:
                 current = self._sessions.activate(current.id, current.message_id)
                 await self._replace_pin(bot, None, current)
                 self._schedule_completion(bot, current)
+                self._schedule_countdown(bot, current)
 
         self._scheduler.add_date(f"coffee_recovery:{session_id}", run, run_at)
 
@@ -320,6 +327,7 @@ class CoffeeService:
             }:
                 return
             now = self._clock()
+            self._scheduler.remove(_coffee_countdown_job_id(session.id))
             if session.message_id is not None:
                 await self._messenger.try_unpin_chat_message(
                     bot,
@@ -385,7 +393,12 @@ class CoffeeService:
             bot,
             session.chat_id,
             session.message_id,
-            self._renderer.render(session, proposer, participants),
+            self._renderer.render(
+                session,
+                proposer,
+                participants,
+                self._clock(),
+            ),
             reply_markup=self._messenger.inline_keyboard(
                 (
                     InlineChoice(
@@ -477,6 +490,35 @@ class CoffeeService:
     def _schedule_completion(self, bot: Bot, session: CoffeeSession) -> None:
         self._schedule_job(bot, session.id, session.scheduled_at)
 
+    def _schedule_countdown(self, bot: Bot, session: CoffeeSession) -> None:
+        job_id = _coffee_countdown_job_id(session.id)
+        next_update = next_coffee_countdown_update(
+            session.scheduled_at,
+            self._clock(),
+        )
+        if next_update is None:
+            self._scheduler.remove(job_id)
+            return
+
+        async def run() -> None:
+            await self.refresh_countdown(bot, session.id)
+
+        self._scheduler.add_date(job_id, run, next_update)
+
+    async def refresh_countdown(self, bot: Bot, session_id: int) -> None:
+        session = self._sessions.get(session_id)
+        if session is None or session.status != CoffeeSessionStatus.ACTIVE:
+            self._scheduler.remove(_coffee_countdown_job_id(session_id))
+            return
+        async with self._lock(session.chat_id):
+            current = self._sessions.get(session_id)
+            if current is None or current.status != CoffeeSessionStatus.ACTIVE:
+                self._scheduler.remove(_coffee_countdown_job_id(session_id))
+                return
+            self._schedule_countdown(bot, current)
+            updated = await self._update_card(bot, current)
+            await self._replace_pin(bot, current, updated)
+
     def _schedule_job(self, bot: Bot, session_id: int, run_at: datetime) -> None:
         async def run() -> None:
             await self.complete(bot, session_id)
@@ -520,6 +562,37 @@ def parse_coffee_time(
     return datetime.combine(local_now.date(), parsed_time, tzinfo=timezone).astimezone(UTC)
 
 
+def coffee_countdown_text(scheduled_at: datetime, now: datetime) -> str:
+    remaining_seconds = (scheduled_at - now).total_seconds()
+    if remaining_seconds <= 0:
+        return "сейчас"
+    minutes = ceil(remaining_seconds / 60)
+    return f"{minutes} {_minute_word(minutes)}"
+
+
+def next_coffee_countdown_update(
+    scheduled_at: datetime,
+    now: datetime,
+) -> datetime | None:
+    remaining_seconds = (scheduled_at - now).total_seconds()
+    if remaining_seconds <= 60:
+        return None
+    displayed_minutes = ceil(remaining_seconds / 60)
+    return scheduled_at - timedelta(minutes=displayed_minutes - 1)
+
+
+def _minute_word(minutes: int) -> str:
+    last_two_digits = minutes % 100
+    if 11 <= last_two_digits <= 14:
+        return "минут"
+    last_digit = minutes % 10
+    if last_digit == 1:
+        return "минуту"
+    if 2 <= last_digit <= 4:
+        return "минуты"
+    return "минут"
+
+
 def _is_allowed_time(
     scheduled_at: datetime,
     now: datetime,
@@ -535,3 +608,7 @@ def _is_allowed_time(
 
 def _coffee_job_id(session_id: int) -> str:
     return f"coffee_session:{session_id}"
+
+
+def _coffee_countdown_job_id(session_id: int) -> str:
+    return f"coffee_countdown:{session_id}"

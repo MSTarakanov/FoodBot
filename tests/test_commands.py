@@ -2859,7 +2859,10 @@ async def test_coffee_creates_card_and_persists_session(tmp_path: Path) -> None:
     await dispatcher.feed_update(bot, make_update("/coffee 15", chat_type="group"))
 
     assert sent_texts(session) == [
-        "☕ Максим предлагает кофе\nВремя: <b>12:30</b>\n\nИдут (1):\n• Максим"
+        "☕ Максим предлагает кофе\n"
+        "Время: <b>12:30</b>\n"
+        "Через: <b>15 минут</b>\n\n"
+        "Идут (1):\n• Максим"
     ]
     assert session.sent_messages[0].parse_mode == ParseMode.HTML
     assert inline_callback_data(session.sent_messages[0]).keys() == {
@@ -2875,6 +2878,36 @@ async def test_coffee_creates_card_and_persists_session(tmp_path: Path) -> None:
     assert [user.display_name for user in CoffeeSessionRepository(database).list_participants(
         coffee_session.id
     )] == ["Максим"]
+
+
+async def test_coffee_countdown_edits_existing_card_without_new_message(
+    tmp_path: Path,
+) -> None:
+    now = [datetime(2026, 6, 30, 12, 15, tzinfo=ZoneInfo("Europe/Belgrade"))]
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database, clock=lambda: now[0])
+
+    await services.coffee.create_or_reschedule(bot, -100, 42, "15")
+    coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
+    assert coffee_session is not None
+    session.clear_messages()
+    now[0] = datetime(2026, 6, 30, 12, 16, tzinfo=ZoneInfo("Europe/Belgrade"))
+
+    await services.coffee.refresh_countdown(bot, coffee_session.id)
+
+    assert session.sent_messages == []
+    assert len(session.edited_messages) == 1
+    assert session.edited_messages[0].message_id == coffee_session.message_id
+    assert session.edited_messages[0].text == (
+        "☕ Максим предлагает кофе\n"
+        "Время: <b>12:30</b>\n"
+        "Через: <b>14 минут</b>\n\n"
+        "Идут (1):\n• Максим"
+    )
+    assert session.pin_requests == []
 
 
 async def test_coffee_reschedule_edits_card_and_keeps_participants(tmp_path: Path) -> None:
@@ -2906,7 +2939,9 @@ async def test_coffee_reschedule_edits_card_and_keeps_participants(tmp_path: Pat
     assert session.sent_messages[1].reply_parameters.message_id == 1
     assert len(session.edited_messages) == 1
     assert session.edited_messages[0].text == (
-        "☕ Анна предлагает кофе\nВремя: <b>12:45</b>\n\n"
+        "☕ Анна предлагает кофе\n"
+        "Время: <b>12:45</b>\n"
+        "Через: <b>30 минут</b>\n\n"
         "Идут (2):\n• Максим\n• Анна"
     )
     assert session.edited_messages[0].parse_mode == ParseMode.HTML
@@ -2988,7 +3023,10 @@ async def test_coffee_shout_uses_persisted_lunch_attendance(tmp_path: Path) -> N
     await dispatcher.feed_update(bot, make_update("/coffee 15", chat_type="group"))
 
     assert sent_texts(session) == [
-        "☕ Максим предлагает кофе\nВремя: <b>12:30</b>\n\nИдут (1):\n• Максим",
+        "☕ Максим предлагает кофе\n"
+        "Время: <b>12:30</b>\n"
+        "Через: <b>15 минут</b>\n\n"
+        "Идут (1):\n• Максим",
         "@anna, присоединяйтесь на кофе.",
     ]
     assert session.sent_messages[1].reply_parameters is not None
