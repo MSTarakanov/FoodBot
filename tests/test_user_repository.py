@@ -374,6 +374,8 @@ def test_database_migrations_are_loaded_from_files() -> None:
         (9, "merge_seen_accounts_into_telegram_accounts"),
         (10, "add_registration_requests"),
         (11, "add_lunch_pinned_messages"),
+        (12, "add_poll_registry"),
+        (13, "add_coffee_sessions"),
     ]
 
 
@@ -551,7 +553,7 @@ def test_database_init_merges_seen_accounts_into_telegram_accounts(tmp_path) -> 
     finally:
         database.close()
 
-    assert schema_version == 11
+    assert schema_version == 13
     assert seen_table is None
     assert linked_row is not None
     assert int(linked_row["user_id"]) == 1

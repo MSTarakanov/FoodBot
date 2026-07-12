@@ -31,7 +31,9 @@ async def main() -> None:
         services = create_services(database, settings)
         dispatcher = create_dispatcher(services)
         await setup_bot_commands(bot, services.command_access)
-        services.lunch_scheduler.start(bot)
+        services.lunch_scheduler.register_job(bot)
+        await services.coffee.restore_jobs(bot)
+        services.job_scheduler.start()
         logger.info(
             "Bot started: username=@%s, environment=%s, database=%s, "
             "schema_version=%s, timezone=%s",
@@ -44,7 +46,7 @@ async def main() -> None:
         await dispatcher.start_polling(bot)
     finally:
         if services is not None:
-            services.lunch_scheduler.shutdown()
+            services.job_scheduler.shutdown()
         if database is not None:
             database.close()
         await bot.session.close()

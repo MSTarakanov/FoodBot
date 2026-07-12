@@ -7,8 +7,9 @@ from typing import Any
 import pytest
 from aiogram import Bot
 from aiogram.client.session.base import BaseSession
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.methods import (
+    EditMessageText,
     PinChatMessage,
     SendMessage,
     SendPoll,
@@ -18,12 +19,18 @@ from aiogram.methods import (
 from aiogram.types import Chat, Message, ReplyKeyboardRemove
 
 from office_food_bot.messaging import BotMessenger, InlineChoice
+from office_food_bot.poll_options import PollOption
 
 
 class RecordingSession(BaseSession):
-    def __init__(self, fail_method_name: str | None = None) -> None:
+    def __init__(
+        self,
+        fail_method_name: str | None = None,
+        failure_message: str = "Bad Request",
+    ) -> None:
         super().__init__()
         self._fail_method_name = fail_method_name
+        self._failure_message = failure_message
         self.requests: list[TelegramMethod[Any]] = []
 
     async def close(self) -> None:
@@ -36,11 +43,17 @@ class RecordingSession(BaseSession):
         timeout: int | None = None,
     ) -> Message:
         if type(method).__name__ == self._fail_method_name:
-            raise TelegramBadRequest(method=method, message="Bad Request")
+            raise TelegramBadRequest(method=method, message=self._failure_message)
 
         self.requests.append(method)
         if isinstance(method, PinChatMessage | UnpinChatMessage):
             return True
+        if isinstance(method, EditMessageText):
+            return Message(
+                message_id=method.message_id or 1,
+                date=datetime.now(tz=UTC),
+                chat=Chat(id=42, type="private"),
+            )
         return Message(
             message_id=len(self.requests),
             date=datetime.now(tz=UTC),
@@ -111,7 +124,7 @@ async def test_send_poll_uses_telegram_poll_options() -> None:
         bot,
         42,
         "Что заказать?",
-        ["Пицца", "Суши"],
+        [PollOption.OTHER_FOOD_PIZZA, PollOption.OTHER_FOOD_POKE],
         is_anonymous=False,
         allows_multiple_answers=True,
     )
@@ -119,7 +132,7 @@ async def test_send_poll_uses_telegram_poll_options() -> None:
     method = session.requests[0]
     assert isinstance(method, SendPoll)
     assert method.question == "Что заказать?"
-    assert [option.text for option in method.options] == ["Пицца", "Суши"]
+    assert [option.text for option in method.options] == ["пицца", "поке"]
     assert method.is_anonymous is False
     assert method.allows_multiple_answers is True
 
@@ -130,7 +143,12 @@ async def test_send_poll_validates_options_before_calling_telegram() -> None:
     messenger = BotMessenger()
 
     with pytest.raises(ValueError, match="At least 2 options"):
-        await messenger.send_poll(bot, 42, "Что заказать?", ["Пицца"])
+        await messenger.send_poll(
+            bot,
+            42,
+            "Что заказать?",
+            [PollOption.OTHER_FOOD_PIZZA],
+        )
 
     assert session.requests == []
 
@@ -148,6 +166,76 @@ async def test_try_pin_chat_message_uses_silent_pin() -> None:
     assert method.chat_id == 42
     assert method.message_id == 100
     assert method.disable_notification is True
+
+
+async def test_edit_or_send_edits_existing_message() -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+
+    message = await BotMessenger().edit_or_send(bot, 42, 100, "Новое время")
+
+    assert message.message_id == 100
+    assert len(session.requests) == 1
+    assert isinstance(session.requests[0], EditMessageText)
+
+
+async def test_edit_or_send_falls_back_to_new_message() -> None:
+    session = RecordingSession(
+        fail_method_name="EditMessageText",
+        failure_message="Bad Request: message to edit not found",
+    )
+    bot = Bot(token="123456:test-token", session=session)
+
+    message = await BotMessenger().edit_or_send(bot, 42, 100, "Новая карточка")
+
+    assert message.message_id == 1
+    assert len(session.requests) == 1
+    assert isinstance(session.requests[0], SendMessage)
+
+
+async def test_edit_or_send_does_not_duplicate_unmodified_message() -> None:
+    session = RecordingSession(
+        fail_method_name="EditMessageText",
+        failure_message="Bad Request: message is not modified",
+    )
+    bot = Bot(token="123456:test-token", session=session)
+
+    message = await BotMessenger().edit_or_send(bot, 42, 100, "Тот же текст")
+
+    assert message.message_id == 100
+    assert session.requests == []
+
+
+class NetworkFailureSession(RecordingSession):
+    async def make_request(
+        self,
+        bot: Bot,
+        method: TelegramMethod[Any],
+        timeout: int | None = None,
+    ) -> Message:
+        if isinstance(method, EditMessageText):
+            raise TelegramNetworkError(method=method, message="Request timeout")
+        return await super().make_request(bot, method, timeout)
+
+
+async def test_edit_or_send_does_not_replace_message_after_network_error() -> None:
+    session = NetworkFailureSession()
+    bot = Bot(token="123456:test-token", session=session)
+
+    with pytest.raises(TelegramNetworkError):
+        await BotMessenger().edit_or_send(bot, 42, 100, "Новое время")
+
+    assert session.requests == []
+
+
+async def test_edit_or_send_does_not_replace_message_after_unknown_bad_request() -> None:
+    session = RecordingSession(fail_method_name="EditMessageText")
+    bot = Bot(token="123456:test-token", session=session)
+
+    with pytest.raises(TelegramBadRequest):
+        await BotMessenger().edit_or_send(bot, 42, 100, "Новое время")
+
+    assert session.requests == []
 
 
 async def test_try_unpin_chat_message_uses_message_id() -> None:

@@ -67,6 +67,62 @@ CREATE TABLE IF NOT EXISTS user_vacations (
     until_date TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS polls (
+    poll_id TEXT PRIMARY KEY,
+    chat_id INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    context_date TEXT NOT NULL,
+    published_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS polls_chat_date_kind_idx
+ON polls (chat_id, context_date, kind, published_at DESC);
+
+CREATE TABLE IF NOT EXISTS poll_selected_options (
+    poll_id TEXT NOT NULL REFERENCES polls(poll_id) ON DELETE CASCADE,
+    telegram_user_id INTEGER NOT NULL,
+    option_key TEXT NOT NULL,
+    selected_at TEXT NOT NULL,
+    PRIMARY KEY (poll_id, telegram_user_id, option_key)
+);
+
+CREATE TABLE IF NOT EXISTS coffee_preferences (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    invitations_enabled INTEGER NOT NULL DEFAULT 1
+        CHECK (invitations_enabled IN (0, 1)),
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS coffee_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id INTEGER NOT NULL,
+    message_id INTEGER,
+    initiator_user_id INTEGER NOT NULL REFERENCES users(id),
+    last_proposer_user_id INTEGER NOT NULL REFERENCES users(id),
+    scheduled_at TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN (
+        'creating', 'active', 'completing', 'completed', 'expired', 'failed'
+    )),
+    notification_attempts INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at TEXT,
+    retry_until TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS one_open_coffee_session_per_chat
+ON coffee_sessions (chat_id)
+WHERE status IN ('creating', 'active');
+
+CREATE TABLE IF NOT EXISTS coffee_session_participants (
+    session_id INTEGER NOT NULL REFERENCES coffee_sessions(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (session_id, user_id)
+);
 """
 
 SPLITWISE_USERS_SCHEMA_SQL = """

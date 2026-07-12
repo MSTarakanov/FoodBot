@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 
@@ -17,6 +17,22 @@ class UserStatus(StrEnum):
 class UserRole(StrEnum):
     MEMBER = "member"
     ADMIN = "admin"
+
+
+class PollKind(StrEnum):
+    LUNCH_ATTENDANCE_V1 = "lunch_attendance_v1"
+    LUNCH_PLACE_SKYLINE_V1 = "lunch_place_skyline_v1"
+    LUNCH_PLACE_ROSE_V1 = "lunch_place_rose_v1"
+    LUNCH_OTHER_FOOD_V1 = "lunch_other_food_v1"
+
+
+class CoffeeSessionStatus(StrEnum):
+    CREATING = "creating"
+    ACTIVE = "active"
+    COMPLETING = "completing"
+    COMPLETED = "completed"
+    EXPIRED = "expired"
+    FAILED = "failed"
 
 
 class RegistrationKind(StrEnum):
@@ -119,3 +135,27 @@ class LunchPinnedMessage:
 class UserVacation:
     user_id: int
     until_date: date
+
+
+@dataclass(frozen=True)
+class StoredPoll:
+    poll_id: str
+    chat_id: int
+    message_id: int
+    kind: PollKind
+    context_date: date
+    published_at: datetime
+
+
+@dataclass(frozen=True)
+class CoffeeSession:
+    id: int
+    chat_id: int
+    message_id: int | None
+    initiator_user_id: int
+    last_proposer_user_id: int
+    scheduled_at: datetime
+    status: CoffeeSessionStatus
+    notification_attempts: int
+    next_attempt_at: datetime | None
+    retry_until: datetime | None
