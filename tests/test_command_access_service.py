@@ -38,7 +38,7 @@ def test_private_only_command_is_forbidden_in_group(database: Database) -> None:
 
 
 def test_group_only_command_is_forbidden_in_private(database: Database) -> None:
-    result = make_access_service(database).can_run("lunch", "private", 42)
+    result = make_access_service(database).can_run("lunch", "private", 42, "rose")
 
     assert not result.allowed
     assert result.denial_reason == CommandAccessDenialReason.GROUP_ONLY
@@ -57,11 +57,30 @@ def test_group_only_command_is_allowed_for_private_admin_debug(
     debug = DebugRepository(database)
     access = make_access_service(database)
 
-    assert not access.can_run("lunch", "private", 7).allowed
+    assert not access.can_run("lunch", "private", 7, "rose").allowed
 
     debug.set_enabled(7, True)
 
-    assert access.can_run("lunch", "private", 7).allowed
+    assert access.can_run("lunch", "private", 7, "rose").allowed
+
+
+def test_lunch_status_and_toggles_are_allowed_in_private(database: Database) -> None:
+    access = make_access_service(database)
+
+    assert access.can_run("lunch", "private", 42).allowed
+    assert access.can_run("lunch", "private", 42, "on").allowed
+    assert access.can_run("lunch", "private", 42, "off").allowed
+
+
+def test_request_register_is_allowed_in_group_but_hidden_from_menu(
+    database: Database,
+) -> None:
+    access = make_access_service(database)
+
+    assert access.can_run("request_register", "group", 42).allowed
+    assert "request_register" not in {
+        command.name for command in access.visible_commands("group", 42)
+    }
 
 
 def test_admin_only_command_is_forbidden_for_non_admin(database: Database) -> None:

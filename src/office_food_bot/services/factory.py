@@ -3,11 +3,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 
-from office_food_bot.coffee_repositories import (
-    CoffeePreferenceRepository,
-    CoffeeSessionRepository,
-)
+from office_food_bot.coffee_repositories import CoffeeSessionRepository
 from office_food_bot.database import Database
+from office_food_bot.invitation_repositories import InvitationPreferenceRepository
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.repositories import (
     DebugRepository,
@@ -25,6 +23,7 @@ from office_food_bot.services.coffee import CoffeeService
 from office_food_bot.services.command_access import CommandAccessService
 from office_food_bot.services.container import BotServices
 from office_food_bot.services.debug import DebugService
+from office_food_bot.services.invitations import InvitationPreferenceService
 from office_food_bot.services.job_scheduler import JobScheduler
 from office_food_bot.services.lunch import LunchService
 from office_food_bot.services.lunch_attendance import LunchAttendanceService
@@ -68,7 +67,7 @@ def build_services(
     lunch_pin_repository = LunchPinRepository(database)
     poll_repository = PollRepository(database)
     vacations = VacationRepository(database)
-    coffee_preferences = CoffeePreferenceRepository(database)
+    invitation_preferences = InvitationPreferenceRepository(database)
     coffee_sessions = CoffeeSessionRepository(database)
     client = splitwise_client
     if client is None and splitwise_api_key is not None:
@@ -81,6 +80,7 @@ def build_services(
         registration_requests,
         admin_ids,
     )
+    invitations = InvitationPreferenceService(users, invitation_preferences)
     debug = DebugService(debug_settings)
     business_calendar = BusinessCalendarService()
     poll_tracking = PollTrackingService(
@@ -96,6 +96,7 @@ def build_services(
         poll_tracking,
         users,
         vacations,
+        invitations,
         lunch_pins,
         LunchPollCatalog(),
         timezone_name,
@@ -105,7 +106,7 @@ def build_services(
     lunch_attendance = LunchAttendanceService(poll_repository)
     coffee = CoffeeService(
         users,
-        coffee_preferences,
+        invitations,
         coffee_sessions,
         lunch_attendance,
         messenger,
@@ -119,6 +120,7 @@ def build_services(
         registration=registration,
         debug=debug,
         command_access=CommandAccessService(registration, debug),
+        invitations=invitations,
         coffee=coffee,
         business_calendar=business_calendar,
         presence=PresenceService(users, timezone_name, clock),

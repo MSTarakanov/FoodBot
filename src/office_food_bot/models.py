@@ -104,6 +104,12 @@ class RegistrationDetails:
     splitwise: SplitwiseConnection | None
 
 
+@dataclass(frozen=True, slots=True)
+class InvitationPreferences:
+    lunch_enabled: bool = True
+    coffee_enabled: bool = True
+
+
 @dataclass(frozen=True)
 class PendingRegistration:
     user: RegisteredUser

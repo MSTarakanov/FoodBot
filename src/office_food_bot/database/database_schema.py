@@ -88,10 +88,12 @@ CREATE TABLE IF NOT EXISTS poll_selected_options (
     PRIMARY KEY (poll_id, telegram_user_id, option_key)
 );
 
-CREATE TABLE IF NOT EXISTS coffee_preferences (
+CREATE TABLE IF NOT EXISTS user_invitation_preferences (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    invitations_enabled INTEGER NOT NULL DEFAULT 1
-        CHECK (invitations_enabled IN (0, 1)),
+    lunch_invitations_enabled INTEGER NOT NULL DEFAULT 1
+        CHECK (lunch_invitations_enabled IN (0, 1)),
+    coffee_invitations_enabled INTEGER NOT NULL DEFAULT 1
+        CHECK (coffee_invitations_enabled IN (0, 1)),
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

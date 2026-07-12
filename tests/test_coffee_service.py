@@ -69,6 +69,14 @@ def test_next_coffee_countdown_update_is_aligned_with_scheduled_time() -> None:
     assert next_coffee_countdown_update(scheduled_at, now) == NOW.replace(minute=16)
 
 
+def test_next_coffee_countdown_update_waits_until_last_hour() -> None:
+    scheduled_at = NOW + timedelta(hours=4)
+
+    assert next_coffee_countdown_update(scheduled_at, NOW) == (
+        scheduled_at - timedelta(minutes=59)
+    )
+
+
 def test_coffee_countdown_has_no_update_during_last_minute() -> None:
     scheduled_at = NOW + timedelta(seconds=60)
 

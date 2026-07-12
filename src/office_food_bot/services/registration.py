@@ -174,6 +174,10 @@ class RegistrationService:
             "Если хотите отрегистрироваться, отправьте /quit."
         )
 
+    def should_ask_initial_preferences(self, telegram_user_id: int) -> bool:
+        user = self._users.get_by_telegram_id(telegram_user_id)
+        return user is None or user.status == UserStatus.ABANDONED
+
     def quit_registration(self, telegram_user_id: int) -> bool:
         user = self._users.get_by_telegram_id(telegram_user_id)
         if user is None or user.status == UserStatus.ABANDONED:

@@ -65,6 +65,7 @@ class CommandAccessMiddleware:
             command_name,
             str(event.chat.type),
             telegram_user_id,
+            parsed_command.arguments,
         )
         denial_reason = access.denial_reason
         if denial_reason is None:

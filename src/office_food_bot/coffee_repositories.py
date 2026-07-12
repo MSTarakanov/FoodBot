@@ -8,7 +8,6 @@ from office_food_bot.database.coffee_queries import (
     ACTIVATE_COFFEE_SESSION_SQL,
     CREATE_COFFEE_SESSION_SQL,
     DELETE_COFFEE_PARTICIPANT_SQL,
-    GET_COFFEE_PREFERENCE_SQL,
     GET_COFFEE_SESSION_SQL,
     GET_OPEN_COFFEE_SESSION_SQL,
     INSERT_COFFEE_PARTICIPANT_SQL,
@@ -19,7 +18,6 @@ from office_food_bot.database.coffee_queries import (
     MARK_COFFEE_TERMINAL_SQL,
     RESCHEDULE_COFFEE_SESSION_SQL,
     UPDATE_COFFEE_MESSAGE_SQL,
-    UPSERT_COFFEE_PREFERENCE_SQL,
 )
 from office_food_bot.models import (
     CoffeeSession,
@@ -28,25 +26,6 @@ from office_food_bot.models import (
     UserRole,
     UserStatus,
 )
-
-
-class CoffeePreferenceRepository:
-    def __init__(self, database: Database) -> None:
-        self._database = database
-
-    def invitations_enabled(self, user_id: int) -> bool:
-        row = self._database.connection.execute(
-            GET_COFFEE_PREFERENCE_SQL,
-            (user_id,),
-        ).fetchone()
-        return row is None or bool(row["invitations_enabled"])
-
-    def set_invitations_enabled(self, user_id: int, enabled: bool) -> None:
-        with self._database.connection:
-            self._database.connection.execute(
-                UPSERT_COFFEE_PREFERENCE_SQL,
-                (user_id, int(enabled)),
-            )
 
 
 class CoffeeSessionRepository:

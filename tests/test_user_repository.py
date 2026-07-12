@@ -6,7 +6,7 @@ from datetime import date
 import pytest
 
 from office_food_bot.database import Database
-from office_food_bot.database.migrations import load_migrations
+from office_food_bot.database.migrations import MigrationRunner, load_migrations
 from office_food_bot.models import SplitwiseMember, TelegramProfile, UserRole, UserStatus
 from office_food_bot.repositories import (
     DebugRepository,
@@ -376,7 +376,45 @@ def test_database_migrations_are_loaded_from_files() -> None:
         (11, "add_lunch_pinned_messages"),
         (12, "add_poll_registry"),
         (13, "add_coffee_sessions"),
+        (14, "unify_invitation_preferences"),
     ]
+
+
+def test_invitation_preferences_migration_preserves_existing_coffee_setting(
+    tmp_path,
+) -> None:
+    database = Database(tmp_path / "test.sqlite3")
+    migrations = load_migrations()
+    MigrationRunner(database.connection, migrations[:13]).migrate()
+    with database.connection:
+        cursor = database.connection.execute(
+            "INSERT INTO users (display_name, status, role) VALUES ('Максим', 'active', 'member')"
+        )
+        user_id = cursor.lastrowid
+        assert user_id is not None
+        database.connection.execute(
+            "INSERT INTO coffee_preferences (user_id, invitations_enabled) VALUES (?, 0)",
+            (user_id,),
+        )
+
+    MigrationRunner(database.connection, migrations).migrate()
+    row = database.connection.execute(
+        """
+        SELECT lunch_invitations_enabled, coffee_invitations_enabled
+        FROM user_invitation_preferences
+        WHERE user_id = ?
+        """,
+        (user_id,),
+    ).fetchone()
+    old_table = database.connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'coffee_preferences'"
+    ).fetchone()
+    database.close()
+
+    assert row is not None
+    assert int(row["lunch_invitations_enabled"]) == 1
+    assert int(row["coffee_invitations_enabled"]) == 0
+    assert old_table is None
 
 
 def test_database_init_rejects_newer_user_version(tmp_path) -> None:
@@ -553,7 +591,7 @@ def test_database_init_merges_seen_accounts_into_telegram_accounts(tmp_path) -> 
     finally:
         database.close()
 
-    assert schema_version == 13
+    assert schema_version == 14
     assert seen_table is None
     assert linked_row is not None
     assert int(linked_row["user_id"]) == 1
