@@ -75,7 +75,9 @@ def test_vacation_status_text_for_inactive_vacation(
     service = make_vacation_service(users, VacationRepository(database))
 
     assert service.reply(42, "") == (
-        "Максим не в отпуске. Чтобы включить: /vacation 2 или /vacation 20.07"
+        "Максим не в отпуске.\n\n"
+        "Уйти в отпуск или изменить дату: /vacation 2 или /vacation 20.07\n"
+        "Выйти из отпуска: /vacation 0 или /vacation off"
     )
 
 
@@ -122,7 +124,9 @@ def test_vacation_status_ignores_expired_vacation(
     service = make_vacation_service(users, vacations)
 
     assert service.reply(42, "") == (
-        "Максим не в отпуске. Чтобы включить: /vacation 2 или /vacation 20.07"
+        "Максим не в отпуске.\n\n"
+        "Уйти в отпуск или изменить дату: /vacation 2 или /vacation 20.07\n"
+        "Выйти из отпуска: /vacation 0 или /vacation off"
     )
 
 

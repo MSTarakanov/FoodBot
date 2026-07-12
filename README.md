@@ -29,8 +29,8 @@ Group chat commands:
 - `/meta <minutes|start-end>` - says when a registered user will arrive.
 - `/eta <minutes|start-end>` - says when delivery is expected.
 - `/balance` - shows Splitwise balances.
-- `/vacation <days|date|0>` - marks the current user as on vacation until the end of the given
-  date, or disables vacation with `0`/`off`.
+- `/vacation` - shows the current vacation status and usage. Use `/vacation <days|date>` to go on
+  vacation until the end of the given date, or `/vacation 0`/`/vacation off` to leave vacation.
 - `/lunch [rose|роза|skyline|скайлайн]` - creates lunch polls. Without an office argument,
   Tuesday uses Rose and every other day uses Skyline.
 - `/coffee <minutes|HH:MM>` - creates or reschedules the chat's current coffee meeting. The

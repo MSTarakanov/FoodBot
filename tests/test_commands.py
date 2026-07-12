@@ -128,7 +128,9 @@ GROUP_HELP_MAIN_AND_SETTINGS = (
     "/coffee 15 или /coffee 16:30 "
     "(также /кофе 15 или /кофе 16:30) - позвать на кофе\n\n"
     "<b>Профиль и настройки:</b>\n"
-    "/vacation 2 - отметить отпуск\n"
+    "/vacation - показать статус отпуска\n"
+    "/vacation 2 или /vacation 20.07 - уйти в отпуск\n"
+    "/vacation 0 или /vacation off - выйти из отпуска\n"
     "/coffee on (также /кофе on) - включить приглашения\n"
     "/coffee off (также /кофе off) - выключить приглашения"
 )
@@ -838,6 +840,10 @@ async def test_setup_bot_commands_registers_telegram_menu() -> None:
         "lunch",
         "coffee",
     ]
+    vacation_menu_command = next(
+        command for command in group_menu.commands if command.command == "vacation"
+    )
+    assert vacation_menu_command.description == "показать статус отпуска"
     assert "кофе" not in _command_names(group_menu.commands)
 
     admin_menu = bot.command_menus[3]
@@ -2106,9 +2112,13 @@ async def test_vacation_sets_shows_and_clears_status_for_active_user(
 
     assert sent_texts(session) == [
         "Максим в отпуске до 30.06.2026. Чтобы выйти из отпуска: /vacation 0",
-        "Максим в отпуске до 30.06.2026. Чтобы выйти из отпуска: /vacation 0",
+        "Максим в отпуске до 30.06.2026.\n\n"
+        "Уйти в отпуск или изменить дату: /vacation 2 или /vacation 20.07\n"
+        "Выйти из отпуска: /vacation 0 или /vacation off",
         "Максим больше не в отпуске.",
-        "Максим не в отпуске. Чтобы включить: /vacation 2 или /vacation 20.07",
+        "Максим не в отпуске.\n\n"
+        "Уйти в отпуск или изменить дату: /vacation 2 или /vacation 20.07\n"
+        "Выйти из отпуска: /vacation 0 или /vacation off",
     ]
 
 

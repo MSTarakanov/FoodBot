@@ -134,10 +134,22 @@ COMMANDS: tuple[CommandDefinition, ...] = (
     ),
     CommandDefinition(
         "vacation",
-        "отметить отпуск",
-        "/vacation 2",
+        "показать статус отпуска",
+        "/vacation",
         CommandScope.GROUP,
         HelpSection.PROFILE_SETTINGS,
+        additional_help=(
+            CommandHelpEntry(
+                "/vacation 2 или /vacation 20.07",
+                "уйти в отпуск",
+                HelpSection.PROFILE_SETTINGS,
+            ),
+            CommandHelpEntry(
+                "/vacation 0 или /vacation off",
+                "выйти из отпуска",
+                HelpSection.PROFILE_SETTINGS,
+            ),
+        ),
     ),
     CommandDefinition(
         "lunch",

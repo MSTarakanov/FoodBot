@@ -15,6 +15,10 @@ VACATION_DATE_FORMAT_ERROR_TEXT = (
     "Не понял дату. Напиши количество дней или дату: "
     "/vacation 2, /vacation 20.07, /vacation 2026-07-20"
 )
+VACATION_USAGE_TEXT = (
+    "Уйти в отпуск или изменить дату: /vacation 2 или /vacation 20.07\n"
+    "Выйти из отпуска: /vacation 0 или /vacation off"
+)
 VACATION_OFF_ARGUMENTS = frozenset({"off"})
 _DAY_COUNT_PATTERN = re.compile(r"[+-]?\d+")
 _ISO_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -75,11 +79,10 @@ class VacationService:
     def _status_text(self, user: RegisteredUser, today: date) -> str:
         vacation = self._vacations.get(user.id)
         if vacation is not None and vacation.until_date >= today:
-            return _active_vacation_text(user.display_name, vacation.until_date)
-        return (
-            f"{user.display_name} не в отпуске. "
-            "Чтобы включить: /vacation 2 или /vacation 20.07"
-        )
+            status = _active_vacation_status(user.display_name, vacation.until_date)
+        else:
+            status = f"{user.display_name} не в отпуске."
+        return f"{status}\n\n{VACATION_USAGE_TEXT}"
 
     def _local_today(self) -> date:
         return self._clock().astimezone(self._timezone).date()
@@ -157,6 +160,10 @@ def _format_date(day: date) -> str:
 
 def _active_vacation_text(display_name: str, until_date: date) -> str:
     return (
-        f"{display_name} в отпуске до {_format_date(until_date)}. "
+        f"{_active_vacation_status(display_name, until_date)} "
         "Чтобы выйти из отпуска: /vacation 0"
     )
+
+
+def _active_vacation_status(display_name: str, until_date: date) -> str:
+    return f"{display_name} в отпуске до {_format_date(until_date)}."
