@@ -3113,6 +3113,29 @@ async def test_coffee_creates_card_and_persists_session(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
+    ("minutes", "countdown_is_visible"),
+    [(59, True), (60, False), (61, False)],
+)
+async def test_coffee_card_shows_countdown_only_during_last_hour(
+    tmp_path: Path,
+    minutes: int,
+    countdown_is_visible: bool,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update(f"/coffee {minutes}", chat_type="group"),
+    )
+
+    assert ("Через:" in sent_texts(session)[0]) is countdown_is_visible
+
+
+@pytest.mark.parametrize(
     ("alias", "expected_time"),
     [("/кофе 15", "12:30"), ("/кофе 16:30", "16:30")],
 )

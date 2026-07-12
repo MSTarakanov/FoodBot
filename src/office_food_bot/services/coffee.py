@@ -35,6 +35,7 @@ COFFEE_TIME_ERROR = (
 COFFEE_TIME_RANGE_ERROR = "Время кофе должно быть минимум через минуту и до конца сегодня."
 RETRY_DELAYS = (timedelta(minutes=1), timedelta(minutes=3), timedelta(minutes=5))
 RECOVERY_GRACE = timedelta(minutes=5)
+COFFEE_COUNTDOWN_WINDOW = timedelta(minutes=60)
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,12 +62,13 @@ class CoffeeCardRenderer:
         now: datetime,
     ) -> str:
         local_time = session.scheduled_at.astimezone(self._timezone).strftime("%H:%M")
-        countdown = coffee_countdown_text(session.scheduled_at, now)
         lines = [
             f"☕ {escape(proposer.display_name)} предлагает кофе",
             f"Время: <b>{local_time}</b>",
-            f"Через: <b>{countdown}</b>",
         ]
+        if _coffee_countdown_is_visible(session.scheduled_at, now):
+            countdown = coffee_countdown_text(session.scheduled_at, now)
+            lines.append(f"Через: <b>{countdown}</b>")
         return self._with_participants(lines, participants)
 
     def render_completed(
@@ -619,8 +621,15 @@ def next_coffee_countdown_update(
     remaining_seconds = (scheduled_at - now).total_seconds()
     if remaining_seconds <= 60:
         return None
+    if remaining_seconds >= COFFEE_COUNTDOWN_WINDOW.total_seconds():
+        return scheduled_at - timedelta(minutes=59)
     displayed_minutes = ceil(remaining_seconds / 60)
     return scheduled_at - timedelta(minutes=displayed_minutes - 1)
+
+
+def _coffee_countdown_is_visible(scheduled_at: datetime, now: datetime) -> bool:
+    remaining = scheduled_at - now
+    return timedelta() < remaining < COFFEE_COUNTDOWN_WINDOW
 
 
 def _minute_word(minutes: int) -> str:
