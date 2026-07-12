@@ -33,7 +33,9 @@ Group chat commands:
   date, or disables vacation with `0`/`off`.
 - `/lunch [rose|роза|skyline|скайлайн]` - creates lunch polls. Without an office argument,
   Tuesday uses Rose and every other day uses Skyline.
-- `/coffee <minutes|HH:MM>` - creates or reschedules the chat's current coffee meeting.
+- `/coffee <minutes|HH:MM>` - creates or reschedules the chat's current coffee meeting. The
+  text alias `/кофе` supports the same arguments, but is not shown in Telegram's native slash menu
+  because Telegram command names only support Latin letters, digits, and underscores.
   `/coffee` shows invitation settings, usage, and the current meeting; `/coffee on` and
   `/coffee off` control whether lunch attendees are mentioned in future coffee invitations.
 - `/lunch_auto_on` - admin-only: enables automatic lunch polls for the current group chat.
