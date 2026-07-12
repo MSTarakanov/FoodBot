@@ -46,8 +46,13 @@ class BotMessenger:
         text: str,
         *,
         reply_markup: ReplyMarkupUnion | None = None,
+        parse_mode: ParseMode | None = None,
     ) -> Message:
-        return await message.answer(text, reply_markup=reply_markup)
+        return await message.answer(
+            text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+        )
 
     async def send(
         self,

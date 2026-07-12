@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, TelegramObject
 
 from office_food_bot.commands.common import telegram_profile_from_message
+from office_food_bot.commands.definitions import command_definition
+from office_food_bot.commands.parsing import is_for_another_bot, parse_command
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices, CommandAccessDenialReason
 
@@ -18,12 +19,6 @@ DENIAL_MESSAGE_TEMPLATES = {
     CommandAccessDenialReason.GROUP_ONLY: GROUP_ONLY_MESSAGE,
     CommandAccessDenialReason.ADMIN_ONLY: ADMIN_ONLY_MESSAGE,
 }
-
-
-@dataclass(frozen=True)
-class ParsedCommand:
-    name: str
-    target_bot_username: str | None
 
 
 CommandMiddlewareData = dict[str, FSMContext]
@@ -49,11 +44,11 @@ class CommandAccessMiddleware:
         if not isinstance(event, Message):
             return await handler(event, data)
 
-        parsed_command = _parse_command(event.text)
+        parsed_command = parse_command(event.text)
         if parsed_command is None:
             return await handler(event, data)
 
-        if _is_for_another_bot(parsed_command, self._services.telegram_bot_username):
+        if is_for_another_bot(parsed_command, self._services.telegram_bot_username):
             return None
 
         profile = telegram_profile_from_message(event)
@@ -61,8 +56,13 @@ class CommandAccessMiddleware:
         if profile is not None:
             telegram_user_id = profile.telegram_user_id
 
+        definition = command_definition(parsed_command.name)
+        command_name = parsed_command.name
+        if definition is not None:
+            command_name = definition.name
+
         access = self._services.command_access.can_run(
-            parsed_command.name,
+            command_name,
             str(event.chat.type),
             telegram_user_id,
         )
@@ -78,36 +78,6 @@ class CommandAccessMiddleware:
             self._services.telegram_bot_username,
         )
         return None
-
-
-def _parse_command(text: str | None) -> ParsedCommand | None:
-    if text is None or not text.startswith("/"):
-        return None
-
-    command_token = text.split(maxsplit=1)[0]
-    command_reference = command_token.removeprefix("/")
-    if not command_reference:
-        return None
-
-    command_parts = command_reference.split("@", maxsplit=1)
-    command_name = command_parts[0].casefold()
-    if not command_name:
-        return None
-
-    target_bot_username = None
-    if len(command_parts) == 2:
-        target_bot_username = command_parts[1]
-
-    return ParsedCommand(command_name, target_bot_username)
-
-
-def _is_for_another_bot(
-    parsed_command: ParsedCommand,
-    bot_username: str,
-) -> bool:
-    if parsed_command.target_bot_username is None:
-        return False
-    return parsed_command.target_bot_username.casefold() != bot_username.casefold()
 
 
 async def _clear_state(data: CommandMiddlewareData) -> None:

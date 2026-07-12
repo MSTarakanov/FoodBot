@@ -29,11 +29,13 @@ Group chat commands:
 - `/meta <minutes|start-end>` - says when a registered user will arrive.
 - `/eta <minutes|start-end>` - says when delivery is expected.
 - `/balance` - shows Splitwise balances.
-- `/vacation <days|date|0>` - marks the current user as on vacation until the end of the given
-  date, or disables vacation with `0`/`off`.
+- `/vacation` - shows the current vacation status and usage. Use `/vacation <days|date>` to go on
+  vacation until the end of the given date, or `/vacation 0`/`/vacation off` to leave vacation.
 - `/lunch [rose|роза|skyline|скайлайн]` - creates lunch polls. Without an office argument,
   Tuesday uses Rose and every other day uses Skyline.
-- `/coffee <minutes|HH:MM>` - creates or reschedules the chat's current coffee meeting.
+- `/coffee <minutes|HH:MM>` - creates or reschedules the chat's current coffee meeting. The
+  text alias `/кофе` supports the same arguments, but is not shown in Telegram's native slash menu
+  because Telegram command names only support Latin letters, digits, and underscores.
   `/coffee` shows invitation settings, usage, and the current meeting; `/coffee on` and
   `/coffee off` control whether lunch attendees are mentioned in future coffee invitations.
 - `/lunch_auto_on` - admin-only: enables automatic lunch polls for the current group chat.

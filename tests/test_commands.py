@@ -87,48 +87,66 @@ ROSE_OTHER_OPTION_INDEX = tuple(
     PollOption.LUNCH_PLACE_OTHER
 )
 PRIVATE_HELP_TEXT = (
-    "Команды:\n"
+    "<b>Команды:</b>\n\n"
+    "<b>Основные:</b>\n"
+    "/balance - показать баланс Splitwise\n\n"
+    "<b>Профиль и настройки:</b>\n"
+    "/register - пройти регистрацию\n"
+    "/request_register - попросить админа зарегистрировать вас\n"
+    "/quit - отрегистрироваться\n\n"
+    "<b>Служебные:</b>\n"
     "/start - показать приветствие\n"
     "/help - показать список команд\n"
     "/hi - проверить, что бот на месте\n"
-    "/register - пройти регистрацию\n"
-    "/request_register - попросить админа зарегистрировать вас\n"
-    "/quit - отрегистрироваться\n"
-    "/cancel - отменить текущий сценарий\n"
-    "/balance - показать баланс Splitwise"
+    "/cancel - отменить текущий сценарий"
 )
 ADMIN_PRIVATE_HELP_TEXT = (
-    "Команды:\n"
+    "<b>Команды:</b>\n\n"
+    "<b>Основные:</b>\n"
+    "/balance - показать баланс Splitwise\n\n"
+    "<b>Профиль и настройки:</b>\n"
+    "/register - пройти регистрацию\n"
+    "/request_register - попросить админа зарегистрировать вас\n"
+    "/quit - отрегистрироваться\n\n"
+    "<b>Администрирование:</b>\n"
+    "/approve 123456789 - подтвердить регистрацию\n"
+    "/register_requests_list - показать заявки на регистрацию\n"
+    "/debug 1 - включить или выключить debug режим\n\n"
+    "<b>Служебные:</b>\n"
     "/start - показать приветствие\n"
     "/help - показать список команд\n"
     "/hi - проверить, что бот на месте\n"
-    "/register - пройти регистрацию\n"
-    "/request_register - попросить админа зарегистрировать вас\n"
-    "/quit - отрегистрироваться\n"
-    "/cancel - отменить текущий сценарий\n"
-    "/approve 123456789 - подтвердить регистрацию\n"
-    "/register_requests_list - показать заявки на регистрацию\n"
-    "/debug 1 - включить или выключить debug режим\n"
-    "/balance - показать баланс Splitwise"
+    "/cancel - отменить текущий сценарий"
 )
-GROUP_HELP_TEXT = (
-    "Команды:\n"
-    "/help - показать список команд\n"
-    "/hi - проверить, что бот на месте\n"
+GROUP_HELP_MAIN_AND_SETTINGS = (
+    "<b>Команды:</b>\n\n"
+    "<b>Основные:</b>\n"
     "/meta 25 или /meta 20-30 - сообщить, через сколько минут или в каком диапазоне придешь\n"
     "/eta 20 или /eta 20-30 - сообщить ожидаемое время доставки\n"
     "/balance - показать баланс Splitwise\n"
-    "/vacation 2 - отметить отпуск\n"
     "/lunch [rose|роза|skyline|скайлайн] - создать опрос про обед\n"
-    "/coffee 15 или /coffee 16:30 - позвать на кофе\n"
-    "/coffee on - включить приглашения\n"
-    "/coffee off - выключить приглашения"
+    "/coffee 15 или /coffee 16:30 "
+    "(также /кофе 15 или /кофе 16:30) - позвать на кофе\n\n"
+    "<b>Профиль и настройки:</b>\n"
+    "/vacation - показать статус отпуска\n"
+    "/vacation 2 или /vacation 20.07 - уйти в отпуск\n"
+    "/vacation 0 или /vacation off - выйти из отпуска\n"
+    "/coffee on (также /кофе on) - включить приглашения\n"
+    "/coffee off (также /кофе off) - выключить приглашения"
 )
+GROUP_HELP_SERVICE = (
+    "<b>Служебные:</b>\n"
+    "/help - показать список команд\n"
+    "/hi - проверить, что бот на месте"
+)
+GROUP_HELP_TEXT = GROUP_HELP_MAIN_AND_SETTINGS + "\n\n" + GROUP_HELP_SERVICE
 ADMIN_GROUP_HELP_TEXT = (
-    GROUP_HELP_TEXT
-    + "\n/lunch_auto_on - включить авто-ланч в этом чате"
-    + "\n/lunch_auto_off - выключить авто-ланч в этом чате"
-    + "\n/lunch_auto_status - показать статус авто-ланча"
+    GROUP_HELP_MAIN_AND_SETTINGS
+    + "\n\n<b>Автоматизация:</b>\n"
+    + "/lunch_auto_on - включить авто-ланч в этом чате\n"
+    + "/lunch_auto_off - выключить авто-ланч в этом чате\n"
+    + "/lunch_auto_status - показать статус авто-ланча\n\n"
+    + GROUP_HELP_SERVICE
 )
 
 
@@ -669,6 +687,7 @@ async def test_help_shows_admin_commands_to_admins(tmp_path: Path) -> None:
     await dispatcher.feed_update(bot, make_update("/help", user_id=7, first_name="Admin"))
 
     assert sent_texts(session) == [ADMIN_PRIVATE_HELP_TEXT]
+    assert session.sent_messages[0].parse_mode == ParseMode.HTML
 
 
 async def test_help_shows_group_commands_in_group_chat(tmp_path: Path) -> None:
@@ -696,6 +715,36 @@ async def test_help_shows_group_admin_commands_to_admins_in_group_chat(
     )
 
     assert sent_texts(session) == [ADMIN_GROUP_HELP_TEXT]
+
+
+async def test_help_shows_all_sections_to_admin_in_private_debug(
+    tmp_path: Path,
+) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    services = make_test_services(database)
+    services.debug.set_enabled(7, True)
+    dispatcher = create_dispatcher(services)
+
+    await dispatcher.feed_update(bot, make_update("/help", user_id=7, first_name="Admin"))
+
+    help_message = sent_texts(session)[0]
+    section_positions = tuple(
+        help_message.index(f"<b>{section}:</b>")
+        for section in (
+            "Основные",
+            "Профиль и настройки",
+            "Автоматизация",
+            "Администрирование",
+            "Служебные",
+        )
+    )
+    assert section_positions == tuple(sorted(section_positions))
+    assert "/coffee 15 или /coffee 16:30" in help_message
+    assert "/coffee on (также /кофе on)" in help_message
+    assert "/lunch_auto_on" in help_message
+    assert "/approve 123456789" in help_message
 
 
 async def test_private_only_command_in_group_points_to_private_bot_link(
@@ -791,6 +840,11 @@ async def test_setup_bot_commands_registers_telegram_menu() -> None:
         "lunch",
         "coffee",
     ]
+    vacation_menu_command = next(
+        command for command in group_menu.commands if command.command == "vacation"
+    )
+    assert vacation_menu_command.description == "показать статус отпуска"
+    assert "кофе" not in _command_names(group_menu.commands)
 
     admin_menu = bot.command_menus[3]
     assert admin_menu.scope_name == "chat"
@@ -2058,9 +2112,13 @@ async def test_vacation_sets_shows_and_clears_status_for_active_user(
 
     assert sent_texts(session) == [
         "Максим в отпуске до 30.06.2026. Чтобы выйти из отпуска: /vacation 0",
-        "Максим в отпуске до 30.06.2026. Чтобы выйти из отпуска: /vacation 0",
+        "Максим в отпуске до 30.06.2026.\n\n"
+        "Уйти в отпуск или изменить дату: /vacation 2 или /vacation 20.07\n"
+        "Выйти из отпуска: /vacation 0 или /vacation off",
         "Максим больше не в отпуске.",
-        "Максим не в отпуске. Чтобы включить: /vacation 2 или /vacation 20.07",
+        "Максим не в отпуске.\n\n"
+        "Уйти в отпуск или изменить дату: /vacation 2 или /vacation 20.07\n"
+        "Выйти из отпуска: /vacation 0 или /vacation off",
     ]
 
 
@@ -2830,6 +2888,95 @@ async def test_coffee_without_arguments_shows_status_usage_and_meeting(
     ]
 
 
+@pytest.mark.parametrize("alias", ["/кофе", "/КоФе", "/КОФЕ@foodbot_dev"])
+async def test_russian_coffee_alias_without_arguments_shows_status(
+    alias: str,
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update(alias, chat_type="group"))
+
+    assert sent_texts(session) == [
+        "Приглашения на кофе: включены.\n\n"
+        "Создать или перенести встречу: /coffee 15 или /coffee 16:30.\n\n"
+        "Текущей встречи нет."
+    ]
+
+
+async def test_russian_coffee_alias_updates_invitation_preference(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/кофе off", chat_type="group"))
+    await dispatcher.feed_update(bot, make_update("/кофе on", chat_type="group"))
+    await dispatcher.feed_update(bot, make_update("/кофе", chat_type="group"))
+
+    assert sent_texts(session) == [
+        "Приглашения на кофе выключены.",
+        "Приглашения на кофе включены.",
+        "Приглашения на кофе: включены.\n\n"
+        "Создать или перенести встречу: /coffee 15 или /coffee 16:30.\n\n"
+        "Текущей встречи нет.",
+    ]
+
+
+async def test_russian_coffee_alias_obeys_group_scope(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/кофе 15"))
+
+    assert sent_texts(session) == ["Команда доступна только в групповом чате."]
+    assert CoffeeSessionRepository(database).get_open_for_chat(42) is None
+
+
+async def test_russian_coffee_alias_works_in_admin_private_debug(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 7, "Админ", "admin")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    services.debug.set_enabled(7, True)
+    dispatcher = create_dispatcher(services)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/кофе 15", user_id=7, username="admin"),
+    )
+
+    assert CoffeeSessionRepository(database).get_open_for_chat(7) is not None
+    assert sent_texts(session)[0].startswith("☕ Админ предлагает кофе")
+
+
+async def test_russian_coffee_alias_for_another_bot_is_ignored(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/кофе@another_bot 15", chat_type="group"),
+    )
+
+    assert sent_texts(session) == []
+    assert CoffeeSessionRepository(database).get_open_for_chat(-100) is None
+
+
 async def test_coffee_off_changes_only_invitation_preference(tmp_path: Path) -> None:
     database = make_database(tmp_path)
     activate_user(database, 42, "Максим", "misha")
@@ -2878,6 +3025,29 @@ async def test_coffee_creates_card_and_persists_session(tmp_path: Path) -> None:
     assert [user.display_name for user in CoffeeSessionRepository(database).list_participants(
         coffee_session.id
     )] == ["Максим"]
+
+
+@pytest.mark.parametrize(
+    ("alias", "expected_time"),
+    [("/кофе 15", "12:30"), ("/кофе 16:30", "16:30")],
+)
+async def test_russian_coffee_alias_creates_session(
+    alias: str,
+    expected_time: str,
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update(alias, chat_type="group"))
+
+    coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
+    assert coffee_session is not None
+    assert coffee_session.message_id == 1
+    assert f"Время: <b>{expected_time}</b>" in sent_texts(session)[0]
 
 
 async def test_coffee_countdown_edits_existing_card_without_new_message(

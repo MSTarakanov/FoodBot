@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message
 
 from office_food_bot.coffee_callbacks import CoffeeCallbackData
 from office_food_bot.commands.common import telegram_profile_from_message
+from office_food_bot.commands.parsing import ParsedCommand
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
 
@@ -19,12 +20,48 @@ async def coffee_command(
     services: BotServices,
     state: FSMContext,
 ) -> None:
+    await _handle_coffee_command(
+        message,
+        command.args,
+        bot,
+        messenger,
+        services,
+        state,
+    )
+
+
+async def coffee_alias_command(
+    message: Message,
+    alias_command: ParsedCommand,
+    bot: Bot,
+    messenger: BotMessenger,
+    services: BotServices,
+    state: FSMContext,
+) -> None:
+    await _handle_coffee_command(
+        message,
+        alias_command.arguments,
+        bot,
+        messenger,
+        services,
+        state,
+    )
+
+
+async def _handle_coffee_command(
+    message: Message,
+    raw_argument: str | None,
+    bot: Bot,
+    messenger: BotMessenger,
+    services: BotServices,
+    state: FSMContext,
+) -> None:
     await state.clear()
     profile = telegram_profile_from_message(message)
     if profile is None:
         await messenger.reply(message, "Не вижу твой Telegram user id.")
         return
-    argument = (command.args or "").strip()
+    argument = (raw_argument or "").strip()
     if not argument:
         await messenger.reply(
             message,
