@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
+from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.methods import (
@@ -2858,8 +2859,9 @@ async def test_coffee_creates_card_and_persists_session(tmp_path: Path) -> None:
     await dispatcher.feed_update(bot, make_update("/coffee 15", chat_type="group"))
 
     assert sent_texts(session) == [
-        "☕ Максим предлагает кофе\nВремя: 12:30\n\nИдут (1):\n• Максим"
+        "☕ Максим предлагает кофе\nВремя: <b>12:30</b>\n\nИдут (1):\n• Максим"
     ]
+    assert session.sent_messages[0].parse_mode == ParseMode.HTML
     assert inline_callback_data(session.sent_messages[0]).keys() == {
         "Пойду",
         "Не пойду",
@@ -2904,9 +2906,10 @@ async def test_coffee_reschedule_edits_card_and_keeps_participants(tmp_path: Pat
     assert session.sent_messages[1].reply_parameters.message_id == 1
     assert len(session.edited_messages) == 1
     assert session.edited_messages[0].text == (
-        "☕ Анна предлагает кофе\nВремя: 12:45\n\n"
+        "☕ Анна предлагает кофе\nВремя: <b>12:45</b>\n\n"
         "Идут (2):\n• Максим\n• Анна"
     )
+    assert session.edited_messages[0].parse_mode == ParseMode.HTML
     coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
     assert coffee_session is not None
     assert [user.display_name for user in CoffeeSessionRepository(database).list_participants(
@@ -2985,7 +2988,7 @@ async def test_coffee_shout_uses_persisted_lunch_attendance(tmp_path: Path) -> N
     await dispatcher.feed_update(bot, make_update("/coffee 15", chat_type="group"))
 
     assert sent_texts(session) == [
-        "☕ Максим предлагает кофе\nВремя: 12:30\n\nИдут (1):\n• Максим",
+        "☕ Максим предлагает кофе\nВремя: <b>12:30</b>\n\nИдут (1):\n• Максим",
         "@anna, присоединяйтесь на кофе.",
     ]
     assert session.sent_messages[1].reply_parameters is not None

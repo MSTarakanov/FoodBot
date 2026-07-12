@@ -6,9 +6,11 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
+from html import escape
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot
+from aiogram.enums import ParseMode
 
 from office_food_bot.coffee_callbacks import CoffeeCallbackData, CoffeeParticipantAction
 from office_food_bot.coffee_repositories import (
@@ -57,13 +59,13 @@ class CoffeeCardRenderer:
     ) -> str:
         local_time = session.scheduled_at.astimezone(self._timezone).strftime("%H:%M")
         lines = [
-            f"☕ {proposer.display_name} предлагает кофе",
-            f"Время: {local_time}",
+            f"☕ {escape(proposer.display_name)} предлагает кофе",
+            f"Время: <b>{local_time}</b>",
             "",
             f"Идут ({len(participants)}):",
         ]
         if participants:
-            lines.extend(f"• {user.display_name}" for user in participants)
+            lines.extend(f"• {escape(user.display_name)}" for user in participants)
         else:
             lines.append("Пока никто")
         return "\n".join(lines)
@@ -402,6 +404,7 @@ class CoffeeService:
                     ),
                 )
             ),
+            parse_mode=ParseMode.HTML,
         )
         if session.message_id != message.message_id:
             return self._sessions.update_message(session.id, message.message_id)

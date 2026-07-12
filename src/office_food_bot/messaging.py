@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from aiogram import Bot
+from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.types import (
     InlineKeyboardButton,
@@ -56,6 +57,7 @@ class BotMessenger:
         *,
         reply_markup: ReplyMarkupUnion | None = None,
         reply_to_message_id: int | None = None,
+        parse_mode: ParseMode | None = None,
     ) -> Message:
         reply_parameters = None
         if reply_to_message_id is not None:
@@ -65,6 +67,7 @@ class BotMessenger:
             text,
             reply_markup=reply_markup,
             reply_parameters=reply_parameters,
+            parse_mode=parse_mode,
         )
 
     async def edit_or_send(
@@ -75,6 +78,7 @@ class BotMessenger:
         text: str,
         *,
         reply_markup: InlineKeyboardMarkup | None = None,
+        parse_mode: ParseMode | None = None,
     ) -> LiveMessageReference:
         if message_id is not None:
             try:
@@ -83,6 +87,7 @@ class BotMessenger:
                     chat_id=chat_id,
                     message_id=message_id,
                     reply_markup=reply_markup,
+                    parse_mode=parse_mode,
                 )
                 if isinstance(edited, Message):
                     return LiveMessageReference(edited.message_id)
@@ -92,7 +97,13 @@ class BotMessenger:
                     return LiveMessageReference(message_id)
                 if not _is_edit_target_unavailable(error):
                     raise
-        sent = await self.send(bot, chat_id, text, reply_markup=reply_markup)
+        sent = await self.send(
+            bot,
+            chat_id,
+            text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+        )
         return LiveMessageReference(sent.message_id)
 
     async def reply_with_choices(
