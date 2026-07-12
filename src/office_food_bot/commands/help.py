@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
@@ -29,4 +30,5 @@ async def help_command(
                 telegram_user_id,
             )
         ),
+        parse_mode=ParseMode.HTML,
     )

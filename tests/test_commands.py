@@ -87,60 +87,60 @@ ROSE_OTHER_OPTION_INDEX = tuple(
     PollOption.LUNCH_PLACE_OTHER
 )
 PRIVATE_HELP_TEXT = (
-    "Команды:\n\n"
-    "Основные:\n"
+    "<b>Команды:</b>\n\n"
+    "<b>Основные:</b>\n"
     "/balance - показать баланс Splitwise\n\n"
-    "Профиль и настройки:\n"
+    "<b>Профиль и настройки:</b>\n"
     "/register - пройти регистрацию\n"
     "/request_register - попросить админа зарегистрировать вас\n"
     "/quit - отрегистрироваться\n\n"
-    "Служебные:\n"
+    "<b>Служебные:</b>\n"
     "/start - показать приветствие\n"
     "/help - показать список команд\n"
     "/hi - проверить, что бот на месте\n"
     "/cancel - отменить текущий сценарий"
 )
 ADMIN_PRIVATE_HELP_TEXT = (
-    "Команды:\n\n"
-    "Основные:\n"
+    "<b>Команды:</b>\n\n"
+    "<b>Основные:</b>\n"
     "/balance - показать баланс Splitwise\n\n"
-    "Профиль и настройки:\n"
+    "<b>Профиль и настройки:</b>\n"
     "/register - пройти регистрацию\n"
     "/request_register - попросить админа зарегистрировать вас\n"
     "/quit - отрегистрироваться\n\n"
-    "Администрирование:\n"
+    "<b>Администрирование:</b>\n"
     "/approve 123456789 - подтвердить регистрацию\n"
     "/register_requests_list - показать заявки на регистрацию\n"
     "/debug 1 - включить или выключить debug режим\n\n"
-    "Служебные:\n"
+    "<b>Служебные:</b>\n"
     "/start - показать приветствие\n"
     "/help - показать список команд\n"
     "/hi - проверить, что бот на месте\n"
     "/cancel - отменить текущий сценарий"
 )
 GROUP_HELP_MAIN_AND_SETTINGS = (
-    "Команды:\n\n"
-    "Основные:\n"
+    "<b>Команды:</b>\n\n"
+    "<b>Основные:</b>\n"
     "/meta 25 или /meta 20-30 - сообщить, через сколько минут или в каком диапазоне придешь\n"
     "/eta 20 или /eta 20-30 - сообщить ожидаемое время доставки\n"
     "/balance - показать баланс Splitwise\n"
     "/lunch [rose|роза|skyline|скайлайн] - создать опрос про обед\n"
     "/coffee 15 или /coffee 16:30 "
     "(также /кофе 15 или /кофе 16:30) - позвать на кофе\n\n"
-    "Профиль и настройки:\n"
+    "<b>Профиль и настройки:</b>\n"
     "/vacation 2 - отметить отпуск\n"
     "/coffee on (также /кофе on) - включить приглашения\n"
     "/coffee off (также /кофе off) - выключить приглашения"
 )
 GROUP_HELP_SERVICE = (
-    "Служебные:\n"
+    "<b>Служебные:</b>\n"
     "/help - показать список команд\n"
     "/hi - проверить, что бот на месте"
 )
 GROUP_HELP_TEXT = GROUP_HELP_MAIN_AND_SETTINGS + "\n\n" + GROUP_HELP_SERVICE
 ADMIN_GROUP_HELP_TEXT = (
     GROUP_HELP_MAIN_AND_SETTINGS
-    + "\n\nАвтоматизация:\n"
+    + "\n\n<b>Автоматизация:</b>\n"
     + "/lunch_auto_on - включить авто-ланч в этом чате\n"
     + "/lunch_auto_off - выключить авто-ланч в этом чате\n"
     + "/lunch_auto_status - показать статус авто-ланча\n\n"
@@ -685,6 +685,7 @@ async def test_help_shows_admin_commands_to_admins(tmp_path: Path) -> None:
     await dispatcher.feed_update(bot, make_update("/help", user_id=7, first_name="Admin"))
 
     assert sent_texts(session) == [ADMIN_PRIVATE_HELP_TEXT]
+    assert session.sent_messages[0].parse_mode == ParseMode.HTML
 
 
 async def test_help_shows_group_commands_in_group_chat(tmp_path: Path) -> None:
@@ -728,7 +729,7 @@ async def test_help_shows_all_sections_to_admin_in_private_debug(
 
     help_message = sent_texts(session)[0]
     section_positions = tuple(
-        help_message.index(f"{section}:")
+        help_message.index(f"<b>{section}:</b>")
         for section in (
             "Основные",
             "Профиль и настройки",

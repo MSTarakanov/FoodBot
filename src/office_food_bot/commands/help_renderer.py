@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from html import escape
 
 from office_food_bot.commands.definitions import CommandDefinition, HelpSection
 
@@ -25,7 +26,7 @@ class HelpRenderer:
             for section in HelpSection
             if any(line.section == section for line in lines)
         )
-        return "Команды:\n\n" + "\n\n".join(sections)
+        return "<b>Команды:</b>\n\n" + "\n\n".join(sections)
 
     def _definition_lines(
         self,
@@ -52,11 +53,11 @@ class HelpRenderer:
         lines: tuple[HelpLine, ...],
     ) -> str:
         entries = "\n".join(
-            f"{line.usage} - {line.description}"
+            f"{escape(line.usage)} - {escape(line.description)}"
             for line in lines
             if line.section == section
         )
-        return f"{section.value}:\n{entries}"
+        return f"<b>{escape(section.value)}:</b>\n{entries}"
 
     def _usage_with_aliases(
         self,
