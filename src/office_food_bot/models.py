@@ -26,28 +26,6 @@ class PollKind(StrEnum):
     LUNCH_OTHER_FOOD_V1 = "lunch_other_food_v1"
 
 
-class PollOptionKey(StrEnum):
-    LUNCH_BRING_OWN = "lunch_bring_own"
-    LUNCH_EAT_IN_OFFICE = "lunch_eat_in_office"
-    LUNCH_WOULD_ORDER = "lunch_would_order"
-    LUNCH_STAY_HOME = "lunch_stay_home"
-    LUNCH_EAT_INDEPENDENTLY = "lunch_eat_independently"
-    LUNCH_UNDECIDED = "lunch_undecided"
-    LUNCH_NOT_WORKING = "lunch_not_working"
-    LUNCH_PLACE_SKYLINE_30_FLOOR = "lunch_place_skyline_30_floor"
-    LUNCH_PLACE_MCDONALDS = "lunch_place_mcdonalds"
-    LUNCH_PLACE_HOME_FOOD = "lunch_place_home_food"
-    LUNCH_PLACE_ROSE_BEREZKA = "lunch_place_rose_berezka"
-    LUNCH_PLACE_ROSE_SALATNITSA = "lunch_place_rose_salatnitsa"
-    LUNCH_PLACE_EAT_OUT = "lunch_place_eat_out"
-    LUNCH_PLACE_OTHER = "lunch_place_other"
-    LUNCH_PLACE_VIEW_RESULTS = "lunch_place_view_results"
-    OTHER_FOOD_BURGER = "other_food_burger"
-    OTHER_FOOD_SHAWARMA = "other_food_shawarma"
-    OTHER_FOOD_POKE = "other_food_poke"
-    OTHER_FOOD_PIZZA = "other_food_pizza"
-
-
 class CoffeeSessionStatus(StrEnum):
     CREATING = "creating"
     ACTIVE = "active"

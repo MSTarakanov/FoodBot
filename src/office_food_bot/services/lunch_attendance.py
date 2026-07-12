@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from datetime import date
 
-from office_food_bot.models import PollKind, PollOptionKey, RegisteredUser
+from office_food_bot.models import PollKind, RegisteredUser
+from office_food_bot.poll_options import PollOption
 from office_food_bot.repositories import PollRepository
 
 OFFICE_ATTENDANCE_OPTIONS = frozenset(
     {
-        PollOptionKey.LUNCH_BRING_OWN,
-        PollOptionKey.LUNCH_EAT_IN_OFFICE,
-        PollOptionKey.LUNCH_WOULD_ORDER,
+        PollOption.LUNCH_BRING_OWN,
+        PollOption.LUNCH_EAT_IN_OFFICE,
+        PollOption.LUNCH_WOULD_ORDER,
     }
 )
 LUNCH_ATTENDANCE_KINDS = (PollKind.LUNCH_ATTENDANCE_V1,)

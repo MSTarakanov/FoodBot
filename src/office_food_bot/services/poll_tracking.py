@@ -58,16 +58,16 @@ class PollTrackingService:
         if stored_poll is None:
             return ()
         definition = self._definitions.get(stored_poll.kind)
-        selected_keys = definition.known_keys_for_indices(selected_option_ids)
-        new_keys = self._polls.replace_selected_options(
+        selected_options = definition.known_options_for_indices(selected_option_ids)
+        new_options = self._polls.replace_selected_options(
             poll_id,
             telegram_user_id,
-            selected_keys,
+            selected_options,
             self._clock(),
         )
         requests: list[PollActionRequest] = []
-        for key in new_keys:
-            action = definition.action_for(key)
+        for option in new_options:
+            action = definition.action_for(option)
             if action is None:
                 continue
             consumed_key = (poll_id, action)

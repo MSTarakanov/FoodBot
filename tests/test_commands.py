@@ -39,11 +39,11 @@ from aiogram.types import (
     Message,
     Poll,
     PollAnswer,
-    PollOption,
     ReplyKeyboardMarkup,
     Update,
     User,
 )
+from aiogram.types import PollOption as TelegramPollOption
 
 from office_food_bot.app import create_dispatcher, create_services
 from office_food_bot.coffee_repositories import CoffeeSessionRepository
@@ -55,12 +55,12 @@ from office_food_bot.database import Database
 from office_food_bot.models import (
     CoffeeSessionStatus,
     PollKind,
-    PollOptionKey,
     SplitwiseBalance,
     SplitwiseMember,
     TelegramProfile,
     UserStatus,
 )
+from office_food_bot.poll_options import PollOption
 from office_food_bot.repositories import (
     LunchAutoChatRepository,
     LunchPinRepository,
@@ -81,9 +81,9 @@ from office_food_bot.services.splitwise import SplitwiseUnavailableError
 DEFAULT_ADMIN_IDS = frozenset({7})
 DEFAULT_SPLITWISE_GROUP_ID = 55
 ROSE_OTHER_OPTION_INDEX = tuple(
-    option.key for option in ROSE_LUNCH_POLLS.place.options
+    ROSE_LUNCH_POLLS.place.options
 ).index(
-    PollOptionKey.LUNCH_PLACE_OTHER
+    PollOption.LUNCH_PLACE_OTHER
 )
 PRIVATE_HELP_TEXT = (
     "Команды:\n"
@@ -324,7 +324,7 @@ def _send_poll_response(method: SendPoll, message_id: int) -> Message:
             id=f"poll-{message_id}",
             question=method.question,
             options=[
-                PollOption(
+                TelegramPollOption(
                     persistent_id=f"option-{message_id}-{option_index}",
                     text=option_text,
                     voter_count=0,
@@ -2137,14 +2137,18 @@ async def test_lunch_creates_non_anonymous_polls_for_active_user(tmp_path: Path)
 
     lunch_poll = session.sent_polls[0]
     assert lunch_poll.question == SKYLINE_LUNCH_POLLS.lunch.question
-    assert poll_option_texts(lunch_poll) == list(SKYLINE_LUNCH_POLLS.lunch.option_texts())
+    assert poll_option_texts(lunch_poll) == [
+        option.display_value for option in SKYLINE_LUNCH_POLLS.lunch.options
+    ]
     assert lunch_poll.is_anonymous is False
     assert lunch_poll.allows_multiple_answers is False
     assert lunch_poll.allow_adding_options is True
 
     place_poll = session.sent_polls[1]
     assert place_poll.question == SKYLINE_LUNCH_POLLS.place.question
-    assert poll_option_texts(place_poll) == list(SKYLINE_LUNCH_POLLS.place.option_texts())
+    assert poll_option_texts(place_poll) == [
+        option.display_value for option in SKYLINE_LUNCH_POLLS.place.options
+    ]
     assert place_poll.is_anonymous is False
     assert place_poll.allows_multiple_answers is True
     assert place_poll.allow_adding_options is True
@@ -2176,8 +2180,12 @@ async def test_lunch_uses_rose_poll_definitions_on_tuesday(tmp_path: Path) -> No
     await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
 
     assert len(session.sent_polls) == 2
-    assert poll_option_texts(session.sent_polls[0]) == list(ROSE_LUNCH_POLLS.lunch.option_texts())
-    assert poll_option_texts(session.sent_polls[1]) == list(ROSE_LUNCH_POLLS.place.option_texts())
+    assert poll_option_texts(session.sent_polls[0]) == [
+        option.display_value for option in ROSE_LUNCH_POLLS.lunch.options
+    ]
+    assert poll_option_texts(session.sent_polls[1]) == [
+        option.display_value for option in ROSE_LUNCH_POLLS.place.options
+    ]
 
 
 @pytest.mark.parametrize(
@@ -2217,8 +2225,12 @@ async def test_lunch_office_argument_overrides_weekday(
     await dispatcher.feed_update(bot, make_update(command_text, chat_type="group"))
 
     assert len(session.sent_polls) == 2
-    assert poll_option_texts(session.sent_polls[0]) == list(expected_polls.lunch.option_texts())
-    assert poll_option_texts(session.sent_polls[1]) == list(expected_polls.place.option_texts())
+    assert poll_option_texts(session.sent_polls[0]) == [
+        option.display_value for option in expected_polls.lunch.options
+    ]
+    assert poll_option_texts(session.sent_polls[1]) == [
+        option.display_value for option in expected_polls.place.options
+    ]
 
 
 async def test_lunch_rejects_unknown_office_argument(tmp_path: Path) -> None:
@@ -2461,8 +2473,12 @@ async def test_scheduled_lunch_uses_rose_polls_and_tracks_actions_on_tuesday(
     assert sent_texts(session) == ["Время обедать! @misha"]
     assert len(session.sent_polls) == 2
     assert session.sent_polls[0].chat_id == -100
-    assert poll_option_texts(session.sent_polls[0]) == list(ROSE_LUNCH_POLLS.lunch.option_texts())
-    assert poll_option_texts(session.sent_polls[1]) == list(ROSE_LUNCH_POLLS.place.option_texts())
+    assert poll_option_texts(session.sent_polls[0]) == [
+        option.display_value for option in ROSE_LUNCH_POLLS.lunch.options
+    ]
+    assert poll_option_texts(session.sent_polls[1]) == [
+        option.display_value for option in ROSE_LUNCH_POLLS.place.options
+    ]
     assert session.unpin_requests == []
     assert len(session.pin_requests) == 1
     assert session.pin_requests[0].chat_id == -100
@@ -2720,7 +2736,9 @@ async def test_rose_lunch_other_place_answer_creates_other_food_poll_once(
     assert len(session.sent_polls) == 1
     other_food_poll = session.sent_polls[0]
     assert other_food_poll.question == LUNCH_OTHER_FOOD_POLL.question
-    assert poll_option_texts(other_food_poll) == list(LUNCH_OTHER_FOOD_POLL.option_texts())
+    assert poll_option_texts(other_food_poll) == [
+        option.display_value for option in LUNCH_OTHER_FOOD_POLL.options
+    ]
     assert other_food_poll.is_anonymous is False
     assert other_food_poll.allows_multiple_answers is True
     assert other_food_poll.allow_adding_options is True

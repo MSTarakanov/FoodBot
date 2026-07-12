@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from office_food_bot.models import PollKind, PollOptionKey
+from office_food_bot.models import PollKind
+from office_food_bot.poll_options import PollOption
 
 
 class PollAction(StrEnum):
@@ -11,14 +12,8 @@ class PollAction(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class PollOptionDefinition:
-    key: PollOptionKey
-    text: str
-
-
-@dataclass(frozen=True, slots=True)
 class PollOptionActionDefinition:
-    option_key: PollOptionKey
+    option: PollOption
     action: PollAction
 
 
@@ -26,29 +21,26 @@ class PollOptionActionDefinition:
 class PollDefinition:
     kind: PollKind
     question: str
-    options: tuple[PollOptionDefinition, ...]
+    options: tuple[PollOption, ...]
     allows_multiple_answers: bool
     option_actions: tuple[PollOptionActionDefinition, ...] = ()
 
-    def option_texts(self) -> tuple[str, ...]:
-        return tuple(option.text for option in self.options)
-
-    def known_keys_for_indices(
+    def known_options_for_indices(
         self,
         option_indices: tuple[int, ...],
-    ) -> frozenset[PollOptionKey]:
+    ) -> frozenset[PollOption]:
         return frozenset(
-            self.options[index].key
+            self.options[index]
             for index in option_indices
             if 0 <= index < len(self.options)
         )
 
-    def action_for(self, option_key: PollOptionKey) -> PollAction | None:
+    def action_for(self, option: PollOption) -> PollAction | None:
         return next(
             (
                 definition.action
                 for definition in self.option_actions
-                if definition.option_key == option_key
+                if definition.option == option
             ),
             None,
         )

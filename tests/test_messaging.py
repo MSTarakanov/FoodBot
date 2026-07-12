@@ -19,6 +19,7 @@ from aiogram.methods import (
 from aiogram.types import Chat, Message, ReplyKeyboardRemove
 
 from office_food_bot.messaging import BotMessenger, InlineChoice
+from office_food_bot.poll_options import PollOption
 
 
 class RecordingSession(BaseSession):
@@ -123,7 +124,7 @@ async def test_send_poll_uses_telegram_poll_options() -> None:
         bot,
         42,
         "Что заказать?",
-        ["Пицца", "Суши"],
+        [PollOption.OTHER_FOOD_PIZZA, PollOption.OTHER_FOOD_POKE],
         is_anonymous=False,
         allows_multiple_answers=True,
     )
@@ -131,7 +132,7 @@ async def test_send_poll_uses_telegram_poll_options() -> None:
     method = session.requests[0]
     assert isinstance(method, SendPoll)
     assert method.question == "Что заказать?"
-    assert [option.text for option in method.options] == ["Пицца", "Суши"]
+    assert [option.text for option in method.options] == ["пицца", "поке"]
     assert method.is_anonymous is False
     assert method.allows_multiple_answers is True
 
@@ -142,7 +143,12 @@ async def test_send_poll_validates_options_before_calling_telegram() -> None:
     messenger = BotMessenger()
 
     with pytest.raises(ValueError, match="At least 2 options"):
-        await messenger.send_poll(bot, 42, "Что заказать?", ["Пицца"])
+        await messenger.send_poll(
+            bot,
+            42,
+            "Что заказать?",
+            [PollOption.OTHER_FOOD_PIZZA],
+        )
 
     assert session.requests == []
 

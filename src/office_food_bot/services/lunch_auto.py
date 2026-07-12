@@ -126,7 +126,7 @@ class LunchPollPublisher:
             bot,
             chat_id,
             definition.question,
-            definition.option_texts(),
+            definition.options,
             is_anonymous=False,
             allows_multiple_answers=definition.allows_multiple_answers,
             allow_adding_options=True,

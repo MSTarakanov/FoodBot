@@ -69,7 +69,6 @@ from office_food_bot.models import (
     LunchPinnedMessage,
     PendingRegistration,
     PollKind,
-    PollOptionKey,
     RegisteredUser,
     RegistrationDetails,
     SplitwiseConnection,
@@ -80,6 +79,7 @@ from office_food_bot.models import (
     UserStatus,
     UserVacation,
 )
+from office_food_bot.poll_options import PollOption
 
 
 class TelegramAccountRepository:
@@ -511,17 +511,18 @@ class PollRepository:
         self,
         poll_id: str,
         telegram_user_id: int,
-        option_keys: Collection[PollOptionKey],
+        options: Collection[PollOption],
         selected_at: datetime,
-    ) -> frozenset[PollOptionKey]:
-        selected = frozenset(option_keys)
+    ) -> frozenset[PollOption]:
+        selected = frozenset(options)
         with self._database.connection:
             previous_rows = self._database.connection.execute(
                 LIST_SELECTED_POLL_OPTIONS_SQL,
                 (poll_id, telegram_user_id),
             ).fetchall()
             previous = frozenset(
-                PollOptionKey(str(row["option_key"])) for row in previous_rows
+                PollOption.from_value(str(row["option_key"]))
+                for row in previous_rows
             )
             self._database.connection.execute(
                 DELETE_SELECTED_POLL_OPTIONS_SQL,
@@ -539,18 +540,22 @@ class PollRepository:
     def list_active_users_with_any_option(
         self,
         poll_id: str,
-        option_keys: Collection[PollOptionKey],
+        options: Collection[PollOption],
     ) -> tuple[RegisteredUser, ...]:
-        keys = tuple(option_keys)
-        if not keys:
+        selected_options = tuple(options)
+        if not selected_options:
             return ()
-        placeholders = ", ".join("?" for _ in keys)
+        placeholders = ", ".join("?" for _ in selected_options)
         query = LIST_ACTIVE_USERS_WITH_SELECTED_OPTIONS_SQL.format(
             option_placeholders=placeholders
         )
         rows = self._database.connection.execute(
             query,
-            (poll_id, UserStatus.ACTIVE.value, *(key.value for key in keys)),
+            (
+                poll_id,
+                UserStatus.ACTIVE.value,
+                *(option.value for option in selected_options),
+            ),
         ).fetchall()
         return tuple(_registered_user_from_row(row) for row in rows)
 

@@ -18,6 +18,8 @@ from aiogram.types import (
     ReplyParameters,
 )
 
+from office_food_bot.poll_options import PollOption
+
 
 @dataclass(frozen=True, slots=True)
 class InlineChoice:
@@ -167,7 +169,7 @@ class BotMessenger:
         self,
         message: Message,
         question: str,
-        options: Sequence[str],
+        options: Sequence[PollOption],
         *,
         is_anonymous: bool = True,
         allows_multiple_answers: bool = False,
@@ -186,7 +188,7 @@ class BotMessenger:
         bot: Bot,
         chat_id: int,
         question: str,
-        options: Sequence[str],
+        options: Sequence[PollOption],
         *,
         is_anonymous: bool = True,
         allows_multiple_answers: bool = False,
@@ -227,7 +229,7 @@ class BotMessenger:
         bot: Bot,
         chat_id: int,
         question: str,
-        options: Sequence[str],
+        options: Sequence[PollOption],
         *,
         is_anonymous: bool = True,
         allows_multiple_answers: bool = False,
@@ -322,10 +324,15 @@ class BotMessenger:
         return ReplyKeyboardRemove(remove_keyboard=True)
 
 
-def _poll_options(options: Sequence[str]) -> list[InputPollOptionUnion]:
+def _poll_options(options: Sequence[PollOption]) -> list[InputPollOptionUnion]:
+    display_values = _text_options(
+        tuple(option.display_value for option in options),
+        minimum=2,
+        maximum=10,
+    )
     return [
-        InputPollOption(text=option)
-        for option in _text_options(options, minimum=2, maximum=10)
+        InputPollOption(text=display_value)
+        for display_value in display_values
     ]
 
 

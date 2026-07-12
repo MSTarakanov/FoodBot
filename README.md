@@ -131,9 +131,10 @@ than the current one, checks foreign keys, and then updates `user_version` to th
 If the database version is newer than the code knows about, startup fails instead of running with an
 unknown schema.
 
-Poll rows store versioned `PollKind` and stable `PollOptionKey` values rather than visible option
-text. Renaming an option therefore does not change its meaning; adding, removing, or reordering
-options requires a new poll kind version.
+Poll rows store versioned `PollKind` and stable `PollOption.value` values rather than visible option
+text. Each option owns its Telegram label in `PollOption.display_value`; conversion to text happens
+only inside `BotMessenger` immediately before sending the poll. Renaming a label therefore does not
+change its stored meaning; adding, removing, or reordering options requires a new poll kind version.
 
 You can inspect the local database version with:
 

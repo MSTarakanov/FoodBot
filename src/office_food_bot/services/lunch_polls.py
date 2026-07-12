@@ -5,16 +5,15 @@ from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 
-from office_food_bot.models import PollKind, PollOptionKey
+from office_food_bot.models import PollKind
+from office_food_bot.poll_options import PollOption
 from office_food_bot.services.polls import (
     PollAction,
     PollDefinition,
     PollDefinitionCatalog,
     PollOptionActionDefinition,
-    PollOptionDefinition,
 )
 
-LUNCH_PLACE_OTHER_OPTION = "не знаю что хочу/хочу что-то другое"
 LUNCH_POLL_QUESTION = "Обед в офисе сегодня"
 LUNCH_PLACE_POLL_QUESTION = "Что едим / заказываем?"
 
@@ -31,21 +30,17 @@ class OfficeLunchPolls:
     place: PollDefinition
 
 
-def _option(key: PollOptionKey, text: str) -> PollOptionDefinition:
-    return PollOptionDefinition(key, text)
-
-
 LUNCH_ATTENDANCE_POLL = PollDefinition(
     kind=PollKind.LUNCH_ATTENDANCE_V1,
     question=LUNCH_POLL_QUESTION,
     options=(
-        _option(PollOptionKey.LUNCH_BRING_OWN, "са собом"),
-        _option(PollOptionKey.LUNCH_EAT_IN_OFFICE, "кушаю в офисе"),
-        _option(PollOptionKey.LUNCH_WOULD_ORDER, "заказал бы что-то"),
-        _option(PollOptionKey.LUNCH_STAY_HOME, "сижу дома"),
-        _option(PollOptionKey.LUNCH_EAT_INDEPENDENTLY, "поел/поем самостоятельно"),
-        _option(PollOptionKey.LUNCH_UNDECIDED, "не решил еще"),
-        _option(PollOptionKey.LUNCH_NOT_WORKING, "ахахахахаххаахаха"),
+        PollOption.LUNCH_BRING_OWN,
+        PollOption.LUNCH_EAT_IN_OFFICE,
+        PollOption.LUNCH_WOULD_ORDER,
+        PollOption.LUNCH_STAY_HOME,
+        PollOption.LUNCH_EAT_INDEPENDENTLY,
+        PollOption.LUNCH_UNDECIDED,
+        PollOption.LUNCH_NOT_WORKING,
     ),
     allows_multiple_answers=False,
 )
@@ -56,16 +51,16 @@ SKYLINE_LUNCH_POLLS = OfficeLunchPolls(
         kind=PollKind.LUNCH_PLACE_SKYLINE_V1,
         question=LUNCH_PLACE_POLL_QUESTION,
         options=(
-            _option(PollOptionKey.LUNCH_PLACE_SKYLINE_30_FLOOR, "30 этаж"),
-            _option(PollOptionKey.LUNCH_PLACE_MCDONALDS, "макдонелдс"),
-            _option(PollOptionKey.LUNCH_PLACE_HOME_FOOD, "домашняя еда"),
-            _option(PollOptionKey.LUNCH_PLACE_OTHER, LUNCH_PLACE_OTHER_OPTION),
-            _option(PollOptionKey.LUNCH_PLACE_VIEW_RESULTS, "посмотреть результаты"),
+            PollOption.LUNCH_PLACE_SKYLINE_30_FLOOR,
+            PollOption.LUNCH_PLACE_MCDONALDS,
+            PollOption.LUNCH_PLACE_HOME_FOOD,
+            PollOption.LUNCH_PLACE_OTHER,
+            PollOption.LUNCH_PLACE_VIEW_RESULTS,
         ),
         allows_multiple_answers=True,
         option_actions=(
             PollOptionActionDefinition(
-                PollOptionKey.LUNCH_PLACE_OTHER,
+                PollOption.LUNCH_PLACE_OTHER,
                 PollAction.LUNCH_OTHER_FOOD_POLL,
             ),
         ),
@@ -78,16 +73,16 @@ ROSE_LUNCH_POLLS = OfficeLunchPolls(
         kind=PollKind.LUNCH_PLACE_ROSE_V1,
         question=LUNCH_PLACE_POLL_QUESTION,
         options=(
-            _option(PollOptionKey.LUNCH_PLACE_ROSE_BEREZKA, "березка"),
-            _option(PollOptionKey.LUNCH_PLACE_ROSE_SALATNITSA, "салатница"),
-            _option(PollOptionKey.LUNCH_PLACE_EAT_OUT, "сходил бы куда-то поесть рядом"),
-            _option(PollOptionKey.LUNCH_PLACE_OTHER, LUNCH_PLACE_OTHER_OPTION),
-            _option(PollOptionKey.LUNCH_PLACE_VIEW_RESULTS, "посмотреть результаты"),
+            PollOption.LUNCH_PLACE_ROSE_BEREZKA,
+            PollOption.LUNCH_PLACE_ROSE_SALATNITSA,
+            PollOption.LUNCH_PLACE_EAT_OUT,
+            PollOption.LUNCH_PLACE_OTHER,
+            PollOption.LUNCH_PLACE_VIEW_RESULTS,
         ),
         allows_multiple_answers=True,
         option_actions=(
             PollOptionActionDefinition(
-                PollOptionKey.LUNCH_PLACE_OTHER,
+                PollOption.LUNCH_PLACE_OTHER,
                 PollAction.LUNCH_OTHER_FOOD_POLL,
             ),
         ),
@@ -98,10 +93,10 @@ LUNCH_OTHER_FOOD_POLL = PollDefinition(
     kind=PollKind.LUNCH_OTHER_FOOD_V1,
     question="Закажем ...",
     options=(
-        _option(PollOptionKey.OTHER_FOOD_BURGER, "другой бургер"),
-        _option(PollOptionKey.OTHER_FOOD_SHAWARMA, "шаурма"),
-        _option(PollOptionKey.OTHER_FOOD_POKE, "поке"),
-        _option(PollOptionKey.OTHER_FOOD_PIZZA, "пицца"),
+        PollOption.OTHER_FOOD_BURGER,
+        PollOption.OTHER_FOOD_SHAWARMA,
+        PollOption.OTHER_FOOD_POKE,
+        PollOption.OTHER_FOOD_PIZZA,
     ),
     allows_multiple_answers=True,
 )
