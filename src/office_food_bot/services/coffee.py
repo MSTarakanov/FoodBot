@@ -185,6 +185,8 @@ class CoffeeService:
                 }
                 session = self._sessions.reschedule(session.id, user.id, scheduled_at)
             try:
+                if is_new:
+                    await self._send_shout(bot, session)
                 session = await self._update_card(bot, session)
             except Exception:
                 if is_new:
@@ -210,9 +212,7 @@ class CoffeeService:
             self._schedule_completion(bot, session)
             self._schedule_countdown(bot, session)
             await self._replace_pin(bot, previous_session, session)
-            if is_new:
-                await self._send_shout(bot, session)
-            elif (
+            if not is_new and (
                 previous_session is not None
                 and previous_session.scheduled_at != session.scheduled_at
             ):
@@ -477,14 +477,13 @@ class CoffeeService:
             if user.id not in participant_ids
             and self._preferences.for_user(user.id).coffee_enabled
         )
-        if not invitees or session.message_id is None:
+        if not invitees:
             return
         references = " ".join(format_user_reference(user) for user in invitees)
         await self._messenger.try_send(
             bot,
             session.chat_id,
             f"{references}, присоединяйтесь на кофе.",
-            reply_to_message_id=session.message_id,
         )
 
     async def _send_reschedule_notification(

@@ -181,6 +181,7 @@ class RecordingSession(BaseSession):
     ) -> None:
         super().__init__()
         self._failed_method_names = failed_method_names
+        self._failed_send_messages = 0
         self.sent_messages: list[SendMessage] = []
         self.sent_polls: list[SendPoll] = []
         self.sent_poll_ids: list[str] = []
@@ -200,6 +201,9 @@ class RecordingSession(BaseSession):
         timeout: int | None = None,
     ) -> TelegramType:
         if type(method).__name__ in self._failed_method_names:
+            raise TelegramBadRequest(method=method, message="Bad Request")
+        if isinstance(method, SendMessage) and self._failed_send_messages:
+            self._failed_send_messages -= 1
             raise TelegramBadRequest(method=method, message="Bad Request")
 
         if isinstance(method, SendMessage):
@@ -264,6 +268,9 @@ class RecordingSession(BaseSession):
 
     def fail_methods(self, *method_names: str) -> None:
         self._failed_method_names = frozenset(method_names)
+
+    def fail_next_send_message(self) -> None:
+        self._failed_send_messages += 1
 
 
 class RecordingCommandMenuClient:
@@ -3300,15 +3307,48 @@ async def test_coffee_shout_uses_persisted_lunch_attendance(tmp_path: Path) -> N
 
     await dispatcher.feed_update(bot, make_update("/coffee 15", chat_type="group"))
 
+    assert len(session.sent_messages) == 2
+    assert (
+        session.sent_messages[0].text
+        == "@anna, присоединяйтесь на кофе."
+    )
+    assert session.sent_messages[0].reply_parameters is None
+    assert session.sent_messages[1].text == (
+        "☕ Максим предлагает кофе\n"
+        "Время: <b>12:30</b>\n"
+        "Через: <b>15 минут</b>\n\n"
+        "Идут (1):\n• Максим"
+    )
+    assert session.pin_requests[0].message_id == 2
+
+
+async def test_coffee_card_is_created_when_shout_fails(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    activate_user(database, 43, "Анна", "anna")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    services = make_test_services(database)
+    dispatcher = create_dispatcher(services)
+
+    await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
+    attendance_poll_id = session.sent_poll_ids[0]
+    await dispatcher.feed_update(
+        bot,
+        make_poll_answer_update(attendance_poll_id, (1,), user_id=43, username="anna"),
+    )
+    session.clear_messages()
+    session.fail_next_send_message()
+
+    await dispatcher.feed_update(bot, make_update("/coffee 15", chat_type="group"))
+
     assert sent_texts(session) == [
         "☕ Максим предлагает кофе\n"
         "Время: <b>12:30</b>\n"
         "Через: <b>15 минут</b>\n\n"
-        "Идут (1):\n• Максим",
-        "@anna, присоединяйтесь на кофе.",
+        "Идут (1):\n• Максим"
     ]
-    assert session.sent_messages[1].reply_parameters is not None
-    assert session.sent_messages[1].reply_parameters.message_id == 1
+    assert session.pin_requests[0].message_id == 1
 
 
 async def test_coffee_leave_button_makes_empty_session_complete_silently(
