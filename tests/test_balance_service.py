@@ -75,11 +75,12 @@ def save_active_splitwise_user(
     telegram_user_id: int,
     display_name: str,
     splitwise_user_id: int,
+    username: str | None = None,
 ) -> None:
     users.save_pending_registration(
         make_profile(
             telegram_user_id=telegram_user_id,
-            username=f"user{telegram_user_id}",
+            username=username if username is not None else f"user{telegram_user_id}",
             first_name=display_name,
         ),
         display_name,
@@ -144,11 +145,11 @@ async def test_balance_formats_active_linked_users_by_rsd_debt_order(
     ).balance(42)
 
     assert result == (
-        "Текущая ситуация по балансам в Splitwise:\n"
+        "<b>Балансы Splitwise</b>\n"
         "\n"
-        '🔴 <a href="tg://user?id=43">Антон</a>: <b>-10837.88 RSD</b>\n'
-        '⚪ <a href="tg://user?id=42">Максим</a>: +277.97 RSD\n'
-        '🟢 <a href="tg://user?id=44">Тимофей</a>: +18976.74 RSD'
+        '🔴 <b>−10 837.88 RSD</b> · <a href="https://t.me/user43">Антон</a>\n'
+        '⚪ +277.97 RSD · <a href="https://t.me/user42">Максим</a>\n'
+        '🟢 +18 976.74 RSD · <a href="https://t.me/user44">Тимофей</a>'
     )
 
 
@@ -165,9 +166,9 @@ async def test_balance_active_user_without_splitwise_link_can_view_group_balance
     )
 
     assert await make_service(users, (make_member(1002, "-100.50"),)).balance(42) == (
-        "Текущая ситуация по балансам в Splitwise:\n"
+        "<b>Балансы Splitwise</b>\n"
         "\n"
-        '⚪ <a href="tg://user?id=43">Антон</a>: <b>-100.50 RSD</b>'
+        '⚪ <b>−100.50 RSD</b> · <a href="https://t.me/user43">Антон</a>'
     )
 
 
@@ -184,9 +185,9 @@ async def test_balance_ignores_non_rsd_and_uses_zero_when_rsd_is_missing(
     assert await make_service(users, (make_member(1001, "10.00", currency_code="EUR"),)).balance(
         42
     ) == (
-        "Текущая ситуация по балансам в Splitwise:\n"
+        "<b>Балансы Splitwise</b>\n"
         "\n"
-        '⚪ <a href="tg://user?id=42">Максим</a>: 0.00 RSD'
+        '⚪ 0.00 RSD · <a href="https://t.me/user42">Максим</a>'
     )
 
 
@@ -199,10 +200,27 @@ async def test_balance_escapes_linked_user_display_name(users: UserRepository) -
     )
 
     assert await make_service(users, (make_member(1001, "-1.00"),)).balance(42) == (
-        "Текущая ситуация по балансам в Splitwise:\n"
+        "<b>Балансы Splitwise</b>\n"
         "\n"
-        '⚪ <a href="tg://user?id=42">Макс &lt;Admin&gt; &amp; Co</a>: '
-        "<b>-1.00 RSD</b>"
+        '⚪ <b>−1.00 RSD</b> · '
+        '<a href="https://t.me/user42">Макс &lt;Admin&gt; &amp; Co</a>'
+    )
+
+
+async def test_balance_does_not_mention_linked_user_without_username(
+    users: UserRepository,
+) -> None:
+    users.save_pending_registration(
+        make_profile(username=None),
+        "Максим",
+        make_member(1001, "0"),
+    )
+    users.approve_by_telegram_id(42)
+
+    assert await make_service(users, (make_member(1001, "10.00"),)).balance(42) == (
+        "<b>Балансы Splitwise</b>\n"
+        "\n"
+        "⚪ +10.00 RSD · Максим"
     )
 
 

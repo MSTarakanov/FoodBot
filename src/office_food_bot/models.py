@@ -118,7 +118,7 @@ class PendingRegistration:
 
 @dataclass(frozen=True)
 class ActiveSplitwiseUser:
-    telegram_user_id: int
+    username: str | None
     display_name: str
     splitwise_user_id: int
     email: str | None
