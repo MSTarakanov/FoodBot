@@ -3288,10 +3288,14 @@ async def test_failed_coffee_card_update_rolls_back_reschedule(
     ] == ["Максим"]
 
 
-async def test_coffee_shout_uses_persisted_lunch_attendance(tmp_path: Path) -> None:
+async def test_coffee_shout_combines_persisted_lunch_poll_answers(
+    tmp_path: Path,
+) -> None:
     database = make_database(tmp_path)
     activate_user(database, 42, "Максим", "misha")
     activate_user(database, 43, "Анна", "anna")
+    activate_user(database, 44, "Борис", "boris")
+    activate_user(database, 45, "Вера", "vera")
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
     services = make_test_services(database)
@@ -3299,9 +3303,48 @@ async def test_coffee_shout_uses_persisted_lunch_attendance(tmp_path: Path) -> N
 
     await dispatcher.feed_update(bot, make_update("/lunch", chat_type="group"))
     attendance_poll_id = session.sent_poll_ids[0]
+    place_poll_id = session.sent_poll_ids[1]
+    independent_option_index = ROSE_LUNCH_POLLS.lunch.options.index(
+        PollOption.LUNCH_EAT_INDEPENDENTLY
+    )
+    place_option_index = ROSE_LUNCH_POLLS.place.options.index(
+        PollOption.LUNCH_PLACE_ROSE_BEREZKA
+    )
     await dispatcher.feed_update(
         bot,
-        make_poll_answer_update(attendance_poll_id, (1,), user_id=43, username="anna"),
+        make_poll_answer_update(
+            attendance_poll_id,
+            (independent_option_index,),
+            user_id=43,
+            username="anna",
+        ),
+    )
+    await dispatcher.feed_update(
+        bot,
+        make_poll_answer_update(
+            place_poll_id,
+            (place_option_index,),
+            user_id=44,
+            username="boris",
+        ),
+    )
+    await dispatcher.feed_update(
+        bot,
+        make_poll_answer_update(
+            attendance_poll_id,
+            (independent_option_index,),
+            user_id=45,
+            username="vera",
+        ),
+    )
+    await dispatcher.feed_update(
+        bot,
+        make_poll_answer_update(
+            place_poll_id,
+            (place_option_index,),
+            user_id=45,
+            username="vera",
+        ),
     )
     session.clear_messages()
 
@@ -3310,7 +3353,7 @@ async def test_coffee_shout_uses_persisted_lunch_attendance(tmp_path: Path) -> N
     assert len(session.sent_messages) == 2
     assert (
         session.sent_messages[0].text
-        == "@anna, присоединяйтесь на кофе."
+        == "@anna @boris @vera, присоединяйтесь на кофе."
     )
     assert session.sent_messages[0].reply_parameters is None
     assert session.sent_messages[1].text == (

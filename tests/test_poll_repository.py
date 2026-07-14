@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
+import pytest
+
 from office_food_bot.database import Database
 from office_food_bot.models import (
     PollKind,
@@ -52,7 +54,12 @@ def test_lunch_attendance_uses_latest_poll_for_chat_and_date(
     database: Database,
 ) -> None:
     users = UserRepository(database)
-    for telegram_id, name in ((42, "Максим"), (43, "Анна")):
+    for telegram_id, name in (
+        (42, "Максим"),
+        (43, "Анна"),
+        (44, "Борис"),
+        (45, "Вера"),
+    ):
         users.create_pending_user(
             TelegramProfile(telegram_id, name.casefold(), name, None),
             name,
@@ -62,7 +69,7 @@ def test_lunch_attendance_uses_latest_poll_for_chat_and_date(
     context_date = date(2026, 7, 7)
     polls.save(
         StoredPoll(
-            "old",
+            "old-attendance",
             -100,
             10,
             PollKind.LUNCH_ATTENDANCE_V1,
@@ -72,7 +79,7 @@ def test_lunch_attendance_uses_latest_poll_for_chat_and_date(
     )
     polls.save(
         StoredPoll(
-            "new",
+            "new-attendance",
             -100,
             11,
             PollKind.LUNCH_ATTENDANCE_V1,
@@ -80,22 +87,158 @@ def test_lunch_attendance_uses_latest_poll_for_chat_and_date(
             datetime(2026, 7, 7, 10, tzinfo=UTC),
         )
     )
+    polls.save(
+        StoredPoll(
+            "old-place",
+            -100,
+            12,
+            PollKind.LUNCH_PLACE_ROSE_V1,
+            context_date,
+            datetime(2026, 7, 7, 9, tzinfo=UTC),
+        )
+    )
+    polls.save(
+        StoredPoll(
+            "new-place",
+            -100,
+            13,
+            PollKind.LUNCH_PLACE_SKYLINE_V1,
+            context_date,
+            datetime(2026, 7, 7, 10, tzinfo=UTC),
+        )
+    )
     polls.replace_selected_options(
-        "old",
+        "old-attendance",
         42,
         {PollOption.LUNCH_EAT_IN_OFFICE},
         datetime(2026, 7, 7, 9, 1, tzinfo=UTC),
     )
     polls.replace_selected_options(
-        "new",
+        "new-attendance",
         43,
         {PollOption.LUNCH_WOULD_ORDER},
+        datetime(2026, 7, 7, 10, 1, tzinfo=UTC),
+    )
+    polls.replace_selected_options(
+        "old-place",
+        44,
+        {PollOption.LUNCH_PLACE_ROSE_BEREZKA},
+        datetime(2026, 7, 7, 9, 1, tzinfo=UTC),
+    )
+    polls.replace_selected_options(
+        "new-place",
+        45,
+        {PollOption.LUNCH_PLACE_MCDONALDS},
         datetime(2026, 7, 7, 10, 1, tzinfo=UTC),
     )
 
     attendance = LunchAttendanceService(polls).list_office_users(-100, context_date)
 
-    assert [user.display_name for user in attendance] == ["Анна"]
+    assert [user.display_name for user in attendance] == ["Анна", "Вера"]
+
+
+@pytest.mark.parametrize(
+    ("kind", "option", "included"),
+    [
+        (PollKind.LUNCH_ATTENDANCE_V1, PollOption.LUNCH_EAT_INDEPENDENTLY, True),
+        (PollKind.LUNCH_ATTENDANCE_V1, PollOption.LUNCH_STAY_HOME, False),
+        (
+            PollKind.LUNCH_PLACE_SKYLINE_V1,
+            PollOption.LUNCH_PLACE_MCDONALDS,
+            True,
+        ),
+        (PollKind.LUNCH_PLACE_ROSE_V1, PollOption.LUNCH_PLACE_OTHER, True),
+        (
+            PollKind.LUNCH_PLACE_ROSE_V1,
+            PollOption.LUNCH_PLACE_VIEW_RESULTS,
+            False,
+        ),
+    ],
+)
+def test_lunch_attendance_includes_only_office_signals(
+    database: Database,
+    kind: PollKind,
+    option: PollOption,
+    included: bool,
+) -> None:
+    users = UserRepository(database)
+    users.create_pending_user(
+        TelegramProfile(42, "maxim", "Maxim", None),
+        "Maxim",
+    )
+    users.approve_by_telegram_id(42)
+    polls = PollRepository(database)
+    context_date = date(2026, 7, 7)
+    polls.save(
+        StoredPoll(
+            "poll-1",
+            -100,
+            10,
+            kind,
+            context_date,
+            datetime(2026, 7, 7, 10, tzinfo=UTC),
+        )
+    )
+    polls.replace_selected_options(
+        "poll-1",
+        42,
+        {option},
+        datetime(2026, 7, 7, 10, 1, tzinfo=UTC),
+    )
+
+    attendance = LunchAttendanceService(polls).list_office_users(-100, context_date)
+
+    assert bool(attendance) is included
+
+
+def test_lunch_attendance_combines_polls_without_duplicate_users(
+    database: Database,
+) -> None:
+    users = UserRepository(database)
+    for telegram_id, name in ((42, "Борис"), (43, "Анна")):
+        users.create_pending_user(
+            TelegramProfile(telegram_id, name.casefold(), name, None),
+            name,
+        )
+        users.approve_by_telegram_id(telegram_id)
+    polls = PollRepository(database)
+    context_date = date(2026, 7, 7)
+    for poll_id, kind in (
+        ("attendance", PollKind.LUNCH_ATTENDANCE_V1),
+        ("place", PollKind.LUNCH_PLACE_ROSE_V1),
+    ):
+        polls.save(
+            StoredPoll(
+                poll_id,
+                -100,
+                10,
+                kind,
+                context_date,
+                datetime(2026, 7, 7, 10, tzinfo=UTC),
+            )
+        )
+    polls.replace_selected_options(
+        "attendance",
+        42,
+        {PollOption.LUNCH_EAT_INDEPENDENTLY},
+        datetime(2026, 7, 7, 10, 1, tzinfo=UTC),
+    )
+    polls.replace_selected_options(
+        "place",
+        42,
+        {PollOption.LUNCH_PLACE_ROSE_BEREZKA},
+        datetime(2026, 7, 7, 10, 2, tzinfo=UTC),
+    )
+    polls.replace_selected_options(
+        "place",
+        43,
+        {PollOption.LUNCH_PLACE_OTHER},
+        datetime(2026, 7, 7, 10, 2, tzinfo=UTC),
+    )
+
+    attendance = LunchAttendanceService(polls).list_office_users(-100, context_date)
+
+    assert [user.display_name for user in attendance] == ["Анна", "Борис"]
 
 
 def test_replacing_poll_vote_returns_only_newly_selected_options(
