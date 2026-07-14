@@ -306,6 +306,7 @@ def test_list_active_splitwise_users_returns_only_active_linked_users(
     active_splitwise_users = users.list_active_splitwise_users()
 
     assert len(active_splitwise_users) == 1
+    assert active_splitwise_users[0].telegram_user_id == 42
     assert active_splitwise_users[0].display_name == "Максим"
     assert active_splitwise_users[0].splitwise_user_id == 1001
     assert active_splitwise_users[0].email == "max@example.com"

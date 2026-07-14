@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from html import escape
 
 from office_food_bot.models import SplitwiseMember, UserStatus
 from office_food_bot.repositories import UserRepository
@@ -16,6 +17,7 @@ MONEY_QUANT = Decimal("0.01")
 
 @dataclass(frozen=True)
 class BalanceLine:
+    telegram_user_id: int
     display_name: str
     amount: Decimal
 
@@ -46,7 +48,11 @@ class BalanceService:
             member.splitwise_user_id: member for member in splitwise_result.members
         }
         lines = tuple(
-            BalanceLine(linked_user.display_name, _rsd_balance(member))
+            BalanceLine(
+                linked_user.telegram_user_id,
+                linked_user.display_name,
+                _rsd_balance(member),
+            )
             for linked_user in linked_users
             if (member := members_by_id.get(linked_user.splitwise_user_id)) is not None
         )
@@ -82,7 +88,11 @@ def _format_balance_line(line: BalanceLine) -> str:
     amount = line.amount.quantize(MONEY_QUANT)
     sign = "+" if amount > 0 else ""
     formatted_amount = f"{sign}{amount:.2f} {BALANCE_CURRENCY_CODE}"
-    return f"{_balance_emoji(amount)} {line.display_name}: {formatted_amount}"
+    if amount < 0:
+        formatted_amount = f"<b>{formatted_amount}</b>"
+    display_name = escape(line.display_name)
+    user_link = f'<a href="tg://user?id={line.telegram_user_id}">{display_name}</a>'
+    return f"{_balance_emoji(amount)} {user_link}: {formatted_amount}"
 
 
 def _balance_emoji(amount: Decimal) -> str:
