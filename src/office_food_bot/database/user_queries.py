@@ -81,11 +81,13 @@ ORDER BY users.created_at, users.id
 
 LIST_ACTIVE_SPLITWISE_USERS_SQL = """
 SELECT
+    telegram_accounts.telegram_user_id,
     users.display_name,
     splitwise_users.splitwise_user_id,
     splitwise_users.email AS splitwise_email
 FROM users
 JOIN splitwise_users ON splitwise_users.user_id = users.id
+JOIN telegram_accounts ON telegram_accounts.user_id = users.id
 WHERE users.status = ?
 ORDER BY users.display_name, users.id
 """

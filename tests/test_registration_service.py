@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from office_food_bot.database import Database
+from office_food_bot.invitation_repositories import InvitationPreferenceRepository
 from office_food_bot.models import (
     ApprovalKind,
+    InvitationPreferences,
     RegistrationKind,
     SplitwiseMember,
     TelegramProfile,
@@ -212,6 +216,38 @@ def test_re_register_existing_active_user_updates_display_name_and_profile(
     assert user.username == "new"
     assert user.first_name == "New"
     assert user.last_name == "Name"
+
+
+def test_re_register_changing_only_name_preserves_existing_user_data(
+    database: Database,
+    users: UserRepository,
+) -> None:
+    service = make_service(database)
+    profile = make_profile(last_name="Petrov")
+    splitwise_member = make_splitwise_member()
+    preferences = InvitationPreferences(lunch_enabled=False, coffee_enabled=True)
+
+    service.register(profile, "Максим", splitwise_member)
+    service.approve(7, profile.telegram_user_id)
+    user_before = users.get_by_telegram_id(profile.telegram_user_id)
+    details_before = users.get_registration_details_by_telegram_id(profile.telegram_user_id)
+    assert user_before is not None
+    assert details_before is not None
+    invitation_preferences = InvitationPreferenceRepository(database)
+    invitation_preferences.save(user_before.id, preferences)
+
+    user_after = service.re_register(profile, "Макс", splitwise_member)
+
+    assert user_after == replace(
+        user_before,
+        display_name="Макс",
+        status=UserStatus.PENDING,
+    )
+    assert users.get_registration_details_by_telegram_id(profile.telegram_user_id) == replace(
+        details_before,
+        display_name="Макс",
+    )
+    assert invitation_preferences.get(user_before.id) == preferences
 
 
 def test_approve_forbids_non_admin(database: Database, users: UserRepository) -> None:

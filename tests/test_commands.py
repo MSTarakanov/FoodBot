@@ -2170,10 +2170,11 @@ async def test_balance_returns_splitwise_balances_for_active_linked_users(
     assert sent_texts(session) == [
         "Текущая ситуация по балансам в Splitwise:\n"
         "\n"
-        "🔴 Антон: -10837.88 RSD\n"
-        "⚪ Максим: +277.97 RSD\n"
-        "🟢 Тимофей: +18976.74 RSD"
+        '🔴 <a href="tg://user?id=43">Антон</a>: <b>-10837.88 RSD</b>\n'
+        '⚪ <a href="tg://user?id=42">Максим</a>: +277.97 RSD\n'
+        '🟢 <a href="tg://user?id=44">Тимофей</a>: +18976.74 RSD'
     ]
+    assert session.sent_messages[0].parse_mode == ParseMode.HTML
 
 
 async def test_vacation_sets_shows_and_clears_status_for_active_user(

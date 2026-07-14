@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
@@ -20,4 +21,8 @@ async def balance_command(
         await messenger.reply(message, "Не вижу твой Telegram user id.")
         return
 
-    await messenger.reply(message, await services.balances.balance(profile.telegram_user_id))
+    await messenger.reply(
+        message,
+        await services.balances.balance(profile.telegram_user_id),
+        parse_mode=ParseMode.HTML,
+    )
