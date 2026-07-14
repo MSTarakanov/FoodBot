@@ -81,7 +81,7 @@ ORDER BY users.created_at, users.id
 
 LIST_ACTIVE_SPLITWISE_USERS_SQL = """
 SELECT
-    telegram_accounts.telegram_user_id,
+    telegram_accounts.username,
     users.display_name,
     splitwise_users.splitwise_user_id,
     splitwise_users.email AS splitwise_email

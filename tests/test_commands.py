@@ -2168,11 +2168,11 @@ async def test_balance_returns_splitwise_balances_for_active_linked_users(
     await dispatcher.feed_update(bot, make_update("/balance"))
 
     assert sent_texts(session) == [
-        "Текущая ситуация по балансам в Splitwise:\n"
+        "<b>Балансы Splitwise</b>\n"
         "\n"
-        '🔴 <a href="tg://user?id=43">Антон</a>: <b>-10837.88 RSD</b>\n'
-        '⚪ <a href="tg://user?id=42">Максим</a>: +277.97 RSD\n'
-        '🟢 <a href="tg://user?id=44">Тимофей</a>: +18976.74 RSD'
+        '🔴 <b>−10 837.88 RSD</b> · <a href="https://t.me/anton">Антон</a>\n'
+        '⚪ +277.97 RSD · <a href="https://t.me/misha">Максим</a>\n'
+        '🟢 +18 976.74 RSD · <a href="https://t.me/tim">Тимофей</a>'
     ]
     assert session.sent_messages[0].parse_mode == ParseMode.HTML
 

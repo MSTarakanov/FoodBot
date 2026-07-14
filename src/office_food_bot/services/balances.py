@@ -3,21 +3,24 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 from html import escape
+from urllib.parse import quote
 
 from office_food_bot.models import SplitwiseMember, UserStatus
 from office_food_bot.repositories import UserRepository
 from office_food_bot.services.splitwise import SplitwiseGroupKind, SplitwiseService
 
 BALANCE_CURRENCY_CODE = "RSD"
-BALANCE_HEADER = "Текущая ситуация по балансам в Splitwise:"
+BALANCE_HEADER = "<b>Балансы Splitwise</b>"
 BALANCE_HIGH_DEBT_THRESHOLD = Decimal("-10000")
 BALANCE_HIGH_CREDIT_THRESHOLD = Decimal("10000")
 MONEY_QUANT = Decimal("0.01")
+MINUS_SIGN = "\N{MINUS SIGN}"
+THOUSANDS_SEPARATOR = "\N{NARROW NO-BREAK SPACE}"
 
 
 @dataclass(frozen=True)
 class BalanceLine:
-    telegram_user_id: int
+    username: str | None
     display_name: str
     amount: Decimal
 
@@ -49,7 +52,7 @@ class BalanceService:
         }
         lines = tuple(
             BalanceLine(
-                linked_user.telegram_user_id,
+                linked_user.username,
                 linked_user.display_name,
                 _rsd_balance(member),
             )
@@ -86,13 +89,24 @@ def _format_balance_lines(lines: tuple[BalanceLine, ...]) -> str:
 
 def _format_balance_line(line: BalanceLine) -> str:
     amount = line.amount.quantize(MONEY_QUANT)
-    sign = "+" if amount > 0 else ""
-    formatted_amount = f"{sign}{amount:.2f} {BALANCE_CURRENCY_CODE}"
+    formatted_amount = _format_amount(amount)
     if amount < 0:
         formatted_amount = f"<b>{formatted_amount}</b>"
+    return f"{_balance_emoji(amount)} {formatted_amount} · {_format_user_name(line)}"
+
+
+def _format_amount(amount: Decimal) -> str:
+    absolute_amount = f"{abs(amount):,.2f}".replace(",", THOUSANDS_SEPARATOR)
+    sign = MINUS_SIGN if amount < 0 else "+" if amount > 0 else ""
+    return f"{sign}{absolute_amount} {BALANCE_CURRENCY_CODE}"
+
+
+def _format_user_name(line: BalanceLine) -> str:
     display_name = escape(line.display_name)
-    user_link = f'<a href="tg://user?id={line.telegram_user_id}">{display_name}</a>'
-    return f"{_balance_emoji(amount)} {user_link}: {formatted_amount}"
+    if line.username is None:
+        return display_name
+    profile_url = f"https://t.me/{quote(line.username, safe='')}"
+    return f'<a href="{profile_url}">{display_name}</a>'
 
 
 def _balance_emoji(amount: Decimal) -> str:

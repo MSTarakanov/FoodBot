@@ -654,7 +654,7 @@ def _registration_details_from_row(row: sqlite3.Row) -> RegistrationDetails:
 
 def _active_splitwise_user_from_row(row: sqlite3.Row) -> ActiveSplitwiseUser:
     return ActiveSplitwiseUser(
-        telegram_user_id=int(row["telegram_user_id"]),
+        username=_optional_str(row["username"]),
         display_name=str(row["display_name"]),
         splitwise_user_id=int(row["splitwise_user_id"]),
         email=_optional_str(row["splitwise_email"]),
