@@ -147,9 +147,12 @@ async def test_balance_formats_active_linked_users_by_rsd_debt_order(
     assert result == (
         "<b>Балансы Splitwise</b>\n"
         "\n"
-        '🔴 <b>−10 837.88 RSD</b> · <a href="https://t.me/user43">Антон</a>\n'
-        '⚪ +277.97 RSD · <a href="https://t.me/user42">Максим</a>\n'
-        '🟢 +18 976.74 RSD · <a href="https://t.me/user44">Тимофей</a>'
+        '🔴 <b>−10 837.88 RSD</b> · '
+        '<a href="https://t.me/user43">Антон</a>\n'
+        '⚪ +   277.97 RSD · '
+        '<a href="https://t.me/user42">Максим</a>\n'
+        '🟢 +18 976.74 RSD · '
+        '<a href="https://t.me/user44">Тимофей</a>'
     )
 
 
@@ -168,7 +171,8 @@ async def test_balance_active_user_without_splitwise_link_can_view_group_balance
     assert await make_service(users, (make_member(1002, "-100.50"),)).balance(42) == (
         "<b>Балансы Splitwise</b>\n"
         "\n"
-        '⚪ <b>−100.50 RSD</b> · <a href="https://t.me/user43">Антон</a>'
+        '⚪ <b>−100.50 RSD</b> · '
+        '<a href="https://t.me/user43">Антон</a>'
     )
 
 
@@ -187,7 +191,8 @@ async def test_balance_ignores_non_rsd_and_uses_zero_when_rsd_is_missing(
     ) == (
         "<b>Балансы Splitwise</b>\n"
         "\n"
-        '⚪ 0.00 RSD · <a href="https://t.me/user42">Максим</a>'
+        '⚪  0.00 RSD · '
+        '<a href="https://t.me/user42">Максим</a>'
     )
 
 

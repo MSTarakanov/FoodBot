@@ -2170,11 +2170,17 @@ async def test_balance_returns_splitwise_balances_for_active_linked_users(
     assert sent_texts(session) == [
         "<b>Балансы Splitwise</b>\n"
         "\n"
-        '🔴 <b>−10 837.88 RSD</b> · <a href="https://t.me/anton">Антон</a>\n'
-        '⚪ +277.97 RSD · <a href="https://t.me/misha">Максим</a>\n'
-        '🟢 +18 976.74 RSD · <a href="https://t.me/tim">Тимофей</a>'
+        '🔴 <b>−10 837.88 RSD</b> · '
+        '<a href="https://t.me/anton">Антон</a>\n'
+        '⚪ +   277.97 RSD · '
+        '<a href="https://t.me/misha">Максим</a>\n'
+        '🟢 +18 976.74 RSD · '
+        '<a href="https://t.me/tim">Тимофей</a>'
     ]
     assert session.sent_messages[0].parse_mode == ParseMode.HTML
+    link_preview_options = session.sent_messages[0].link_preview_options
+    assert link_preview_options is not None
+    assert link_preview_options.is_disabled is True
 
 
 async def test_vacation_sets_shows_and_clears_status_for_active_user(
