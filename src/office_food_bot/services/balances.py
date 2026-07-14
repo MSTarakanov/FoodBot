@@ -15,6 +15,7 @@ BALANCE_HIGH_DEBT_THRESHOLD = Decimal("-10000")
 BALANCE_HIGH_CREDIT_THRESHOLD = Decimal("10000")
 MONEY_QUANT = Decimal("0.01")
 MINUS_SIGN = "\N{MINUS SIGN}"
+FIGURE_SPACE = "\N{FIGURE SPACE}"
 THOUSANDS_SEPARATOR = "\N{NARROW NO-BREAK SPACE}"
 
 
@@ -78,27 +79,52 @@ def _rsd_balance(member: SplitwiseMember) -> Decimal:
 
 def _format_balance_lines(lines: tuple[BalanceLine, ...]) -> str:
     sorted_lines = sorted(lines, key=lambda line: (line.amount, line.display_name))
+    integer_width = max(_integer_digit_count(line.amount) for line in sorted_lines)
     return "\n".join(
         (
             BALANCE_HEADER,
             "",
-            *(_format_balance_line(line) for line in sorted_lines),
+            *(_format_balance_line(line, integer_width) for line in sorted_lines),
         )
     )
 
 
-def _format_balance_line(line: BalanceLine) -> str:
+def _format_balance_line(line: BalanceLine, integer_width: int) -> str:
     amount = line.amount.quantize(MONEY_QUANT)
-    formatted_amount = _format_amount(amount)
+    formatted_amount = _format_amount(amount, integer_width)
     if amount < 0:
         formatted_amount = f"<b>{formatted_amount}</b>"
     return f"{_balance_emoji(amount)} {formatted_amount} · {_format_user_name(line)}"
 
 
-def _format_amount(amount: Decimal) -> str:
-    absolute_amount = f"{abs(amount):,.2f}".replace(",", THOUSANDS_SEPARATOR)
-    sign = MINUS_SIGN if amount < 0 else "+" if amount > 0 else ""
-    return f"{sign}{absolute_amount} {BALANCE_CURRENCY_CODE}"
+def _format_amount(amount: Decimal, integer_width: int) -> str:
+    integer_part, fractional_part = f"{abs(amount):.2f}".split(".")
+    alignment_prefix = _integer_alignment_prefix(len(integer_part), integer_width)
+    grouped_integer = _group_integer_part(integer_part)
+    sign = MINUS_SIGN if amount < 0 else "+" if amount > 0 else FIGURE_SPACE
+    return (
+        f"{alignment_prefix}{sign}{grouped_integer}.{fractional_part} "
+        f"{BALANCE_CURRENCY_CODE}"
+    )
+
+
+def _integer_alignment_prefix(value_digits: int, column_digits: int) -> str:
+    column_template = _group_integer_part(FIGURE_SPACE * column_digits)
+    value_template = _group_integer_part(FIGURE_SPACE * value_digits)
+    return column_template[: -len(value_template)]
+
+
+def _group_integer_part(integer_part: str) -> str:
+    groups: list[str] = []
+    while integer_part:
+        groups.append(integer_part[-3:])
+        integer_part = integer_part[:-3]
+    return THOUSANDS_SEPARATOR.join(reversed(groups))
+
+
+def _integer_digit_count(amount: Decimal) -> int:
+    integer_part = f"{abs(amount.quantize(MONEY_QUANT)):.2f}".partition(".")[0]
+    return len(integer_part)
 
 
 def _format_user_name(line: BalanceLine) -> str:

@@ -12,6 +12,7 @@ from aiogram.types import (
     InputPollOption,
     InputPollOptionUnion,
     KeyboardButton,
+    LinkPreviewOptions,
     Message,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
@@ -47,11 +48,13 @@ class BotMessenger:
         *,
         reply_markup: ReplyMarkupUnion | None = None,
         parse_mode: ParseMode | None = None,
+        link_preview_options: LinkPreviewOptions | None = None,
     ) -> Message:
         return await message.answer(
             text,
             reply_markup=reply_markup,
             parse_mode=parse_mode,
+            link_preview_options=link_preview_options,
         )
 
     async def send(
