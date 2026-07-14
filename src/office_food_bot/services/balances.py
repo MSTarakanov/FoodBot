@@ -16,6 +16,7 @@ BALANCE_HIGH_CREDIT_THRESHOLD = Decimal("10000")
 MONEY_QUANT = Decimal("0.01")
 MINUS_SIGN = "\N{MINUS SIGN}"
 FIGURE_SPACE = "\N{FIGURE SPACE}"
+THOUSANDS_SEPARATOR = "\N{NARROW NO-BREAK SPACE}"
 
 
 @dataclass(frozen=True)
@@ -78,7 +79,7 @@ def _rsd_balance(member: SplitwiseMember) -> Decimal:
 
 def _format_balance_lines(lines: tuple[BalanceLine, ...]) -> str:
     sorted_lines = sorted(lines, key=lambda line: (line.amount, line.display_name))
-    integer_width = max(_formatted_integer_width(line.amount) for line in sorted_lines)
+    integer_width = max(_integer_digit_count(line.amount) for line in sorted_lines)
     return "\n".join(
         (
             BALANCE_HEADER,
@@ -97,15 +98,32 @@ def _format_balance_line(line: BalanceLine, integer_width: int) -> str:
 
 
 def _format_amount(amount: Decimal, integer_width: int) -> str:
-    integer_part, fractional_part = f"{abs(amount):,.2f}".split(".")
-    grouped_integer = integer_part.replace(",", FIGURE_SPACE)
-    aligned_integer = f"{grouped_integer:{FIGURE_SPACE}>{integer_width}}"
+    integer_part, fractional_part = f"{abs(amount):.2f}".split(".")
+    alignment_prefix = _integer_alignment_prefix(len(integer_part), integer_width)
+    grouped_integer = _group_integer_part(integer_part)
     sign = MINUS_SIGN if amount < 0 else "+" if amount > 0 else FIGURE_SPACE
-    return f"{sign}{aligned_integer}.{fractional_part} {BALANCE_CURRENCY_CODE}"
+    return (
+        f"{alignment_prefix}{sign}{grouped_integer}.{fractional_part} "
+        f"{BALANCE_CURRENCY_CODE}"
+    )
 
 
-def _formatted_integer_width(amount: Decimal) -> int:
-    integer_part = f"{abs(amount.quantize(MONEY_QUANT)):,.2f}".partition(".")[0]
+def _integer_alignment_prefix(value_digits: int, column_digits: int) -> str:
+    column_template = _group_integer_part(FIGURE_SPACE * column_digits)
+    value_template = _group_integer_part(FIGURE_SPACE * value_digits)
+    return column_template[: -len(value_template)]
+
+
+def _group_integer_part(integer_part: str) -> str:
+    groups: list[str] = []
+    while integer_part:
+        groups.append(integer_part[-3:])
+        integer_part = integer_part[:-3]
+    return THOUSANDS_SEPARATOR.join(reversed(groups))
+
+
+def _integer_digit_count(amount: Decimal) -> int:
+    integer_part = f"{abs(amount.quantize(MONEY_QUANT)):.2f}".partition(".")[0]
     return len(integer_part)
 
 

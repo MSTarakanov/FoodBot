@@ -2170,11 +2170,11 @@ async def test_balance_returns_splitwise_balances_for_active_linked_users(
     assert sent_texts(session) == [
         "<b>Балансы Splitwise</b>\n"
         "\n"
-        '🔴 <b>−10 837.88 RSD</b> · '
+        '🔴 <b>−10 837.88 RSD</b> · '
         '<a href="https://t.me/anton">Антон</a>\n'
-        '⚪ +   277.97 RSD · '
+        '⚪    +277.97 RSD · '
         '<a href="https://t.me/misha">Максим</a>\n'
-        '🟢 +18 976.74 RSD · '
+        '🟢 +18 976.74 RSD · '
         '<a href="https://t.me/tim">Тимофей</a>'
     ]
     assert session.sent_messages[0].parse_mode == ParseMode.HTML

@@ -134,6 +134,12 @@ async def test_balance_formats_active_linked_users_by_rsd_debt_order(
         display_name="Тимофей",
         splitwise_user_id=1003,
     )
+    save_active_splitwise_user(
+        users,
+        telegram_user_id=45,
+        display_name="Олег",
+        splitwise_user_id=1004,
+    )
 
     result = await make_service(
         users,
@@ -141,17 +147,20 @@ async def test_balance_formats_active_linked_users_by_rsd_debt_order(
             make_member(1001, "277.967"),
             make_member(1002, "-10837.88"),
             make_member(1003, "18976.74"),
+            make_member(1004, "6028.75"),
         ),
     ).balance(42)
 
     assert result == (
         "<b>Балансы Splitwise</b>\n"
         "\n"
-        '🔴 <b>−10 837.88 RSD</b> · '
+        '🔴 <b>−10 837.88 RSD</b> · '
         '<a href="https://t.me/user43">Антон</a>\n'
-        '⚪ +   277.97 RSD · '
+        '⚪    +277.97 RSD · '
         '<a href="https://t.me/user42">Максим</a>\n'
-        '🟢 +18 976.74 RSD · '
+        '⚪  +6 028.75 RSD · '
+        '<a href="https://t.me/user45">Олег</a>\n'
+        '🟢 +18 976.74 RSD · '
         '<a href="https://t.me/user44">Тимофей</a>'
     )
 
