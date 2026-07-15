@@ -4,7 +4,13 @@ from decimal import Decimal
 
 from office_food_bot.models import SplitwiseBalance, SplitwiseMember, TelegramProfile
 from office_food_bot.repositories import UserRepository
-from office_food_bot.services.balances import BalanceService
+from office_food_bot.services.balances import (
+    BalanceEntry,
+    BalanceNotice,
+    BalanceNoticeKind,
+    BalanceReport,
+    BalanceService,
+)
 from office_food_bot.services.splitwise import SplitwiseService, SplitwiseUnavailableError
 
 
@@ -95,13 +101,17 @@ def save_active_splitwise_user(
 
 
 async def test_balance_requires_registration(users: UserRepository) -> None:
-    assert (await make_service(users).balance(42)).text == "Сначала зарегистрируйся: /register"
+    assert await make_service(users).balance(42) == BalanceNotice(
+        BalanceNoticeKind.REGISTRATION_REQUIRED
+    )
 
 
 async def test_balance_requires_approved_registration(users: UserRepository) -> None:
     users.create_pending_user(make_profile(), "Максим")
 
-    assert (await make_service(users).balance(42)).text == "Регистрация еще ждет аппрува."
+    assert await make_service(users).balance(42) == BalanceNotice(
+        BalanceNoticeKind.REGISTRATION_PENDING
+    )
 
 
 async def test_balance_returns_placeholder_when_splitwise_is_empty(
@@ -110,10 +120,12 @@ async def test_balance_returns_placeholder_when_splitwise_is_empty(
     users.create_pending_user(make_profile(), "Максим")
     users.approve_by_telegram_id(42)
 
-    assert (await make_service(users).balance(42)).text == "Splitwise пока не подключен."
+    assert await make_service(users).balance(42) == BalanceNotice(
+        BalanceNoticeKind.SPLITWISE_NOT_CONNECTED
+    )
 
 
-async def test_balance_formats_active_linked_users_by_rsd_debt_order(
+async def test_balance_builds_report_from_active_users_and_splitwise_balances(
     users: UserRepository,
 ) -> None:
     save_active_splitwise_user(
@@ -141,29 +153,23 @@ async def test_balance_formats_active_linked_users_by_rsd_debt_order(
         splitwise_user_id=1004,
     )
 
-    result = (
-        await make_service(
-            users,
-            (
-                make_member(1001, "277.967"),
-                make_member(1002, "-10837.88"),
-                make_member(1003, "18976.74"),
-                make_member(1004, "6028.75"),
-            ),
-        ).balance(42)
-    ).text
+    result = await make_service(
+        users,
+        (
+            make_member(1001, "277.967"),
+            make_member(1002, "-10837.88"),
+            make_member(1003, "18976.74"),
+            make_member(1004, "6028.75"),
+        ),
+    ).balance(42)
 
-    assert result == (
-        "<b>Балансы Splitwise</b>\n"
-        "\n"
-        '🔴 <b>−10 837.88 RSD</b> · '
-        '<a href="https://t.me/user43">Антон</a>\n'
-        '⚪    +277.97 RSD · '
-        '<a href="https://t.me/user42">Максим</a>\n'
-        '⚪  +6 028.75 RSD · '
-        '<a href="https://t.me/user45">Олег</a>\n'
-        '🟢 +18 976.74 RSD · '
-        '<a href="https://t.me/user44">Тимофей</a>'
+    assert result == BalanceReport(
+        entries=(
+            BalanceEntry("user43", "Антон", Decimal("-10837.88")),
+            BalanceEntry("user42", "Максим", Decimal("277.967")),
+            BalanceEntry("user45", "Олег", Decimal("6028.75")),
+            BalanceEntry("user44", "Тимофей", Decimal("18976.74")),
+        )
     )
 
 
@@ -179,11 +185,10 @@ async def test_balance_active_user_without_splitwise_link_can_view_group_balance
         splitwise_user_id=1002,
     )
 
-    assert (await make_service(users, (make_member(1002, "-100.50"),)).balance(42)).text == (
-        "<b>Балансы Splitwise</b>\n"
-        "\n"
-        '⚪ <b>−100.50 RSD</b> · '
-        '<a href="https://t.me/user43">Антон</a>'
+    assert await make_service(users, (make_member(1002, "-100.50"),)).balance(
+        42
+    ) == BalanceReport(
+        entries=(BalanceEntry("user43", "Антон", Decimal("-100.50")),)
     )
 
 
@@ -197,20 +202,15 @@ async def test_balance_ignores_non_rsd_and_uses_zero_when_rsd_is_missing(
         splitwise_user_id=1001,
     )
 
-    assert (
-        await make_service(
-            users,
-            (make_member(1001, "10.00", currency_code="EUR"),),
-        ).balance(42)
-    ).text == (
-        "<b>Балансы Splitwise</b>\n"
-        "\n"
-        '⚪  0.00 RSD · '
-        '<a href="https://t.me/user42">Максим</a>'
+    assert await make_service(
+        users,
+        (make_member(1001, "10.00", currency_code="EUR"),),
+    ).balance(42) == BalanceReport(
+        entries=(BalanceEntry("user42", "Максим", Decimal("0")),)
     )
 
 
-async def test_balance_escapes_linked_user_display_name(users: UserRepository) -> None:
+async def test_balance_preserves_user_display_name_in_report(users: UserRepository) -> None:
     save_active_splitwise_user(
         users,
         telegram_user_id=42,
@@ -218,11 +218,10 @@ async def test_balance_escapes_linked_user_display_name(users: UserRepository) -
         splitwise_user_id=1001,
     )
 
-    assert (await make_service(users, (make_member(1001, "-1.00"),)).balance(42)).text == (
-        "<b>Балансы Splitwise</b>\n"
-        "\n"
-        '⚪ <b>−1.00 RSD</b> · '
-        '<a href="https://t.me/user42">Макс &lt;Admin&gt; &amp; Co</a>'
+    assert await make_service(users, (make_member(1001, "-1.00"),)).balance(
+        42
+    ) == BalanceReport(
+        entries=(BalanceEntry("user42", "Макс <Admin> & Co", Decimal("-1.00")),)
     )
 
 
@@ -236,10 +235,10 @@ async def test_balance_does_not_mention_linked_user_without_username(
     )
     users.approve_by_telegram_id(42)
 
-    assert (await make_service(users, (make_member(1001, "10.00"),)).balance(42)).text == (
-        "<b>Балансы Splitwise</b>\n"
-        "\n"
-        "⚪ +10.00 RSD · Максим"
+    assert await make_service(users, (make_member(1001, "10.00"),)).balance(
+        42
+    ) == BalanceReport(
+        entries=(BalanceEntry(None, "Максим", Decimal("10.00")),)
     )
 
 
@@ -253,7 +252,9 @@ async def test_balance_skips_linked_users_missing_from_splitwise_response(
         splitwise_user_id=1001,
     )
 
-    assert (await make_service(users).balance(42)).text == "Splitwise пока не подключен."
+    assert await make_service(users).balance(42) == BalanceNotice(
+        BalanceNoticeKind.SPLITWISE_NOT_CONNECTED
+    )
 
 
 async def test_balance_returns_unavailable_when_splitwise_fails(
@@ -266,6 +267,6 @@ async def test_balance_returns_unavailable_when_splitwise_fails(
         splitwise_user_id=1001,
     )
 
-    assert (await make_service(users, unavailable=True).balance(42)).text == (
-        "Не смог получить балансы Splitwise. Попробуй позже."
+    assert await make_service(users, unavailable=True).balance(42) == BalanceNotice(
+        BalanceNoticeKind.SPLITWISE_UNAVAILABLE
     )

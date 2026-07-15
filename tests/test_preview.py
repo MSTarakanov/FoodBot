@@ -12,8 +12,9 @@ from aiogram.methods.base import TelegramType
 from aiogram.types import Chat, Message, User
 
 from office_food_bot.config import RuntimeEnvironment, Settings
-from office_food_bot.message_previews import MESSAGE_PREVIEWS
+from office_food_bot.messaging import TextMessagePayload
 from office_food_bot.preview import PreviewError, deliver_preview, resolve_chat_id
+from office_food_bot.previews import MESSAGE_PREVIEWS
 
 
 class PreviewSession(BaseSession):
@@ -110,7 +111,7 @@ async def test_deliver_preview_sends_catalog_payload() -> None:
     await deliver_preview(make_settings(), "balance-full", 42, bot=bot)
 
     expected = MESSAGE_PREVIEWS.render("balance-full")
-    assert expected is not None
+    assert isinstance(expected, TextMessagePayload)
     assert len(session.sent_messages) == 1
     assert session.sent_messages[0].text == expected.text
     assert session.sent_messages[0].parse_mode == expected.parse_mode

@@ -5,6 +5,7 @@ from aiogram.types import Message
 
 from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
+from office_food_bot.presenters import render_balance_message
 from office_food_bot.services import BotServices
 
 
@@ -22,5 +23,7 @@ async def balance_command(
 
     await messenger.reply_payload(
         message,
-        await services.balances.balance(profile.telegram_user_id),
+        render_balance_message(
+            await services.balances.balance(profile.telegram_user_id),
+        ),
     )

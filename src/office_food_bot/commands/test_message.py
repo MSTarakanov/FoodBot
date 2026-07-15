@@ -4,8 +4,8 @@ from aiogram.filters.command import CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from office_food_bot.message_previews import MESSAGE_PREVIEWS
 from office_food_bot.messaging import BotMessenger
+from office_food_bot.previews import MESSAGE_PREVIEWS
 
 
 async def test_message_command(

@@ -35,7 +35,12 @@ class LiveMessageReference:
 
 
 @dataclass(frozen=True, slots=True)
-class TextMessagePayload:
+class MessagePayload:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class TextMessagePayload(MessagePayload):
     text: str
     parse_mode: ParseMode | None = None
     link_preview_options: LinkPreviewOptions | None = None
@@ -51,8 +56,10 @@ class BotMessenger:
     async def reply_payload(
         self,
         message: Message,
-        payload: TextMessagePayload,
+        payload: MessagePayload,
     ) -> Message:
+        if not isinstance(payload, TextMessagePayload):
+            raise TypeError(f"Unsupported message payload: {type(payload).__name__}")
         return await self.reply(
             message,
             payload.text,
@@ -64,8 +71,10 @@ class BotMessenger:
         self,
         bot: Bot,
         chat_id: int,
-        payload: TextMessagePayload,
+        payload: MessagePayload,
     ) -> Message:
+        if not isinstance(payload, TextMessagePayload):
+            raise TypeError(f"Unsupported message payload: {type(payload).__name__}")
         return await self.send(
             bot,
             chat_id,

@@ -54,7 +54,7 @@ from office_food_bot.commands.menu import setup_bot_commands
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
 from office_food_bot.invitation_repositories import InvitationPreferenceRepository
-from office_food_bot.message_previews import MESSAGE_PREVIEWS
+from office_food_bot.messaging import TextMessagePayload
 from office_food_bot.models import (
     CoffeeSessionStatus,
     InvitationPreferences,
@@ -65,6 +65,7 @@ from office_food_bot.models import (
     UserStatus,
 )
 from office_food_bot.poll_options import PollOption
+from office_food_bot.previews import MESSAGE_PREVIEWS
 from office_food_bot.repositories import (
     LunchAutoChatRepository,
     LunchPinRepository,
@@ -740,7 +741,7 @@ async def test_admin_can_send_balance_preview_in_private_chat(tmp_path: Path) ->
     )
 
     expected = MESSAGE_PREVIEWS.render("balance-full")
-    assert expected is not None
+    assert isinstance(expected, TextMessagePayload)
     assert len(session.sent_messages) == 1
     assert session.sent_messages[0].text == expected.text
     assert session.sent_messages[0].parse_mode == expected.parse_mode

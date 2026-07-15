@@ -9,8 +9,8 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import Message
 
 from office_food_bot.config import RuntimeEnvironment, Settings, load_settings
-from office_food_bot.message_previews import MESSAGE_PREVIEWS
 from office_food_bot.messaging import BotMessenger
+from office_food_bot.previews import MESSAGE_PREVIEWS
 from office_food_bot.runtime_guard import (
     ProductionTokenInDevelopmentError,
     ensure_safe_telegram_token_for_environment,
@@ -54,7 +54,7 @@ async def deliver_preview(
 
     payload = MESSAGE_PREVIEWS.render(raw_case)
     if payload is None:
-        available = ", ".join(case.value for case in MESSAGE_PREVIEWS.cases)
+        available = ", ".join(MESSAGE_PREVIEWS.cases)
         raise PreviewError(f"Unknown preview case: {raw_case}. Available cases: {available}.")
 
     owns_bot = bot is None
