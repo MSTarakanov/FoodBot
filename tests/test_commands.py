@@ -54,6 +54,7 @@ from office_food_bot.commands.menu import setup_bot_commands
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
 from office_food_bot.invitation_repositories import InvitationPreferenceRepository
+from office_food_bot.message_previews import MESSAGE_PREVIEWS
 from office_food_bot.models import (
     CoffeeSessionStatus,
     InvitationPreferences,
@@ -125,7 +126,8 @@ ADMIN_PRIVATE_HELP_TEXT = (
     "<b>Администрирование:</b>\n"
     "/approve 123456789 - подтвердить регистрацию\n"
     "/register_requests_list - показать заявки на регистрацию\n"
-    "/debug 1 - включить или выключить debug режим\n\n"
+    "/debug 1 - включить или выключить debug режим\n"
+    "/test balance-full - отправить тестовое сообщение\n\n"
     "<b>Служебные:</b>\n"
     "/start - показать приветствие\n"
     "/help - показать список команд\n"
@@ -724,6 +726,75 @@ async def test_help_shows_admin_commands_to_admins(tmp_path: Path) -> None:
 
     assert sent_texts(session) == [ADMIN_PRIVATE_HELP_TEXT]
     assert session.sent_messages[0].parse_mode == ParseMode.HTML
+
+
+async def test_admin_can_send_balance_preview_in_private_chat(tmp_path: Path) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/test balance-full", user_id=7, first_name="Admin"),
+    )
+
+    expected = MESSAGE_PREVIEWS.render("balance-full")
+    assert expected is not None
+    assert len(session.sent_messages) == 1
+    assert session.sent_messages[0].text == expected.text
+    assert session.sent_messages[0].parse_mode == expected.parse_mode
+    assert session.sent_messages[0].link_preview_options == expected.link_preview_options
+
+
+@pytest.mark.parametrize("command", ["/test", "/test unknown"])
+async def test_test_command_lists_available_cases(
+    tmp_path: Path,
+    command: str,
+) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update(command, user_id=7, first_name="Admin"),
+    )
+
+    assert sent_texts(session) == [MESSAGE_PREVIEWS.help_text()]
+
+
+async def test_test_command_is_admin_only(tmp_path: Path) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/test balance-full"))
+
+    assert sent_texts(session) == ["Команда доступна только админам."]
+
+
+async def test_test_command_is_private_only(tmp_path: Path) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update(
+            "/test balance-full",
+            user_id=7,
+            first_name="Admin",
+            chat_type="group",
+        ),
+    )
+
+    assert sent_texts(session) == [
+        "Команда доступна только в личке: https://t.me/foodbot_dev"
+    ]
 
 
 async def test_help_shows_group_commands_in_group_chat(tmp_path: Path) -> None:

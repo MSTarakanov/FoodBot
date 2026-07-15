@@ -17,11 +17,13 @@ dev = [
     "mypy>=1.10,<3.0",
     "pytest>=8.2,<10.0",
     "pytest-asyncio>=0.23,<2.0",
+    "pytest-regressions>=2.11,<3.0",
     "ruff>=0.5,<1.0",
 ]
 
 [project.scripts]
 office-food-bot = "office_food_bot.main:run"
+preview = "office_food_bot.preview:run"
 
 [build-system]
 requires = ["setuptools>=69", "wheel"]

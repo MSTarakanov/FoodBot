@@ -103,6 +103,16 @@ Run the bot:
 ./run office-food-bot
 ```
 
+Preview a deterministic message through the configured development bot after
+opening its private chat and pressing Start:
+
+```bash
+./run preview balance-full
+```
+
+The same fixture is available to admins as `/test balance-full` in a private
+chat. Preview cases never read production data, Splitwise, or the local database.
+
 Run checks:
 
 ```bash

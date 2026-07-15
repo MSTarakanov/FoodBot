@@ -34,6 +34,13 @@ class LiveMessageReference:
     message_id: int
 
 
+@dataclass(frozen=True, slots=True)
+class TextMessagePayload:
+    text: str
+    parse_mode: ParseMode | None = None
+    link_preview_options: LinkPreviewOptions | None = None
+
+
 EDIT_TARGET_UNAVAILABLE_MESSAGES = (
     "message to edit not found",
     "message can't be edited",
@@ -41,6 +48,32 @@ EDIT_TARGET_UNAVAILABLE_MESSAGES = (
 
 
 class BotMessenger:
+    async def reply_payload(
+        self,
+        message: Message,
+        payload: TextMessagePayload,
+    ) -> Message:
+        return await self.reply(
+            message,
+            payload.text,
+            parse_mode=payload.parse_mode,
+            link_preview_options=payload.link_preview_options,
+        )
+
+    async def send_payload(
+        self,
+        bot: Bot,
+        chat_id: int,
+        payload: TextMessagePayload,
+    ) -> Message:
+        return await self.send(
+            bot,
+            chat_id,
+            payload.text,
+            parse_mode=payload.parse_mode,
+            link_preview_options=payload.link_preview_options,
+        )
+
     async def reply(
         self,
         message: Message,
@@ -66,6 +99,7 @@ class BotMessenger:
         reply_markup: ReplyMarkupUnion | None = None,
         reply_to_message_id: int | None = None,
         parse_mode: ParseMode | None = None,
+        link_preview_options: LinkPreviewOptions | None = None,
     ) -> Message:
         reply_parameters = None
         if reply_to_message_id is not None:
@@ -76,6 +110,7 @@ class BotMessenger:
             reply_markup=reply_markup,
             reply_parameters=reply_parameters,
             parse_mode=parse_mode,
+            link_preview_options=link_preview_options,
         )
 
     async def edit_or_send(

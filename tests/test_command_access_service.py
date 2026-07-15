@@ -101,6 +101,22 @@ def test_debug_command_is_forbidden_in_group(database: Database) -> None:
     assert result.denial_reason == CommandAccessDenialReason.PRIVATE_ONLY
 
 
+def test_test_command_is_private_admin_only_and_hidden_from_menu(
+    database: Database,
+) -> None:
+    access = make_access_service(database)
+
+    assert access.can_run("test", "private", 7).allowed
+    assert not access.can_run("test", "private", 42).allowed
+    assert not access.can_run("test", "group", 7).allowed
+    assert "test" not in {
+        command.name for command in access.visible_commands("private", 7)
+    }
+    assert "test" in {
+        entry.command_name for entry in access.visible_help_entries("private", 7)
+    }
+
+
 def test_denial_texts_cover_all_denial_reasons() -> None:
     assert set(DENIAL_MESSAGE_TEMPLATES) == set(CommandAccessDenialReason)
     assert command_access_denial_text(

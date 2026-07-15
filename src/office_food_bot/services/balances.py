@@ -5,6 +5,10 @@ from decimal import Decimal
 from html import escape
 from urllib.parse import quote
 
+from aiogram.enums import ParseMode
+from aiogram.types import LinkPreviewOptions
+
+from office_food_bot.messaging import TextMessagePayload
 from office_food_bot.models import SplitwiseMember, UserStatus
 from office_food_bot.repositories import UserRepository
 from office_food_bot.services.splitwise import SplitwiseGroupKind, SplitwiseService
@@ -26,27 +30,45 @@ class BalanceLine:
     amount: Decimal
 
 
+class BalanceMessageRenderer:
+    def render(self, lines: tuple[BalanceLine, ...]) -> TextMessagePayload:
+        return self.text(_format_balance_lines(lines))
+
+    def text(self, text: str) -> TextMessagePayload:
+        return TextMessagePayload(
+            text,
+            parse_mode=ParseMode.HTML,
+            link_preview_options=LinkPreviewOptions(is_disabled=True),
+        )
+
+
 class BalanceService:
-    def __init__(self, users: UserRepository, splitwise: SplitwiseService) -> None:
+    def __init__(
+        self,
+        users: UserRepository,
+        splitwise: SplitwiseService,
+        renderer: BalanceMessageRenderer | None = None,
+    ) -> None:
         self._users = users
         self._splitwise = splitwise
+        self._renderer = renderer or BalanceMessageRenderer()
 
-    async def balance(self, telegram_user_id: int) -> str:
+    async def balance(self, telegram_user_id: int) -> TextMessagePayload:
         user = self._users.get_by_telegram_id(telegram_user_id)
         if user is None:
-            return "Сначала зарегистрируйся: /register"
+            return self._renderer.text("Сначала зарегистрируйся: /register")
         if user.status == UserStatus.PENDING:
-            return "Регистрация еще ждет аппрува."
+            return self._renderer.text("Регистрация еще ждет аппрува.")
         if user.status != UserStatus.ACTIVE:
-            return "Регистрация сейчас неактивна."
+            return self._renderer.text("Регистрация сейчас неактивна.")
 
         linked_users = self._users.list_active_splitwise_users()
         if not linked_users:
-            return "Splitwise пока не подключен."
+            return self._renderer.text("Splitwise пока не подключен.")
 
         splitwise_result = await self._splitwise.group_members()
         if splitwise_result.kind == SplitwiseGroupKind.UNAVAILABLE:
-            return "Не смог получить балансы Splitwise. Попробуй позже."
+            return self._renderer.text("Не смог получить балансы Splitwise. Попробуй позже.")
 
         members_by_id = {
             member.splitwise_user_id: member for member in splitwise_result.members
@@ -61,9 +83,9 @@ class BalanceService:
             if (member := members_by_id.get(linked_user.splitwise_user_id)) is not None
         )
         if not lines:
-            return "Splitwise пока не подключен."
+            return self._renderer.text("Splitwise пока не подключен.")
 
-        return _format_balance_lines(lines)
+        return self._renderer.render(lines)
 
 
 def _rsd_balance(member: SplitwiseMember) -> Decimal:

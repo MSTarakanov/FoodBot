@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
-from aiogram.types import LinkPreviewOptions, Message
+from aiogram.types import Message
 
 from office_food_bot.commands.common import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
@@ -21,9 +20,7 @@ async def balance_command(
         await messenger.reply(message, "Не вижу твой Telegram user id.")
         return
 
-    await messenger.reply(
+    await messenger.reply_payload(
         message,
         await services.balances.balance(profile.telegram_user_id),
-        parse_mode=ParseMode.HTML,
-        link_preview_options=LinkPreviewOptions(is_disabled=True),
     )

@@ -1,0 +1,22 @@
+link_preview_options:
+  is_disabled: true
+method: sendMessage
+parse_mode: HTML
+text: '<b>Балансы Splitwise</b>
+
+
+  🔴 <b>−12 500.00 RSD</b> · <a href="https://t.me/preview_alex">Алексей</a>
+
+  ⚪ <b> −7 536.37 RSD</b> · <a href="https://t.me/preview_olga">Ольга</a>
+
+  ⚪ <b> −2 083.70 RSD</b> · <a href="https://t.me/preview_anton">Антон</a>
+
+  ⚪       0.00 RSD · Без username
+
+  ⚪     +68.36 RSD · <a href="https://t.me/preview_tim">Тимофей</a>
+
+  ⚪    +277.97 RSD · <a href="https://t.me/preview_max">Максим</a>
+
+  ⚪  +6 028.75 RSD · <a href="https://t.me/preview_albert">Альберт</a>
+
+  🟢 +11 925.78 RSD · <a href="https://t.me/preview_sergey">Сергей</a>'

@@ -68,6 +68,8 @@ Admin private commands:
 - `/register <telegram_user_id>` - starts guided registration for another Telegram user.
 - `/register_requests_list` - shows pending registration requests.
 - `/debug 1` and `/debug 0` - allow an admin to test group-only commands in private chat.
+- `/test balance-full` - sends deterministic mock data through the current balance renderer. It is
+  documented in admin `/help` but hidden from the native slash menu.
 
 Command visibility and execution use the same access layer. Admin command visibility is based on
 `TELEGRAM_ADMIN_IDS`. If a private-only command is typed in a group, the bot replies with a link to
@@ -91,6 +93,18 @@ token verification is enabled, it detects the username with Telegram `getMe`, ot
 it directly. If `.env` already has a token, setup shows the bot username and `https://t.me/...`
 link before asking whether to keep it.
 Setup refuses to save the production Telegram bot token for local development.
+
+To inspect a deterministic message in the real Telegram client, open the development bot, press
+Start, and run:
+
+```bash
+./run preview balance-full
+```
+
+The command uses the only configured `TELEGRAM_ADMIN_IDS` value by default. Pass `--chat-id` when
+multiple admins are configured. Admins can also send `/test balance-full` in a private chat with
+either the development or production bot; `/test` is hidden from the slash menu and documented in
+the admin `/help` output.
 
 If `./setup-dev` is run from a linked `git worktree`, it can reuse ignored local state from the
 main worktree: `.env` values, `.tools`, and the local SQLite database. This keeps feature worktrees

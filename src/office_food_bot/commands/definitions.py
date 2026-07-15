@@ -161,6 +161,15 @@ COMMANDS: tuple[CommandDefinition, ...] = (
         admin_only=True,
     ),
     CommandDefinition(
+        "test",
+        "отправить тестовое сообщение",
+        "/test balance-full",
+        CommandScope.PRIVATE,
+        HelpSection.ADMINISTRATION,
+        admin_only=True,
+        show_in_menu=False,
+    ),
+    CommandDefinition(
         "meta",
         "сообщить, через сколько минут или в каком диапазоне придешь",
         "/meta 25 или /meta 20-30",
