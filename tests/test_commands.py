@@ -48,10 +48,10 @@ from aiogram.types import PollOption as TelegramPollOption
 
 from office_food_bot.app import create_dispatcher, create_services
 from office_food_bot.coffee_repositories import CoffeeSessionRepository
-from office_food_bot.commands.definitions import START_TEXT
-from office_food_bot.commands.errors import UNHANDLED_ERROR_REPLY_TEXT
+from office_food_bot.commanding.definition import START_TEXT
+from office_food_bot.commanding.errors.handler import UNHANDLED_ERROR_REPLY_TEXT
+from office_food_bot.commanding.menu import setup_bot_commands
 from office_food_bot.commands.factory import build_command_catalog
-from office_food_bot.commands.menu import setup_bot_commands
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
 from office_food_bot.invitation_repositories import InvitationPreferenceRepository
@@ -931,6 +931,10 @@ def test_command_catalog_contains_each_current_slash_command_once(
     )
     assert len(names) == len(set(names))
     assert all("definition" in type(command).__dict__ for command in catalog.commands)
+    assert tuple(
+        type(command).__module__.rsplit(".", maxsplit=1)[-1]
+        for command in catalog.commands
+    ) == names
     assert catalog.resolve("КОФЕ") is catalog.resolve("coffee")
 
 

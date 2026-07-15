@@ -4,19 +4,19 @@ from aiogram.filters.command import CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from office_food_bot.commands.base import (
+from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
     RawArguments,
     RawArgumentsParser,
 )
-from office_food_bot.commands.common import telegram_profile_from_message
-from office_food_bot.commands.definitions import (
+from office_food_bot.commanding.definition import (
     CommandDefinition,
     CommandHelpEntry,
     CommandScope,
     HelpSection,
 )
+from office_food_bot.commanding.profile import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
 

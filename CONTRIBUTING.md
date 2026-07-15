@@ -121,15 +121,26 @@ scripts/check
 
 ## Adding a command
 
-1. Add the handler in `src/office_food_bot/commands/`.
-2. Send text, choice buttons, inline buttons, and polls through `BotMessenger`,
+The command framework lives in `commanding/`; concrete slash commands live in
+`commands/`; callback, poll, and FSM continuation handlers live in `controllers/`;
+feature output formatting lives in `presenters/`.
+
+1. Add `<name>Command` in `src/office_food_bot/commands/<name>.py`. Keep exactly
+   one concrete slash command in the file and make the module name match its
+   canonical command name.
+2. Choose `RenderedCommand`, `EffectCommand`, or `FlowCommand`; keep the
+   immutable `CommandDefinition` on the concrete class and inject its dependencies.
+3. Add the command instance to `src/office_food_bot/commands/factory.py`. Slash
+   commands are resolved by `CommandCatalog`, so they are not registered manually
+   in the router.
+4. Send text, choice buttons, inline buttons, and polls through `BotMessenger`,
    not directly through `message.answer`, `bot.send_message`, or `bot.send_poll`.
-3. Keep database access inside repositories and business rules inside services.
-4. Register the handler in `src/office_food_bot/commands/router.py`.
-5. Add the slash-command metadata in `src/office_food_bot/commands/definitions.py`.
+5. Keep database access inside repositories, business rules inside services, and
+   feature-model formatting inside presenters.
 6. For multi-step flows, add aiogram FSM states and keep validation in the active
    state handler until the answer is valid or the user runs another command.
-7. For inline button callbacks, add `callback_query` handlers in the router.
+7. Put callback, poll, and FSM continuation handlers in `controllers/` and
+   register them in `src/office_food_bot/commands/router.py`.
 8. Add or update command tests in `tests/test_commands.py`; add messenger tests
    in `tests/test_messaging.py` when introducing a new response primitive.
 9. Run `scripts/check`.

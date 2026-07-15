@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from office_food_bot.commanding.access import CommandAccessService
 from office_food_bot.services.balances import BalanceService
 from office_food_bot.services.business_calendar import BusinessCalendarService
 from office_food_bot.services.coffee import CoffeeService
-from office_food_bot.services.command_access import CommandAccessService
 from office_food_bot.services.debug import DebugService
 from office_food_bot.services.invitations import InvitationPreferenceService
 from office_food_bot.services.job_scheduler import JobScheduler

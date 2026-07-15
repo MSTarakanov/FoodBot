@@ -5,6 +5,12 @@ from decimal import Decimal
 import pytest
 
 from office_food_bot.balance_models import BalanceEntry, BalanceReport
+from office_food_bot.commanding.errors.models import (
+    BalanceError,
+    BalanceErrorCode,
+    ExternalDependency,
+    InfrastructureUnavailableError,
+)
 from office_food_bot.models import (
     ActiveSplitwiseUser,
     SplitwiseBalance,
@@ -12,12 +18,6 @@ from office_food_bot.models import (
 )
 from office_food_bot.services.balances import BalanceService
 from office_food_bot.services.splitwise import SplitwiseService, SplitwiseUnavailableError
-from office_food_bot.user_errors import (
-    BalanceError,
-    BalanceErrorCode,
-    ExternalDependency,
-    InfrastructureUnavailableError,
-)
 
 
 class FakeSplitwiseClient:

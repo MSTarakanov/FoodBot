@@ -4,6 +4,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from office_food_bot.coffee_repositories import CoffeeSessionRepository
+from office_food_bot.commanding.access import CommandAccessService
 from office_food_bot.database import Database
 from office_food_bot.invitation_repositories import InvitationPreferenceRepository
 from office_food_bot.messaging import BotMessenger
@@ -20,7 +21,6 @@ from office_food_bot.repositories import (
 from office_food_bot.services.balances import BalanceService
 from office_food_bot.services.business_calendar import BusinessCalendarService
 from office_food_bot.services.coffee import CoffeeService
-from office_food_bot.services.command_access import CommandAccessService
 from office_food_bot.services.container import BotServices
 from office_food_bot.services.debug import DebugService
 from office_food_bot.services.invitations import InvitationPreferenceService

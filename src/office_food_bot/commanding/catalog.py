@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from office_food_bot.commands.base import Command
-from office_food_bot.commands.definitions import CommandDefinition
+from office_food_bot.commanding.contracts import Command
+from office_food_bot.commanding.definition import CommandDefinition
 
 
 class CommandCatalog:

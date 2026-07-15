@@ -4,15 +4,15 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from office_food_bot.commands.definitions import (
+from office_food_bot.commanding.definition import (
     CommandDefinition,
     CommandHelpEntry,
     CommandScope,
     VisibleCommandHelpEntry,
 )
+from office_food_bot.commanding.errors.models import CommonError, CommonErrorCode
 from office_food_bot.services.debug import DebugService
 from office_food_bot.services.registration import RegistrationService
-from office_food_bot.user_errors import CommonError, CommonErrorCode
 
 PRIVATE_CHAT_TYPE = "private"
 GROUP_CHAT_TYPES = frozenset({"group", "supergroup"})

@@ -13,8 +13,8 @@ from aiogram.types import (
     BotCommandScopeUnion,
 )
 
-from office_food_bot.commands.catalog import CommandCatalog
-from office_food_bot.commands.definitions import CommandDefinition
+from office_food_bot.commanding.catalog import CommandCatalog
+from office_food_bot.commanding.definition import CommandDefinition
 
 PRIVATE_CHAT_TYPE = "private"
 GROUP_MENU_CHAT_TYPE = "group"

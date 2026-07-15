@@ -1,40 +1,37 @@
 from __future__ import annotations
 
-from aiogram.filters.command import CommandObject
-
 from office_food_bot.commanding.contracts import (
     CommandContext,
-    FlowCommand,
+    EffectCommand,
     RawArguments,
     RawArgumentsParser,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
-from office_food_bot.controllers.registration import register_command
+from office_food_bot.controllers.registration import request_register_command
 from office_food_bot.services import BotServices
 
 
-class RegisterCommand(FlowCommand[RawArguments]):
+class RequestRegisterCommand(EffectCommand[RawArguments]):
     definition = CommandDefinition(
-        "register",
-        "пройти регистрацию",
-        "/register",
-        CommandScope.PRIVATE,
+        "request_register",
+        "попросить админа зарегистрировать вас",
+        "/request_register",
+        CommandScope.ANY,
         HelpSection.PROFILE_SETTINGS,
+        show_in_menu=False,
     )
 
     def __init__(self, services: BotServices) -> None:
         super().__init__(RawArgumentsParser(), (), ())
         self._services = services
 
-    async def start_flow(
+    async def execute_effect(
         self,
         context: CommandContext,
         request: RawArguments,
     ) -> None:
-        command = CommandObject(command=context.invocation.name, args=request.value)
-        await register_command(
+        await request_register_command(
             context.message,
-            command,
             context.bot,
             context.messenger,
             self._services,

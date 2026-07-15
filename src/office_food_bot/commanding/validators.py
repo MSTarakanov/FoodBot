@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from office_food_bot.commands.base import CommandContext
+from office_food_bot.commanding.contracts import CommandContext
+from office_food_bot.commanding.errors.models import CommonError, CommonErrorCode
 from office_food_bot.services.user_access import ActiveUserResolver
-from office_food_bot.user_errors import CommonError, CommonErrorCode
 
 
 class TelegramIdentityValidator:

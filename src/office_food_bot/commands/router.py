@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from aiogram import F, Router
 
-from office_food_bot.commands.catalog import CommandCatalog
-from office_food_bot.commands.coffee import coffee_callback_handler
-from office_food_bot.commands.dispatcher import CommandDispatcher
-from office_food_bot.commands.error_middleware import UserFacingErrorMiddleware
-from office_food_bot.commands.error_rendering import UserErrorRenderer
-from office_food_bot.commands.poll_tracking import poll_answer_handler
-from office_food_bot.commands.register import (
+from office_food_bot.commanding.catalog import CommandCatalog
+from office_food_bot.commanding.dispatcher import CommandDispatcher
+from office_food_bot.commanding.errors.middleware import UserFacingErrorMiddleware
+from office_food_bot.commanding.errors.rendering import UserErrorRenderer
+from office_food_bot.controllers.coffee import coffee_callback_handler
+from office_food_bot.controllers.polls import poll_answer_handler
+from office_food_bot.controllers.registration import (
     RegistrationFlow,
     confirm_reregistration_message,
     confirm_reregistration_unknown_message,

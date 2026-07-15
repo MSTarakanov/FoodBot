@@ -11,11 +11,11 @@ from office_food_bot.controllers.presence import handle_presence_command
 from office_food_bot.services import BotServices
 
 
-class EtaCommand(EffectCommand[RawArguments]):
+class MetaCommand(EffectCommand[RawArguments]):
     definition = CommandDefinition(
-        "eta",
-        "сообщить ожидаемое время доставки",
-        "/eta 20 или /eta 20-30",
+        "meta",
+        "сообщить, через сколько минут или в каком диапазоне придешь",
+        "/meta 25 или /meta 20-30",
         CommandScope.GROUP,
         HelpSection.MAIN,
     )

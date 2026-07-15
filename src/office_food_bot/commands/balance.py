@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 from office_food_bot.balance_models import BalanceReport
-from office_food_bot.commands.base import (
+from office_food_bot.commanding.contracts import (
     CommandContext,
     RawArguments,
     RawArgumentsParser,
     RenderedCommand,
 )
-from office_food_bot.commands.definitions import (
+from office_food_bot.commanding.definition import (
     CommandDefinition,
     CommandScope,
     HelpSection,
 )
-from office_food_bot.commands.validators import (
+from office_food_bot.commanding.validators import (
     ActiveUserValidator,
 )
 from office_food_bot.presenters import render_balance_message

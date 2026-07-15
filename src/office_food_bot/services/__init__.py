@@ -1,10 +1,5 @@
 from office_food_bot.services.balances import BalanceService
 from office_food_bot.services.business_calendar import BusinessCalendarService
-from office_food_bot.services.command_access import (
-    CommandAccessDenialReason,
-    CommandAccessResult,
-    CommandAccessService,
-)
 from office_food_bot.services.container import BotServices
 from office_food_bot.services.debug import DebugService
 from office_food_bot.services.factory import build_services
@@ -46,9 +41,6 @@ __all__ = [
     "BalanceService",
     "BusinessCalendarService",
     "BotServices",
-    "CommandAccessDenialReason",
-    "CommandAccessResult",
-    "CommandAccessService",
     "DebugService",
     "LunchService",
     "InvitationPreferenceService",

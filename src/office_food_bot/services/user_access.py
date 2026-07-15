@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from office_food_bot.commanding.errors.models import CommonError, CommonErrorCode
 from office_food_bot.models import RegisteredUser, UserStatus
 from office_food_bot.repositories import UserRepository
-from office_food_bot.user_errors import CommonError, CommonErrorCode
 
 
 class ActiveUserResolver:

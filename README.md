@@ -281,22 +281,33 @@ Maintainer note: to grant direct push access, open
 
 ## Adding a Command
 
-1. Add the handler in `src/office_food_bot/commands/`.
-2. Send text, choice buttons, inline buttons, and polls through `BotMessenger`,
+Command-related code is split by responsibility:
+
+- `commanding/` contains the reusable command lifecycle, catalog, access checks, and error pipeline;
+- `commands/` contains concrete slash commands, one command per file;
+- `controllers/` contains callback, poll, and FSM continuation handlers;
+- `presenters/` turns feature models into Telegram payloads;
+- `services/` and repositories contain business rules and persistence.
+
+1. Add `<name>Command` in `src/office_food_bot/commands/<name>.py`. The module name must match the
+   canonical slash-command name.
+2. Choose `RenderedCommand`, `EffectCommand`, or `FlowCommand` and keep the immutable
+   `CommandDefinition` on the concrete class.
+3. Pass parsers, validators, services, and renderers explicitly through the constructor.
+4. Add the command instance to `src/office_food_bot/commands/factory.py`. The common dispatcher
+   resolves it through `CommandCatalog`; do not register a separate slash handler in the router.
+5. Send text, choice buttons, inline buttons, and polls through `BotMessenger`,
    not directly through `message.answer`, `bot.send_message`, or `bot.send_poll`.
-3. Keep database access inside repositories and business rules inside services.
-4. Register the handler in `src/office_food_bot/commands/router.py`.
-5. Add the slash-command metadata in `src/office_food_bot/commands/definitions.py`.
-   Choose the command scope there: `private`, `group`, or `any`, and set `admin_only=True` when
-   needed. The command access middleware will enforce the same rules that `/help` and the Telegram
-   command menu show.
-6. Use aiogram FSM states for multi-step flows. Ordinary text remains inside the
+6. Keep database access inside repositories and business rules inside services. Render feature
+   models in presenters instead of assembling output inside repositories.
+7. Use aiogram FSM states for multi-step flows. Ordinary text remains inside the
    active state until it validates; slash commands clear the active flow and run
    their own handler.
-7. For inline button callbacks, add `callback_query` handlers in the router.
-8. Add or update command tests in `tests/test_commands.py`; add messenger tests
+8. Put callback, poll, and FSM continuation handlers in `controllers/` and register them in
+   `src/office_food_bot/commands/router.py`.
+9. Add or update command tests in `tests/test_commands.py`; add messenger tests
    in `tests/test_messaging.py` when introducing a new response primitive.
-9. Run `scripts/check`.
+10. Run `scripts/check`.
 
 ## Testing Approach
 

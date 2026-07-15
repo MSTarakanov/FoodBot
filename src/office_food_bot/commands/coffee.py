@@ -3,17 +3,15 @@ from __future__ import annotations
 from aiogram import Bot
 from aiogram.filters.command import CommandObject
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import Message
 
-from office_food_bot.coffee_callbacks import CoffeeCallbackData
-from office_food_bot.commands.base import (
+from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
     RawArguments,
     RawArgumentsParser,
 )
-from office_food_bot.commands.common import telegram_profile_from_message
-from office_food_bot.commands.definitions import (
+from office_food_bot.commanding.definition import (
     CommandArgumentPattern,
     CommandDefinition,
     CommandHelpEntry,
@@ -21,7 +19,7 @@ from office_food_bot.commands.definitions import (
     CommandScopeOverride,
     HelpSection,
 )
-from office_food_bot.commands.parsing import ParsedCommand
+from office_food_bot.commanding.profile import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
 
@@ -37,24 +35,6 @@ async def coffee_command(
     await _handle_coffee_command(
         message,
         command.args,
-        bot,
-        messenger,
-        services,
-        state,
-    )
-
-
-async def coffee_alias_command(
-    message: Message,
-    alias_command: ParsedCommand,
-    bot: Bot,
-    messenger: BotMessenger,
-    services: BotServices,
-    state: FSMContext,
-) -> None:
-    await _handle_coffee_command(
-        message,
-        alias_command.arguments,
         bot,
         messenger,
         services,
@@ -100,23 +80,6 @@ async def _handle_coffee_command(
     )
     if error is not None:
         await messenger.reply(message, error)
-
-
-async def coffee_callback_handler(
-    callback_query: CallbackQuery,
-    bot: Bot,
-    services: BotServices,
-) -> None:
-    callback_data = CoffeeCallbackData.unpack(callback_query.data or "")
-    if callback_data is None:
-        await callback_query.answer("Не понял действие.", show_alert=True)
-        return
-    result = await services.coffee.update_participation(
-        bot,
-        callback_query.from_user.id,
-        callback_data,
-    )
-    await callback_query.answer(result.text, show_alert=result.show_alert)
 
 
 class CoffeeCommand(EffectCommand[RawArguments]):

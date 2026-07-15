@@ -5,9 +5,9 @@ from datetime import datetime
 from aiogram import Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from office_food_bot.commands.catalog import CommandCatalog
-from office_food_bot.commands.error_rendering import build_user_error_renderer
-from office_food_bot.commands.errors import unhandled_error_handler
+from office_food_bot.commanding.catalog import CommandCatalog
+from office_food_bot.commanding.errors.handler import unhandled_error_handler
+from office_food_bot.commanding.errors.rendering import build_user_error_renderer
 from office_food_bot.commands.factory import build_command_catalog
 from office_food_bot.commands.router import create_command_router
 from office_food_bot.config import Settings

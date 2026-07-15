@@ -4,11 +4,11 @@ from collections.abc import Awaitable, Callable
 
 from aiogram.types import Message, TelegramObject
 
-from office_food_bot.commands.catalog import CommandCatalog
-from office_food_bot.commands.error_rendering import ErrorRenderContext, UserErrorRenderer
-from office_food_bot.commands.parsing import parse_command
+from office_food_bot.commanding.catalog import CommandCatalog
+from office_food_bot.commanding.errors.models import UserFacingError
+from office_food_bot.commanding.errors.rendering import ErrorRenderContext, UserErrorRenderer
+from office_food_bot.commanding.invocation import parse_command
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.user_errors import UserFacingError
 
 
 class UserFacingErrorMiddleware:

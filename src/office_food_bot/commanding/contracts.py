@@ -8,13 +8,13 @@ from aiogram import Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from office_food_bot.commands.definitions import CommandDefinition
-from office_food_bot.commands.parsing import ParsedCommand
+from office_food_bot.commanding.definition import CommandDefinition
+from office_food_bot.commanding.invocation import ParsedCommand
 from office_food_bot.messaging import BotMessenger, MessagePayload
 from office_food_bot.models import TelegramProfile
 
 if TYPE_CHECKING:
-    from office_food_bot.commands.catalog import CommandCatalog
+    from office_food_bot.commanding.catalog import CommandCatalog
 
 
 @dataclass(frozen=True, slots=True)

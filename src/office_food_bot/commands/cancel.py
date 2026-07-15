@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
-
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
@@ -10,30 +7,22 @@ from office_food_bot.commanding.contracts import (
     RawArgumentsParser,
 )
 from office_food_bot.commanding.definition import (
-    START_TEXT,
     CommandDefinition,
+    CommandFlowPolicy,
     CommandScope,
     HelpSection,
 )
-from office_food_bot.messaging import BotMessenger
+from office_food_bot.controllers.registration import cancel_registration_command
 
 
-async def start_command(
-    message: Message,
-    messenger: BotMessenger,
-    state: FSMContext,
-) -> None:
-    await state.clear()
-    await messenger.reply(message, START_TEXT)
-
-
-class StartCommand(EffectCommand[RawArguments]):
+class CancelCommand(EffectCommand[RawArguments]):
     definition = CommandDefinition(
-        "start",
-        "показать приветствие",
-        "/start",
+        "cancel",
+        "отменить текущий сценарий",
+        "/cancel",
         CommandScope.PRIVATE,
         HelpSection.SERVICE,
+        flow_policy=CommandFlowPolicy.MANAGED_BY_COMMAND,
     )
 
     def __init__(self) -> None:
@@ -44,4 +33,8 @@ class StartCommand(EffectCommand[RawArguments]):
         context: CommandContext,
         request: RawArguments,
     ) -> None:
-        await start_command(context.message, context.messenger, context.state)
+        await cancel_registration_command(
+            context.message,
+            context.messenger,
+            context.state,
+        )

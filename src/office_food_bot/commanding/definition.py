@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from office_food_bot.user_errors import InputErrorCode
+from office_food_bot.commanding.errors.models import InputErrorCode
 
 
 class CommandScope(StrEnum):

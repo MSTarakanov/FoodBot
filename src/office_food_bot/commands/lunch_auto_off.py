@@ -7,17 +7,18 @@ from office_food_bot.commanding.contracts import (
     RawArgumentsParser,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
-from office_food_bot.controllers.presence import handle_presence_command
+from office_food_bot.controllers.lunch_auto import disable_lunch_auto
 from office_food_bot.services import BotServices
 
 
-class EtaCommand(EffectCommand[RawArguments]):
+class LunchAutoOffCommand(EffectCommand[RawArguments]):
     definition = CommandDefinition(
-        "eta",
-        "сообщить ожидаемое время доставки",
-        "/eta 20 или /eta 20-30",
+        "lunch_auto_off",
+        "выключить авто-ланч в этом чате",
+        "/lunch_auto_off",
         CommandScope.GROUP,
-        HelpSection.MAIN,
+        HelpSection.AUTOMATION,
+        admin_only=True,
     )
 
     def __init__(self, services: BotServices) -> None:
@@ -29,4 +30,4 @@ class EtaCommand(EffectCommand[RawArguments]):
         context: CommandContext,
         request: RawArguments,
     ) -> None:
-        await handle_presence_command(context, request, self._services)
+        await disable_lunch_auto(context, self._services)

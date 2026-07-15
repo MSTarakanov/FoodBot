@@ -1,23 +1,21 @@
 from __future__ import annotations
 
-from aiogram.filters.command import CommandObject
-
 from office_food_bot.commanding.contracts import (
     CommandContext,
-    FlowCommand,
+    EffectCommand,
     RawArguments,
     RawArgumentsParser,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
-from office_food_bot.controllers.registration import register_command
+from office_food_bot.controllers.registration import quit_command
 from office_food_bot.services import BotServices
 
 
-class RegisterCommand(FlowCommand[RawArguments]):
+class QuitCommand(EffectCommand[RawArguments]):
     definition = CommandDefinition(
-        "register",
-        "пройти регистрацию",
-        "/register",
+        "quit",
+        "отрегистрироваться",
+        "/quit",
         CommandScope.PRIVATE,
         HelpSection.PROFILE_SETTINGS,
     )
@@ -26,16 +24,13 @@ class RegisterCommand(FlowCommand[RawArguments]):
         super().__init__(RawArgumentsParser(), (), ())
         self._services = services
 
-    async def start_flow(
+    async def execute_effect(
         self,
         context: CommandContext,
         request: RawArguments,
     ) -> None:
-        command = CommandObject(command=context.invocation.name, args=request.value)
-        await register_command(
+        await quit_command(
             context.message,
-            command,
-            context.bot,
             context.messenger,
             self._services,
             context.state,

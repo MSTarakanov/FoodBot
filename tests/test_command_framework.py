@@ -11,7 +11,8 @@ from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Chat, Message, User
 
-from office_food_bot.commands.base import (
+from office_food_bot.commanding.catalog import CommandCatalog
+from office_food_bot.commanding.contracts import (
     Command,
     CommandContext,
     EffectCommand,
@@ -20,15 +21,14 @@ from office_food_bot.commands.base import (
     RawArgumentsParser,
     RenderedCommand,
 )
-from office_food_bot.commands.catalog import CommandCatalog
-from office_food_bot.commands.definitions import (
+from office_food_bot.commanding.definition import (
     CommandDefinition,
     CommandScope,
     HelpSection,
 )
-from office_food_bot.commands.parsing import ParsedCommand
+from office_food_bot.commanding.errors.models import CommonError, CommonErrorCode
+from office_food_bot.commanding.invocation import ParsedCommand
 from office_food_bot.messaging import BotMessenger, MessagePayload, TextMessagePayload
-from office_food_bot.user_errors import CommonError, CommonErrorCode
 
 TEST_DEFINITION = CommandDefinition(
     "test",

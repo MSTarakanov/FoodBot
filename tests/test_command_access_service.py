@@ -1,21 +1,22 @@
 from __future__ import annotations
 
+from office_food_bot.commanding.access import (
+    CommandAccessDenialReason,
+    CommandAccessService,
+)
 from office_food_bot.commands.approve import ApproveCommand
 from office_food_bot.commands.balance import BalanceCommand
 from office_food_bot.commands.debug import DebugCommand
 from office_food_bot.commands.lunch import LunchCommand
-from office_food_bot.commands.register import RegisterCommand, RequestRegisterCommand
-from office_food_bot.commands.test_message import TestMessageCommand as PreviewTestMessageCommand
+from office_food_bot.commands.register import RegisterCommand
+from office_food_bot.commands.request_register import RequestRegisterCommand
+from office_food_bot.commands.test import TestCommand as PreviewCommand
 from office_food_bot.database import Database
 from office_food_bot.repositories import (
     DebugRepository,
     RegistrationRequestRepository,
     TelegramAccountRepository,
     UserRepository,
-)
-from office_food_bot.services.command_access import (
-    CommandAccessDenialReason,
-    CommandAccessService,
 )
 from office_food_bot.services.debug import DebugService
 from office_food_bot.services.registration import RegistrationService
@@ -123,16 +124,16 @@ def test_test_command_is_private_admin_only_and_hidden_from_menu(
 ) -> None:
     access = make_access_service(database)
 
-    definitions = (PreviewTestMessageCommand.definition,)
+    definitions = (PreviewCommand.definition,)
 
-    assert access.can_run(PreviewTestMessageCommand.definition, "private", 7).allowed
+    assert access.can_run(PreviewCommand.definition, "private", 7).allowed
     assert not access.can_run(
-        PreviewTestMessageCommand.definition,
+        PreviewCommand.definition,
         "private",
         42,
     ).allowed
     assert not access.can_run(
-        PreviewTestMessageCommand.definition,
+        PreviewCommand.definition,
         "group",
         7,
     ).allowed

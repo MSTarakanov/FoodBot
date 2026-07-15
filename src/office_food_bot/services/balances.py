@@ -4,14 +4,14 @@ from decimal import Decimal
 from typing import Protocol
 
 from office_food_bot.balance_models import BalanceEntry, BalanceReport
-from office_food_bot.models import ActiveSplitwiseUser, SplitwiseMember
-from office_food_bot.services.splitwise import SplitwiseGroupKind, SplitwiseService
-from office_food_bot.user_errors import (
+from office_food_bot.commanding.errors.models import (
     BalanceError,
     BalanceErrorCode,
     ExternalDependency,
     InfrastructureUnavailableError,
 )
+from office_food_bot.models import ActiveSplitwiseUser, SplitwiseMember
+from office_food_bot.services.splitwise import SplitwiseGroupKind, SplitwiseService
 
 BALANCE_CURRENCY_CODE = "RSD"
 

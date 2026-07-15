@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
+from office_food_bot.commanding.errors.models import CommonError, CommonErrorCode
 from office_food_bot.models import TelegramProfile
 from office_food_bot.repositories import UserRepository
 from office_food_bot.services.user_access import ActiveUserResolver
-from office_food_bot.user_errors import CommonError, CommonErrorCode
 
 
 def make_profile() -> TelegramProfile:

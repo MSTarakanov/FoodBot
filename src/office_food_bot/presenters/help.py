@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from html import escape
 
-from office_food_bot.commands.definitions import HelpSection, VisibleCommandHelpEntry
+from office_food_bot.commanding.definition import HelpSection, VisibleCommandHelpEntry
 
 
 class HelpRenderer:

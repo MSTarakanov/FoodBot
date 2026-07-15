@@ -5,16 +5,16 @@ from aiogram.filters.command import CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from office_food_bot.commands.base import (
+from office_food_bot.commanding.catalog import CommandCatalog
+from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
     RawArguments,
     RawArgumentsParser,
 )
-from office_food_bot.commands.catalog import CommandCatalog
-from office_food_bot.commands.common import telegram_profile_from_message
-from office_food_bot.commands.definitions import CommandDefinition, CommandScope, HelpSection
-from office_food_bot.commands.menu import setup_private_admin_commands
+from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
+from office_food_bot.commanding.menu import setup_private_admin_commands
+from office_food_bot.commanding.profile import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
 

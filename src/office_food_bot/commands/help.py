@@ -4,17 +4,17 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from office_food_bot.commands.base import (
+from office_food_bot.commanding.catalog import CommandCatalog
+from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
     RawArguments,
     RawArgumentsParser,
 )
-from office_food_bot.commands.catalog import CommandCatalog
-from office_food_bot.commands.common import telegram_profile_from_message
-from office_food_bot.commands.definitions import CommandDefinition, CommandScope, HelpSection
-from office_food_bot.commands.help_renderer import HELP_RENDERER
+from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
+from office_food_bot.commanding.profile import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
+from office_food_bot.presenters.help import HELP_RENDERER
 from office_food_bot.services import BotServices
 
 

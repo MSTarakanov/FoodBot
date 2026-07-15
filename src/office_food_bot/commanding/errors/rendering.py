@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
-from office_food_bot.commands.definitions import CommandDefinition
-from office_food_bot.user_errors import (
+from office_food_bot.commanding.definition import CommandDefinition
+from office_food_bot.commanding.errors.models import (
     BalanceError,
     BalanceErrorCode,
     CommandInputError,

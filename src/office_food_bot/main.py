@@ -5,7 +5,7 @@ from pathlib import Path
 from aiogram import Bot
 
 from office_food_bot.app import create_application, create_services
-from office_food_bot.commands.menu import setup_bot_commands
+from office_food_bot.commanding.menu import setup_bot_commands
 from office_food_bot.config import load_settings
 from office_food_bot.database import Database
 from office_food_bot.runtime_guard import (

@@ -2,14 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from office_food_bot.commands.balance import BalanceCommand
-from office_food_bot.commands.error_rendering import (
-    ErrorRenderContext,
-    ErrorRendererRegistration,
-    UserErrorRenderer,
-    build_user_error_renderer,
-)
-from office_food_bot.user_errors import (
+from office_food_bot.commanding.errors.models import (
     BalanceError,
     BalanceErrorCode,
     CommonError,
@@ -19,6 +12,13 @@ from office_food_bot.user_errors import (
     InfrastructureUnavailableError,
     UserFacingError,
 )
+from office_food_bot.commanding.errors.rendering import (
+    ErrorRenderContext,
+    ErrorRendererRegistration,
+    UserErrorRenderer,
+    build_user_error_renderer,
+)
+from office_food_bot.commands.balance import BalanceCommand
 
 
 class UnknownError(UserFacingError):

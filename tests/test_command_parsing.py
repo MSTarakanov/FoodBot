@@ -1,6 +1,6 @@
 import pytest
 
-from office_food_bot.commands.parsing import (
+from office_food_bot.commanding.invocation import (
     ParsedCommand,
     is_for_another_bot,
     parse_command,
