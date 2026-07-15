@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-from aiogram import Bot
-from aiogram.filters.command import CommandObject
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
-
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
@@ -12,56 +7,8 @@ from office_food_bot.commanding.contracts import (
     RawArgumentsParser,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
-from office_food_bot.commanding.profile import telegram_profile_from_message
-from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import ApprovalKind
 from office_food_bot.services import BotServices
-
-
-async def approve_command(
-    message: Message,
-    command: CommandObject,
-    bot: Bot,
-    messenger: BotMessenger,
-    services: BotServices,
-    state: FSMContext,
-) -> None:
-    await state.clear()
-    approver = telegram_profile_from_message(message)
-    if approver is None:
-        await messenger.reply(message, "Не вижу твой Telegram user id.")
-        return
-
-    if not command.args:
-        await messenger.reply(message, "Напиши Telegram user id: /approve 123456789")
-        return
-
-    try:
-        telegram_user_id = int(command.args.strip())
-    except ValueError:
-        await messenger.reply(message, "Telegram user id должен быть числом: /approve 123456789")
-        return
-
-    result = services.registration.approve(approver.telegram_user_id, telegram_user_id)
-    if result.kind == ApprovalKind.FORBIDDEN:
-        await messenger.reply(message, "Не могу: аппрувить могут только админы.")
-        return
-
-    if result.kind == ApprovalKind.NOT_FOUND:
-        await messenger.reply(message, f"Не нашел заявку для Telegram ID {telegram_user_id}.")
-        return
-
-    approved_user = result.user
-    if approved_user is None:
-        msg = "Approved user is unexpectedly missing"
-        raise RuntimeError(msg)
-
-    await messenger.reply(message, f"Аппрувнул: {approved_user.display_name}")
-    await messenger.try_send(
-        bot,
-        telegram_user_id,
-        f"Регистрация подтверждена. Теперь я буду звать тебя {approved_user.display_name}.",
-    )
 
 
 class ApproveCommand(EffectCommand[RawArguments]):
@@ -83,12 +30,59 @@ class ApproveCommand(EffectCommand[RawArguments]):
         context: CommandContext,
         request: RawArguments,
     ) -> None:
-        command = CommandObject(command=context.invocation.name, args=request.value)
-        await approve_command(
+        approver = context.profile
+        if approver is None:
+            await context.messenger.reply(
+                context.message,
+                "Не вижу твой Telegram user id.",
+            )
+            return
+
+        if not request.value:
+            await context.messenger.reply(
+                context.message,
+                "Напиши Telegram user id: /approve 123456789",
+            )
+            return
+
+        try:
+            telegram_user_id = int(request.value.strip())
+        except ValueError:
+            await context.messenger.reply(
+                context.message,
+                "Telegram user id должен быть числом: /approve 123456789",
+            )
+            return
+
+        result = self._services.registration.approve(
+            approver.telegram_user_id,
+            telegram_user_id,
+        )
+        if result.kind == ApprovalKind.FORBIDDEN:
+            await context.messenger.reply(
+                context.message,
+                "Не могу: аппрувить могут только админы.",
+            )
+            return
+
+        if result.kind == ApprovalKind.NOT_FOUND:
+            await context.messenger.reply(
+                context.message,
+                f"Не нашел заявку для Telegram ID {telegram_user_id}.",
+            )
+            return
+
+        approved_user = result.user
+        if approved_user is None:
+            raise RuntimeError("Approved user is unexpectedly missing")
+
+        await context.messenger.reply(
             context.message,
-            command,
+            f"Аппрувнул: {approved_user.display_name}",
+        )
+        await context.messenger.try_send(
             context.bot,
-            context.messenger,
-            self._services,
-            context.state,
+            telegram_user_id,
+            "Регистрация подтверждена. "
+            f"Теперь я буду звать тебя {approved_user.display_name}.",
         )

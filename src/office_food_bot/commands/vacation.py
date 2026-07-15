@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-from aiogram.filters.command import CommandObject
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
-
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
@@ -16,28 +12,7 @@ from office_food_bot.commanding.definition import (
     CommandScope,
     HelpSection,
 )
-from office_food_bot.commanding.profile import telegram_profile_from_message
-from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
-
-
-async def vacation_command(
-    message: Message,
-    command: CommandObject,
-    messenger: BotMessenger,
-    services: BotServices,
-    state: FSMContext,
-) -> None:
-    await state.clear()
-    profile = telegram_profile_from_message(message)
-    if profile is None:
-        await messenger.reply(message, "Не вижу твой Telegram user id.")
-        return
-
-    await messenger.reply(
-        message,
-        services.vacation.reply(profile.telegram_user_id, command.args or ""),
-    )
 
 
 class VacationCommand(EffectCommand[RawArguments]):
@@ -70,11 +45,18 @@ class VacationCommand(EffectCommand[RawArguments]):
         context: CommandContext,
         request: RawArguments,
     ) -> None:
-        command = CommandObject(command=context.invocation.name, args=request.value)
-        await vacation_command(
+        profile = context.profile
+        if profile is None:
+            await context.messenger.reply(
+                context.message,
+                "Не вижу твой Telegram user id.",
+            )
+            return
+
+        await context.messenger.reply(
             context.message,
-            command,
-            context.messenger,
-            self._services,
-            context.state,
+            self._services.vacation.reply(
+                profile.telegram_user_id,
+                request.value or "",
+            ),
         )

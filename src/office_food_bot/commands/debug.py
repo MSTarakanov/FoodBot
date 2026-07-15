@@ -1,11 +1,5 @@
 from __future__ import annotations
 
-from aiogram import Bot
-from aiogram.filters.command import CommandObject
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
-
-from office_food_bot.commanding.catalog import CommandCatalog
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
@@ -14,60 +8,10 @@ from office_food_bot.commanding.contracts import (
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
 from office_food_bot.commanding.menu import setup_private_admin_commands
-from office_food_bot.commanding.profile import telegram_profile_from_message
-from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
 
 DEBUG_ON_VALUES = frozenset({"1", "on", "true", "вкл"})
 DEBUG_OFF_VALUES = frozenset({"0", "off", "false", "выкл"})
-
-
-async def debug_command(
-    message: Message,
-    command: CommandObject,
-    bot: Bot,
-    messenger: BotMessenger,
-    services: BotServices,
-    catalog: CommandCatalog,
-    state: FSMContext,
-) -> None:
-    await state.clear()
-    profile = telegram_profile_from_message(message)
-    if profile is None:
-        await messenger.reply(message, "Не вижу твой Telegram user id.")
-        return
-
-    raw_argument = (command.args or "").strip().casefold()
-    if not raw_argument:
-        await messenger.reply(
-            message,
-            _debug_status_text(services.debug.is_enabled(profile.telegram_user_id)),
-        )
-        return
-
-    if raw_argument in DEBUG_ON_VALUES:
-        services.debug.set_enabled(profile.telegram_user_id, True)
-        await setup_private_admin_commands(
-            bot,
-            services.command_access,
-            catalog,
-            profile.telegram_user_id,
-        )
-        await messenger.reply(message, "Debug включен. В личке доступны все команды.")
-        return
-
-    if raw_argument in DEBUG_OFF_VALUES:
-        services.debug.set_enabled(profile.telegram_user_id, False)
-        await setup_private_admin_commands(
-            bot,
-            services.command_access,
-            catalog,
-            profile.telegram_user_id,
-        )
-        await messenger.reply(message, "Debug выключен.")
-        return
-
-    await messenger.reply(message, "Напиши /debug 1 или /debug 0")
 
 
 def _debug_status_text(enabled: bool) -> str:
@@ -95,13 +39,52 @@ class DebugCommand(EffectCommand[RawArguments]):
         context: CommandContext,
         request: RawArguments,
     ) -> None:
-        command = CommandObject(command=context.invocation.name, args=request.value)
-        await debug_command(
+        profile = context.profile
+        if profile is None:
+            await context.messenger.reply(
+                context.message,
+                "Не вижу твой Telegram user id.",
+            )
+            return
+
+        raw_argument = (request.value or "").strip().casefold()
+        if not raw_argument:
+            await context.messenger.reply(
+                context.message,
+                _debug_status_text(
+                    self._services.debug.is_enabled(profile.telegram_user_id)
+                ),
+            )
+            return
+
+        if raw_argument in DEBUG_ON_VALUES:
+            self._services.debug.set_enabled(profile.telegram_user_id, True)
+            await self._update_menu(context, profile.telegram_user_id)
+            await context.messenger.reply(
+                context.message,
+                "Debug включен. В личке доступны все команды.",
+            )
+            return
+
+        if raw_argument in DEBUG_OFF_VALUES:
+            self._services.debug.set_enabled(profile.telegram_user_id, False)
+            await self._update_menu(context, profile.telegram_user_id)
+            await context.messenger.reply(context.message, "Debug выключен.")
+            return
+
+        await context.messenger.reply(
             context.message,
-            command,
+            "Напиши /debug 1 или /debug 0",
+        )
+
+    async def _update_menu(
+        self,
+        context: CommandContext,
+        telegram_user_id: int,
+    ) -> None:
+        await setup_private_admin_commands(
             context.bot,
-            context.messenger,
-            self._services,
+            self._services.command_access,
             context.catalog,
-            context.state,
+            telegram_user_id,
         )
