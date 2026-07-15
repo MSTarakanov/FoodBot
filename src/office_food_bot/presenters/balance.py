@@ -7,14 +7,8 @@ from urllib.parse import quote
 from aiogram.enums import ParseMode
 from aiogram.types import LinkPreviewOptions
 
+from office_food_bot.balance_models import BalanceEntry, BalanceReport
 from office_food_bot.messaging import MessagePayload, TextMessagePayload
-from office_food_bot.services.balances import (
-    BalanceEntry,
-    BalanceNotice,
-    BalanceNoticeKind,
-    BalanceReport,
-    BalanceResult,
-)
 
 BALANCE_CURRENCY_CODE = "RSD"
 BALANCE_HEADER = "<b>Балансы Splitwise</b>"
@@ -24,26 +18,11 @@ MONEY_QUANT = Decimal("0.01")
 MINUS_SIGN = "\N{MINUS SIGN}"
 FIGURE_SPACE = "\N{FIGURE SPACE}"
 THOUSANDS_SEPARATOR = "\N{NARROW NO-BREAK SPACE}"
-BALANCE_NOTICE_TEXT = {
-    BalanceNoticeKind.REGISTRATION_REQUIRED: "Сначала зарегистрируйся: /register",
-    BalanceNoticeKind.REGISTRATION_PENDING: "Регистрация еще ждет аппрува.",
-    BalanceNoticeKind.REGISTRATION_INACTIVE: "Регистрация сейчас неактивна.",
-    BalanceNoticeKind.SPLITWISE_NOT_CONNECTED: "Splitwise пока не подключен.",
-    BalanceNoticeKind.SPLITWISE_UNAVAILABLE: (
-        "Не смог получить балансы Splitwise. Попробуй позже."
-    ),
-}
 
 
-def render_balance_message(result: BalanceResult) -> MessagePayload:
-    if isinstance(result, BalanceNotice):
-        text = BALANCE_NOTICE_TEXT[result.kind]
-    elif isinstance(result, BalanceReport):
-        text = _format_balance_report(result)
-    else:
-        raise TypeError(f"Unsupported balance result: {type(result).__name__}")
+def render_balance_message(report: BalanceReport) -> MessagePayload:
     return TextMessagePayload(
-        text,
+        _format_balance_report(report),
         parse_mode=ParseMode.HTML,
         link_preview_options=LinkPreviewOptions(is_disabled=True),
     )
@@ -77,10 +56,7 @@ def _format_amount(amount: Decimal, integer_width: int) -> str:
     alignment_prefix = _integer_alignment_prefix(len(integer_part), integer_width)
     grouped_integer = _group_integer_part(integer_part)
     sign = MINUS_SIGN if amount < 0 else "+" if amount > 0 else FIGURE_SPACE
-    return (
-        f"{alignment_prefix}{sign}{grouped_integer}.{fractional_part} "
-        f"{BALANCE_CURRENCY_CODE}"
-    )
+    return f"{alignment_prefix}{sign}{grouped_integer}.{fractional_part} {BALANCE_CURRENCY_CODE}"
 
 
 def _integer_alignment_prefix(value_digits: int, column_digits: int) -> str:

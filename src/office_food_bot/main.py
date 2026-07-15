@@ -4,7 +4,7 @@ from pathlib import Path
 
 from aiogram import Bot
 
-from office_food_bot.app import create_dispatcher, create_services
+from office_food_bot.app import create_application, create_services
 from office_food_bot.commands.menu import setup_bot_commands
 from office_food_bot.config import load_settings
 from office_food_bot.database import Database
@@ -29,8 +29,9 @@ async def main() -> None:
         database = Database(Path(settings.database_path))
         database.init_schema()
         services = create_services(database, settings)
-        dispatcher = create_dispatcher(services)
-        await setup_bot_commands(bot, services.command_access)
+        application = create_application(services)
+        dispatcher = application.dispatcher
+        await setup_bot_commands(bot, services.command_access, application.commands)
         services.lunch_scheduler.register_job(bot)
         await services.coffee.restore_jobs(bot)
         services.job_scheduler.start()

@@ -2,18 +2,12 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-import pytest
 from pytest_regressions.data_regression import DataRegressionFixture
 
+from office_food_bot.balance_models import BalanceEntry, BalanceReport
 from office_food_bot.messaging import TextMessagePayload
 from office_food_bot.presenters import render_balance_message
 from office_food_bot.previews.balance import build_balance_full_preview
-from office_food_bot.services.balances import (
-    BalanceEntry,
-    BalanceNotice,
-    BalanceNoticeKind,
-    BalanceReport,
-)
 
 
 def test_balance_full_payload_matches_snapshot(
@@ -34,26 +28,6 @@ def test_balance_full_payload_matches_snapshot(
             },
         }
     )
-
-
-@pytest.mark.parametrize(
-    ("kind", "expected_text"),
-    [
-        (BalanceNoticeKind.REGISTRATION_REQUIRED, "Сначала зарегистрируйся: /register"),
-        (BalanceNoticeKind.REGISTRATION_PENDING, "Регистрация еще ждет аппрува."),
-        (BalanceNoticeKind.REGISTRATION_INACTIVE, "Регистрация сейчас неактивна."),
-        (BalanceNoticeKind.SPLITWISE_NOT_CONNECTED, "Splitwise пока не подключен."),
-        (
-            BalanceNoticeKind.SPLITWISE_UNAVAILABLE,
-            "Не смог получить балансы Splitwise. Попробуй позже.",
-        ),
-    ],
-)
-def test_balance_notice_messages(kind: BalanceNoticeKind, expected_text: str) -> None:
-    payload = render_balance_message(BalanceNotice(kind))
-
-    assert isinstance(payload, TextMessagePayload)
-    assert payload.text == expected_text
 
 
 def test_balance_report_escapes_names_and_keeps_unlinked_name_plain() -> None:

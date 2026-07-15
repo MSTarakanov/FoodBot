@@ -46,6 +46,7 @@ from office_food_bot.services.splitwise import (
     SplitwiseService,
 )
 from office_food_bot.services.telegram_interactions import TelegramInteractionService
+from office_food_bot.services.user_access import ActiveUserResolver
 from office_food_bot.services.vacation import VacationService
 
 
@@ -120,6 +121,7 @@ def build_services(
         registration=registration,
         debug=debug,
         command_access=CommandAccessService(registration, debug),
+        active_users=ActiveUserResolver(users),
         invitations=invitations,
         coffee=coffee,
         business_calendar=business_calendar,

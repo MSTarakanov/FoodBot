@@ -2,16 +2,22 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from office_food_bot.models import SplitwiseBalance, SplitwiseMember, TelegramProfile
-from office_food_bot.repositories import UserRepository
-from office_food_bot.services.balances import (
-    BalanceEntry,
-    BalanceNotice,
-    BalanceNoticeKind,
-    BalanceReport,
-    BalanceService,
+import pytest
+
+from office_food_bot.balance_models import BalanceEntry, BalanceReport
+from office_food_bot.models import (
+    ActiveSplitwiseUser,
+    SplitwiseBalance,
+    SplitwiseMember,
 )
+from office_food_bot.services.balances import BalanceService
 from office_food_bot.services.splitwise import SplitwiseService, SplitwiseUnavailableError
+from office_food_bot.user_errors import (
+    BalanceError,
+    BalanceErrorCode,
+    ExternalDependency,
+    InfrastructureUnavailableError,
+)
 
 
 class FakeSplitwiseClient:
@@ -30,17 +36,12 @@ class FakeSplitwiseClient:
         return self._members
 
 
-def make_profile(
-    telegram_user_id: int = 42,
-    username: str | None = "misha",
-    first_name: str = "Misha",
-) -> TelegramProfile:
-    return TelegramProfile(
-        telegram_user_id=telegram_user_id,
-        username=username,
-        first_name=first_name,
-        last_name=None,
-    )
+class FakeBalanceUserRepository:
+    def __init__(self, users: tuple[ActiveSplitwiseUser, ...] = ()) -> None:
+        self._users = users
+
+    def list_active_splitwise_users(self) -> tuple[ActiveSplitwiseUser, ...]:
+        return self._users
 
 
 def make_member(
@@ -64,104 +65,52 @@ def make_member(
 
 
 def make_service(
-    users: UserRepository,
+    users: tuple[ActiveSplitwiseUser, ...] = (),
     members: tuple[SplitwiseMember, ...] = (),
     *,
     unavailable: bool = False,
 ) -> BalanceService:
     return BalanceService(
-        users,
+        FakeBalanceUserRepository(users),
         SplitwiseService(FakeSplitwiseClient(members, unavailable=unavailable), 55),
     )
 
 
-def save_active_splitwise_user(
-    users: UserRepository,
-    *,
-    telegram_user_id: int,
-    display_name: str,
+def make_user(
     splitwise_user_id: int,
-    username: str | None = None,
-) -> None:
-    users.save_pending_registration(
-        make_profile(
-            telegram_user_id=telegram_user_id,
-            username=username if username is not None else f"user{telegram_user_id}",
-            first_name=display_name,
-        ),
-        display_name,
-        SplitwiseMember(
-            splitwise_user_id=splitwise_user_id,
-            first_name="Splitwise",
-            last_name=None,
-            email=f"{splitwise_user_id}@example.com",
-        ),
-    )
-    users.approve_by_telegram_id(telegram_user_id)
-
-
-async def test_balance_requires_registration(users: UserRepository) -> None:
-    assert await make_service(users).balance(42) == BalanceNotice(
-        BalanceNoticeKind.REGISTRATION_REQUIRED
+    display_name: str,
+    username: str | None,
+) -> ActiveSplitwiseUser:
+    return ActiveSplitwiseUser(
+        username=username,
+        display_name=display_name,
+        splitwise_user_id=splitwise_user_id,
+        email=f"{splitwise_user_id}@example.com",
     )
 
 
-async def test_balance_requires_approved_registration(users: UserRepository) -> None:
-    users.create_pending_user(make_profile(), "Максим")
+async def test_balance_returns_placeholder_when_splitwise_is_empty() -> None:
+    with pytest.raises(BalanceError) as error:
+        await make_service().balance()
 
-    assert await make_service(users).balance(42) == BalanceNotice(
-        BalanceNoticeKind.REGISTRATION_PENDING
-    )
-
-
-async def test_balance_returns_placeholder_when_splitwise_is_empty(
-    users: UserRepository,
-) -> None:
-    users.create_pending_user(make_profile(), "Максим")
-    users.approve_by_telegram_id(42)
-
-    assert await make_service(users).balance(42) == BalanceNotice(
-        BalanceNoticeKind.SPLITWISE_NOT_CONNECTED
-    )
+    assert error.value.code == BalanceErrorCode.NO_SPLITWISE_USERS
 
 
-async def test_balance_builds_report_from_active_users_and_splitwise_balances(
-    users: UserRepository,
-) -> None:
-    save_active_splitwise_user(
-        users,
-        telegram_user_id=42,
-        display_name="Максим",
-        splitwise_user_id=1001,
-    )
-    save_active_splitwise_user(
-        users,
-        telegram_user_id=43,
-        display_name="Антон",
-        splitwise_user_id=1002,
-    )
-    save_active_splitwise_user(
-        users,
-        telegram_user_id=44,
-        display_name="Тимофей",
-        splitwise_user_id=1003,
-    )
-    save_active_splitwise_user(
-        users,
-        telegram_user_id=45,
-        display_name="Олег",
-        splitwise_user_id=1004,
-    )
-
+async def test_balance_builds_report_from_active_users_and_splitwise_balances() -> None:
     result = await make_service(
-        users,
+        (
+            make_user(1002, "Антон", "user43"),
+            make_user(1001, "Максим", "user42"),
+            make_user(1004, "Олег", "user45"),
+            make_user(1003, "Тимофей", "user44"),
+        ),
         (
             make_member(1001, "277.967"),
             make_member(1002, "-10837.88"),
             make_member(1003, "18976.74"),
             make_member(1004, "6028.75"),
         ),
-    ).balance(42)
+    ).balance()
 
     assert result == BalanceReport(
         entries=(
@@ -173,100 +122,52 @@ async def test_balance_builds_report_from_active_users_and_splitwise_balances(
     )
 
 
-async def test_balance_active_user_without_splitwise_link_can_view_group_balance(
-    users: UserRepository,
-) -> None:
-    users.create_pending_user(make_profile(), "Максим")
-    users.approve_by_telegram_id(42)
-    save_active_splitwise_user(
-        users,
-        telegram_user_id=43,
-        display_name="Антон",
-        splitwise_user_id=1002,
-    )
-
-    assert await make_service(users, (make_member(1002, "-100.50"),)).balance(
-        42
-    ) == BalanceReport(
+async def test_balance_builds_group_report_without_requester_data() -> None:
+    assert await make_service(
+        (make_user(1002, "Антон", "user43"),),
+        (make_member(1002, "-100.50"),),
+    ).balance() == BalanceReport(
         entries=(BalanceEntry("user43", "Антон", Decimal("-100.50")),)
     )
 
 
-async def test_balance_ignores_non_rsd_and_uses_zero_when_rsd_is_missing(
-    users: UserRepository,
-) -> None:
-    save_active_splitwise_user(
-        users,
-        telegram_user_id=42,
-        display_name="Максим",
-        splitwise_user_id=1001,
-    )
-
+async def test_balance_ignores_non_rsd_and_uses_zero_when_rsd_is_missing() -> None:
     assert await make_service(
-        users,
+        (make_user(1001, "Максим", "user42"),),
         (make_member(1001, "10.00", currency_code="EUR"),),
-    ).balance(42) == BalanceReport(
-        entries=(BalanceEntry("user42", "Максим", Decimal("0")),)
-    )
+    ).balance() == BalanceReport(entries=(BalanceEntry("user42", "Максим", Decimal("0")),))
 
 
-async def test_balance_preserves_user_display_name_in_report(users: UserRepository) -> None:
-    save_active_splitwise_user(
-        users,
-        telegram_user_id=42,
-        display_name="Макс <Admin> & Co",
-        splitwise_user_id=1001,
-    )
-
-    assert await make_service(users, (make_member(1001, "-1.00"),)).balance(
-        42
-    ) == BalanceReport(
+async def test_balance_preserves_user_display_name_in_report() -> None:
+    assert await make_service(
+        (make_user(1001, "Макс <Admin> & Co", "user42"),),
+        (make_member(1001, "-1.00"),),
+    ).balance() == BalanceReport(
         entries=(BalanceEntry("user42", "Макс <Admin> & Co", Decimal("-1.00")),)
     )
 
 
-async def test_balance_does_not_mention_linked_user_without_username(
-    users: UserRepository,
-) -> None:
-    users.save_pending_registration(
-        make_profile(username=None),
-        "Максим",
-        make_member(1001, "0"),
-    )
-    users.approve_by_telegram_id(42)
-
-    assert await make_service(users, (make_member(1001, "10.00"),)).balance(
-        42
-    ) == BalanceReport(
+async def test_balance_does_not_mention_linked_user_without_username() -> None:
+    assert await make_service(
+        (make_user(1001, "Максим", None),),
+        (make_member(1001, "10.00"),),
+    ).balance() == BalanceReport(
         entries=(BalanceEntry(None, "Максим", Decimal("10.00")),)
     )
 
 
-async def test_balance_skips_linked_users_missing_from_splitwise_response(
-    users: UserRepository,
-) -> None:
-    save_active_splitwise_user(
-        users,
-        telegram_user_id=42,
-        display_name="Максим",
-        splitwise_user_id=1001,
-    )
+async def test_balance_skips_linked_users_missing_from_splitwise_response() -> None:
+    with pytest.raises(BalanceError) as error:
+        await make_service((make_user(1001, "Максим", "user42"),)).balance()
 
-    assert await make_service(users).balance(42) == BalanceNotice(
-        BalanceNoticeKind.SPLITWISE_NOT_CONNECTED
-    )
+    assert error.value.code == BalanceErrorCode.NO_SPLITWISE_USERS
 
 
-async def test_balance_returns_unavailable_when_splitwise_fails(
-    users: UserRepository,
-) -> None:
-    save_active_splitwise_user(
-        users,
-        telegram_user_id=42,
-        display_name="Максим",
-        splitwise_user_id=1001,
-    )
+async def test_balance_returns_unavailable_when_splitwise_fails() -> None:
+    with pytest.raises(InfrastructureUnavailableError) as error:
+        await make_service(
+            (make_user(1001, "Максим", "user42"),),
+            unavailable=True,
+        ).balance()
 
-    assert await make_service(users, unavailable=True).balance(42) == BalanceNotice(
-        BalanceNoticeKind.SPLITWISE_UNAVAILABLE
-    )
+    assert error.value.dependency == ExternalDependency.SPLITWISE

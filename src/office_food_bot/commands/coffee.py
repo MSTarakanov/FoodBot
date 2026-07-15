@@ -6,7 +6,21 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from office_food_bot.coffee_callbacks import CoffeeCallbackData
+from office_food_bot.commands.base import (
+    CommandContext,
+    EffectCommand,
+    RawArguments,
+    RawArgumentsParser,
+)
 from office_food_bot.commands.common import telegram_profile_from_message
+from office_food_bot.commands.definitions import (
+    CommandArgumentPattern,
+    CommandDefinition,
+    CommandHelpEntry,
+    CommandScope,
+    CommandScopeOverride,
+    HelpSection,
+)
 from office_food_bot.commands.parsing import ParsedCommand
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
@@ -103,3 +117,58 @@ async def coffee_callback_handler(
         callback_data,
     )
     await callback_query.answer(result.text, show_alert=result.show_alert)
+
+
+class CoffeeCommand(EffectCommand[RawArguments]):
+    definition = CommandDefinition(
+        "coffee",
+        "позвать на кофе",
+        "/coffee 15 или /coffee 16:30",
+        CommandScope.GROUP,
+        HelpSection.MAIN,
+        additional_help=(
+            CommandHelpEntry(
+                "/coffee",
+                "показать настройки приглашений на кофе",
+                HelpSection.PROFILE_SETTINGS,
+                CommandScope.PRIVATE,
+            ),
+            CommandHelpEntry(
+                "/coffee on",
+                "включить приглашения",
+                HelpSection.PROFILE_SETTINGS,
+                CommandScope.ANY,
+            ),
+            CommandHelpEntry(
+                "/coffee off",
+                "выключить приглашения",
+                HelpSection.PROFILE_SETTINGS,
+                CommandScope.ANY,
+            ),
+        ),
+        text_aliases=("кофе",),
+        scope_overrides=(
+            CommandScopeOverride(CommandArgumentPattern.EMPTY, CommandScope.ANY),
+            CommandScopeOverride(CommandArgumentPattern.TOGGLE, CommandScope.ANY),
+        ),
+        private_description="настроить приглашения на кофе",
+    )
+
+    def __init__(self, services: BotServices) -> None:
+        super().__init__(RawArgumentsParser(), (), ())
+        self._services = services
+
+    async def execute_effect(
+        self,
+        context: CommandContext,
+        request: RawArguments,
+    ) -> None:
+        command = CommandObject(command=context.invocation.name, args=request.value)
+        await coffee_command(
+            context.message,
+            command,
+            context.bot,
+            context.messenger,
+            self._services,
+            context.state,
+        )

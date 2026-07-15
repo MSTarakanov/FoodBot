@@ -3,7 +3,14 @@ from __future__ import annotations
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from office_food_bot.commands.base import (
+    CommandContext,
+    EffectCommand,
+    RawArguments,
+    RawArgumentsParser,
+)
 from office_food_bot.commands.common import telegram_profile_from_message
+from office_food_bot.commands.definitions import CommandDefinition, CommandScope, HelpSection
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import (
     KnownTelegramAccount,
@@ -43,6 +50,33 @@ async def register_requests_list_command(
         message,
         _registration_requests_text(pending_requests, requested_accounts, seen_accounts),
     )
+
+
+class RegisterRequestsListCommand(EffectCommand[RawArguments]):
+    definition = CommandDefinition(
+        "register_requests_list",
+        "показать заявки на регистрацию",
+        "/register_requests_list",
+        CommandScope.PRIVATE,
+        HelpSection.ADMINISTRATION,
+        admin_only=True,
+    )
+
+    def __init__(self, services: BotServices) -> None:
+        super().__init__(RawArgumentsParser(), (), ())
+        self._services = services
+
+    async def execute_effect(
+        self,
+        context: CommandContext,
+        request: RawArguments,
+    ) -> None:
+        await register_requests_list_command(
+            context.message,
+            context.messenger,
+            self._services,
+            context.state,
+        )
 
 
 def _registration_requests_text(

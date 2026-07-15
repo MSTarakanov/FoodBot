@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from office_food_bot.balance_models import BalanceEntry, BalanceReport
 from office_food_bot.messaging import MessagePayload
 from office_food_bot.presenters import render_balance_message
 from office_food_bot.previews.catalog import PreviewDefinition
-from office_food_bot.services.balances import BalanceEntry, BalanceReport
 
 
 def build_balance_full_preview() -> MessagePayload:

@@ -22,6 +22,7 @@ from office_food_bot.services.presence import PresenceService
 from office_food_bot.services.registration import RegistrationService
 from office_food_bot.services.splitwise import SplitwiseService
 from office_food_bot.services.telegram_interactions import TelegramInteractionService
+from office_food_bot.services.user_access import ActiveUserResolver
 from office_food_bot.services.vacation import VacationService
 
 
@@ -32,6 +33,7 @@ class BotServices:
     registration: RegistrationService
     debug: DebugService
     command_access: CommandAccessService
+    active_users: ActiveUserResolver
     invitations: InvitationPreferenceService
     coffee: CoffeeService
     business_calendar: BusinessCalendarService

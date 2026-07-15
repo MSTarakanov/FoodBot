@@ -37,10 +37,12 @@ from office_food_bot.services.splitwise import (
     SplitwiseUnavailableError,
 )
 from office_food_bot.services.telegram_interactions import TelegramInteractionService
+from office_food_bot.services.user_access import ActiveUserResolver
 from office_food_bot.services.vacation import VacationService
 
 __all__ = [
     "ApprovalResult",
+    "ActiveUserResolver",
     "BalanceService",
     "BusinessCalendarService",
     "BotServices",

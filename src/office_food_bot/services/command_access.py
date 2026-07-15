@@ -1,18 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 
 from office_food_bot.commands.definitions import (
-    COMMANDS,
     CommandDefinition,
     CommandHelpEntry,
     CommandScope,
     VisibleCommandHelpEntry,
-    command_definition,
 )
 from office_food_bot.services.debug import DebugService
 from office_food_bot.services.registration import RegistrationService
+from office_food_bot.user_errors import CommonError, CommonErrorCode
 
 PRIVATE_CHAT_TYPE = "private"
 GROUP_CHAT_TYPES = frozenset({"group", "supergroup"})
@@ -44,15 +44,11 @@ class CommandAccessService:
 
     def can_run(
         self,
-        command_name: str,
+        definition: CommandDefinition,
         chat_type: str,
         telegram_user_id: int | None,
         arguments: str | None = None,
     ) -> CommandAccessResult:
-        definition = command_definition(command_name)
-        if definition is None:
-            return _allowed()
-
         denial = self._scope_denial(
             definition.scope_for(arguments),
             chat_type,
@@ -66,26 +62,44 @@ class CommandAccessService:
 
         return _allowed()
 
+    def validate_run(
+        self,
+        definition: CommandDefinition,
+        chat_type: str,
+        telegram_user_id: int | None,
+        arguments: str | None = None,
+    ) -> None:
+        denial = self.can_run(
+            definition,
+            chat_type,
+            telegram_user_id,
+            arguments,
+        ).denial_reason
+        if denial is not None:
+            raise CommonError(_common_error_code(denial))
+
     def visible_commands(
         self,
+        definitions: Iterable[CommandDefinition],
         chat_type: str,
         telegram_user_id: int | None,
     ) -> tuple[CommandDefinition, ...]:
         return tuple(
             definition
-            for definition in COMMANDS
+            for definition in definitions
             if definition.show_in_menu
             and self._definition_visible(definition, chat_type, telegram_user_id)
         )
 
     def visible_help_entries(
         self,
+        definitions: Iterable[CommandDefinition],
         chat_type: str,
         telegram_user_id: int | None,
     ) -> tuple[VisibleCommandHelpEntry, ...]:
         return tuple(
             self._visible_help_entry(definition, entry)
-            for definition in COMMANDS
+            for definition in definitions
             if not definition.admin_only or self.is_admin(telegram_user_id)
             for entry in self._help_entries(definition)
             if self._scope_denial(
@@ -132,8 +146,7 @@ class CommandAccessService:
             return False
         scopes = {definition.scope, *(item.scope for item in definition.scope_overrides)}
         return any(
-            self._scope_denial(scope, chat_type, telegram_user_id) is None
-            for scope in scopes
+            self._scope_denial(scope, chat_type, telegram_user_id) is None for scope in scopes
         )
 
     def _scope_denial(
@@ -144,9 +157,8 @@ class CommandAccessService:
     ) -> CommandAccessDenialReason | None:
         if scope == CommandScope.PRIVATE and chat_type != PRIVATE_CHAT_TYPE:
             return CommandAccessDenialReason.PRIVATE_ONLY
-        if (
-            scope == CommandScope.GROUP
-            and not self._can_run_group_command_in_chat(chat_type, telegram_user_id)
+        if scope == CommandScope.GROUP and not self._can_run_group_command_in_chat(
+            chat_type, telegram_user_id
         ):
             return CommandAccessDenialReason.GROUP_ONLY
         return None
@@ -183,3 +195,13 @@ def _allowed() -> CommandAccessResult:
 
 def _denied(reason: CommandAccessDenialReason) -> CommandAccessResult:
     return CommandAccessResult(reason)
+
+
+def _common_error_code(reason: CommandAccessDenialReason) -> CommonErrorCode:
+    if reason == CommandAccessDenialReason.PRIVATE_ONLY:
+        return CommonErrorCode.PRIVATE_CHAT_REQUIRED
+    if reason == CommandAccessDenialReason.GROUP_ONLY:
+        return CommonErrorCode.GROUP_CHAT_REQUIRED
+    if reason == CommandAccessDenialReason.ADMIN_ONLY:
+        return CommonErrorCode.ADMIN_REQUIRED
+    raise ValueError(f"Unsupported command access denial: {reason}")

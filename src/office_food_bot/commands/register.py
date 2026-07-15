@@ -8,7 +8,20 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
+from office_food_bot.commands.base import (
+    CommandContext,
+    EffectCommand,
+    FlowCommand,
+    RawArguments,
+    RawArgumentsParser,
+)
 from office_food_bot.commands.common import telegram_profile_from_message
+from office_food_bot.commands.definitions import (
+    CommandDefinition,
+    CommandFlowPolicy,
+    CommandScope,
+    HelpSection,
+)
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import (
     InvitationPreferences,
@@ -1046,6 +1059,114 @@ def _splitwise_connection_email(splitwise: SplitwiseConnection | None) -> str | 
     if splitwise is None:
         return None
     return splitwise.email
+
+
+class RequestRegisterCommand(EffectCommand[RawArguments]):
+    definition = CommandDefinition(
+        "request_register",
+        "попросить админа зарегистрировать вас",
+        "/request_register",
+        CommandScope.ANY,
+        HelpSection.PROFILE_SETTINGS,
+        show_in_menu=False,
+    )
+
+    def __init__(self, services: BotServices) -> None:
+        super().__init__(RawArgumentsParser(), (), ())
+        self._services = services
+
+    async def execute_effect(
+        self,
+        context: CommandContext,
+        request: RawArguments,
+    ) -> None:
+        await request_register_command(
+            context.message,
+            context.bot,
+            context.messenger,
+            self._services,
+            context.state,
+        )
+
+
+class RegisterCommand(FlowCommand[RawArguments]):
+    definition = CommandDefinition(
+        "register",
+        "пройти регистрацию",
+        "/register",
+        CommandScope.PRIVATE,
+        HelpSection.PROFILE_SETTINGS,
+    )
+
+    def __init__(self, services: BotServices) -> None:
+        super().__init__(RawArgumentsParser(), (), ())
+        self._services = services
+
+    async def start_flow(
+        self,
+        context: CommandContext,
+        request: RawArguments,
+    ) -> None:
+        command = CommandObject(command=context.invocation.name, args=request.value)
+        await register_command(
+            context.message,
+            command,
+            context.bot,
+            context.messenger,
+            self._services,
+            context.state,
+        )
+
+
+class QuitCommand(EffectCommand[RawArguments]):
+    definition = CommandDefinition(
+        "quit",
+        "отрегистрироваться",
+        "/quit",
+        CommandScope.PRIVATE,
+        HelpSection.PROFILE_SETTINGS,
+    )
+
+    def __init__(self, services: BotServices) -> None:
+        super().__init__(RawArgumentsParser(), (), ())
+        self._services = services
+
+    async def execute_effect(
+        self,
+        context: CommandContext,
+        request: RawArguments,
+    ) -> None:
+        await quit_command(
+            context.message,
+            context.messenger,
+            self._services,
+            context.state,
+        )
+
+
+class CancelCommand(EffectCommand[RawArguments]):
+    definition = CommandDefinition(
+        "cancel",
+        "отменить текущий сценарий",
+        "/cancel",
+        CommandScope.PRIVATE,
+        HelpSection.SERVICE,
+        flow_policy=CommandFlowPolicy.MANAGED_BY_COMMAND,
+    )
+
+    def __init__(self) -> None:
+        super().__init__(RawArgumentsParser(), (), ())
+
+    async def execute_effect(
+        self,
+        context: CommandContext,
+        request: RawArguments,
+    ) -> None:
+        await cancel_registration_command(
+            context.message,
+            context.messenger,
+            context.state,
+        )
 
 
 def _previous_details_from_state_data(

@@ -5,7 +5,21 @@ from aiogram.filters.command import CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from office_food_bot.commands.base import (
+    CommandContext,
+    EffectCommand,
+    RawArguments,
+    RawArgumentsParser,
+)
 from office_food_bot.commands.common import telegram_profile_from_message
+from office_food_bot.commands.definitions import (
+    CommandArgumentPattern,
+    CommandDefinition,
+    CommandHelpEntry,
+    CommandScope,
+    CommandScopeOverride,
+    HelpSection,
+)
 from office_food_bot.execution import CommandExecutionMode
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
@@ -115,3 +129,138 @@ async def lunch_auto_status_command(
 
 def _is_group_chat(message: Message) -> bool:
     return str(message.chat.type) in GROUP_CHAT_TYPES
+
+
+class LunchCommand(EffectCommand[RawArguments]):
+    definition = CommandDefinition(
+        "lunch",
+        "создать опрос про обед",
+        "/lunch [rose|роза|skyline|скайлайн]",
+        CommandScope.GROUP,
+        HelpSection.MAIN,
+        additional_help=(
+            CommandHelpEntry(
+                "/lunch",
+                "показать настройки приглашений на ланч",
+                HelpSection.PROFILE_SETTINGS,
+                CommandScope.PRIVATE,
+            ),
+            CommandHelpEntry(
+                "/lunch on",
+                "включить приглашения",
+                HelpSection.PROFILE_SETTINGS,
+                CommandScope.ANY,
+            ),
+            CommandHelpEntry(
+                "/lunch off",
+                "выключить приглашения",
+                HelpSection.PROFILE_SETTINGS,
+                CommandScope.ANY,
+            ),
+        ),
+        scope_overrides=(
+            CommandScopeOverride(CommandArgumentPattern.EMPTY, CommandScope.ANY),
+            CommandScopeOverride(CommandArgumentPattern.TOGGLE, CommandScope.ANY),
+        ),
+        private_description="настроить приглашения на ланч",
+    )
+
+    def __init__(self, services: BotServices) -> None:
+        super().__init__(RawArgumentsParser(), (), ())
+        self._services = services
+
+    async def execute_effect(
+        self,
+        context: CommandContext,
+        request: RawArguments,
+    ) -> None:
+        command = CommandObject(command=context.invocation.name, args=request.value)
+        await lunch_command(
+            context.message,
+            command,
+            context.bot,
+            context.messenger,
+            self._services,
+            context.state,
+        )
+
+
+class LunchAutoOnCommand(EffectCommand[RawArguments]):
+    definition = CommandDefinition(
+        "lunch_auto_on",
+        "включить авто-ланч в этом чате",
+        "/lunch_auto_on",
+        CommandScope.GROUP,
+        HelpSection.AUTOMATION,
+        admin_only=True,
+    )
+
+    def __init__(self, services: BotServices) -> None:
+        super().__init__(RawArgumentsParser(), (), ())
+        self._services = services
+
+    async def execute_effect(
+        self,
+        context: CommandContext,
+        request: RawArguments,
+    ) -> None:
+        await lunch_auto_on_command(
+            context.message,
+            context.messenger,
+            self._services,
+            context.state,
+        )
+
+
+class LunchAutoOffCommand(EffectCommand[RawArguments]):
+    definition = CommandDefinition(
+        "lunch_auto_off",
+        "выключить авто-ланч в этом чате",
+        "/lunch_auto_off",
+        CommandScope.GROUP,
+        HelpSection.AUTOMATION,
+        admin_only=True,
+    )
+
+    def __init__(self, services: BotServices) -> None:
+        super().__init__(RawArgumentsParser(), (), ())
+        self._services = services
+
+    async def execute_effect(
+        self,
+        context: CommandContext,
+        request: RawArguments,
+    ) -> None:
+        await lunch_auto_off_command(
+            context.message,
+            context.messenger,
+            self._services,
+            context.state,
+        )
+
+
+class LunchAutoStatusCommand(EffectCommand[RawArguments]):
+    definition = CommandDefinition(
+        "lunch_auto_status",
+        "показать статус авто-ланча",
+        "/lunch_auto_status",
+        CommandScope.GROUP,
+        HelpSection.AUTOMATION,
+        admin_only=True,
+    )
+
+    def __init__(self, services: BotServices) -> None:
+        super().__init__(RawArgumentsParser(), (), ())
+        self._services = services
+
+    async def execute_effect(
+        self,
+        context: CommandContext,
+        request: RawArguments,
+    ) -> None:
+        await lunch_auto_status_command(
+            context.message,
+            context.messenger,
+            self._services,
+            context.state,
+        )

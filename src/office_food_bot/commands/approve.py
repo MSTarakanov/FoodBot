@@ -5,7 +5,14 @@ from aiogram.filters.command import CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from office_food_bot.commands.base import (
+    CommandContext,
+    EffectCommand,
+    RawArguments,
+    RawArgumentsParser,
+)
 from office_food_bot.commands.common import telegram_profile_from_message
+from office_food_bot.commands.definitions import CommandDefinition, CommandScope, HelpSection
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import ApprovalKind
 from office_food_bot.services import BotServices
@@ -55,3 +62,33 @@ async def approve_command(
         telegram_user_id,
         f"Регистрация подтверждена. Теперь я буду звать тебя {approved_user.display_name}.",
     )
+
+
+class ApproveCommand(EffectCommand[RawArguments]):
+    definition = CommandDefinition(
+        "approve",
+        "подтвердить регистрацию",
+        "/approve 123456789",
+        CommandScope.PRIVATE,
+        HelpSection.ADMINISTRATION,
+        admin_only=True,
+    )
+
+    def __init__(self, services: BotServices) -> None:
+        super().__init__(RawArgumentsParser(), (), ())
+        self._services = services
+
+    async def execute_effect(
+        self,
+        context: CommandContext,
+        request: RawArguments,
+    ) -> None:
+        command = CommandObject(command=context.invocation.name, args=request.value)
+        await approve_command(
+            context.message,
+            command,
+            context.bot,
+            context.messenger,
+            self._services,
+            context.state,
+        )

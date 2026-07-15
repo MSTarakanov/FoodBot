@@ -5,7 +5,15 @@ from aiogram.filters.command import CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from office_food_bot.commands.base import (
+    CommandContext,
+    EffectCommand,
+    RawArguments,
+    RawArgumentsParser,
+)
+from office_food_bot.commands.catalog import CommandCatalog
 from office_food_bot.commands.common import telegram_profile_from_message
+from office_food_bot.commands.definitions import CommandDefinition, CommandScope, HelpSection
 from office_food_bot.commands.menu import setup_private_admin_commands
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices
@@ -20,6 +28,7 @@ async def debug_command(
     bot: Bot,
     messenger: BotMessenger,
     services: BotServices,
+    catalog: CommandCatalog,
     state: FSMContext,
 ) -> None:
     await state.clear()
@@ -41,6 +50,7 @@ async def debug_command(
         await setup_private_admin_commands(
             bot,
             services.command_access,
+            catalog,
             profile.telegram_user_id,
         )
         await messenger.reply(message, "Debug включен. В личке доступны все команды.")
@@ -51,6 +61,7 @@ async def debug_command(
         await setup_private_admin_commands(
             bot,
             services.command_access,
+            catalog,
             profile.telegram_user_id,
         )
         await messenger.reply(message, "Debug выключен.")
@@ -63,3 +74,34 @@ def _debug_status_text(enabled: bool) -> str:
     if enabled:
         return "Debug: включен."
     return "Debug: выключен."
+
+
+class DebugCommand(EffectCommand[RawArguments]):
+    definition = CommandDefinition(
+        "debug",
+        "включить или выключить debug режим",
+        "/debug 1",
+        CommandScope.PRIVATE,
+        HelpSection.ADMINISTRATION,
+        admin_only=True,
+    )
+
+    def __init__(self, services: BotServices) -> None:
+        super().__init__(RawArgumentsParser(), (), ())
+        self._services = services
+
+    async def execute_effect(
+        self,
+        context: CommandContext,
+        request: RawArguments,
+    ) -> None:
+        command = CommandObject(command=context.invocation.name, args=request.value)
+        await debug_command(
+            context.message,
+            command,
+            context.bot,
+            context.messenger,
+            self._services,
+            context.catalog,
+            context.state,
+        )

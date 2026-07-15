@@ -13,6 +13,7 @@ from aiogram.types import (
     BotCommandScopeUnion,
 )
 
+from office_food_bot.commands.catalog import CommandCatalog
 from office_food_bot.commands.definitions import CommandDefinition
 
 PRIVATE_CHAT_TYPE = "private"
@@ -30,6 +31,7 @@ class BotCommandClient(Protocol):
 class CommandAccess(Protocol):
     def visible_commands(
         self,
+        definitions: Iterable[CommandDefinition],
         chat_type: str,
         telegram_user_id: int | None,
     ) -> tuple[CommandDefinition, ...]: ...
@@ -40,36 +42,48 @@ class CommandAccess(Protocol):
 async def setup_bot_commands(
     bot: BotCommandClient,
     access: CommandAccess,
+    catalog: CommandCatalog,
 ) -> None:
     await bot.set_my_commands(
-        _bot_commands(access.visible_commands(PRIVATE_CHAT_TYPE, None), PRIVATE_CHAT_TYPE),
+        _bot_commands(
+            access.visible_commands(catalog.definitions, PRIVATE_CHAT_TYPE, None),
+            PRIVATE_CHAT_TYPE,
+        ),
         scope=BotCommandScopeDefault(),
     )
     await bot.set_my_commands(
-        _bot_commands(access.visible_commands(PRIVATE_CHAT_TYPE, None), PRIVATE_CHAT_TYPE),
+        _bot_commands(
+            access.visible_commands(catalog.definitions, PRIVATE_CHAT_TYPE, None),
+            PRIVATE_CHAT_TYPE,
+        ),
         scope=BotCommandScopeAllPrivateChats(),
     )
     await bot.set_my_commands(
         _bot_commands(
-            access.visible_commands(GROUP_MENU_CHAT_TYPE, None),
+            access.visible_commands(catalog.definitions, GROUP_MENU_CHAT_TYPE, None),
             GROUP_MENU_CHAT_TYPE,
         ),
         scope=BotCommandScopeAllGroupChats(),
     )
 
     for admin_id in access.admin_chat_ids_for_menu():
-        await setup_private_admin_commands(bot, access, admin_id)
+        await setup_private_admin_commands(bot, access, catalog, admin_id)
 
 
 async def setup_private_admin_commands(
     bot: BotCommandClient,
     access: CommandAccess,
+    catalog: CommandCatalog,
     admin_id: int,
 ) -> None:
     try:
         await bot.set_my_commands(
             _bot_commands(
-                access.visible_commands(PRIVATE_CHAT_TYPE, admin_id),
+                access.visible_commands(
+                    catalog.definitions,
+                    PRIVATE_CHAT_TYPE,
+                    admin_id,
+                ),
                 PRIVATE_CHAT_TYPE,
             ),
             scope=BotCommandScopeChat(chat_id=admin_id),

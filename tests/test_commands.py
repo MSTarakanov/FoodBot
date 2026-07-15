@@ -48,8 +48,9 @@ from aiogram.types import PollOption as TelegramPollOption
 
 from office_food_bot.app import create_dispatcher, create_services
 from office_food_bot.coffee_repositories import CoffeeSessionRepository
-from office_food_bot.commands.definitions import COMMANDS, START_TEXT
+from office_food_bot.commands.definitions import START_TEXT
 from office_food_bot.commands.errors import UNHANDLED_ERROR_REPLY_TEXT
+from office_food_bot.commands.factory import build_command_catalog
 from office_food_bot.commands.menu import setup_bot_commands
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
@@ -900,13 +901,48 @@ async def test_command_addressed_to_another_bot_is_ignored(tmp_path: Path) -> No
     assert UserRepository(database).get_by_telegram_id(42) is None
 
 
+def test_command_catalog_contains_each_current_slash_command_once(
+    database: Database,
+) -> None:
+    catalog = build_command_catalog(make_test_services(database))
+    names = tuple(command.definition.name for command in catalog.commands)
+
+    assert names == (
+        "start",
+        "help",
+        "hi",
+        "register",
+        "request_register",
+        "quit",
+        "cancel",
+        "approve",
+        "register_requests_list",
+        "debug",
+        "test",
+        "meta",
+        "eta",
+        "balance",
+        "vacation",
+        "lunch",
+        "coffee",
+        "lunch_auto_on",
+        "lunch_auto_off",
+        "lunch_auto_status",
+    )
+    assert len(names) == len(set(names))
+    assert all("definition" in type(command).__dict__ for command in catalog.commands)
+    assert catalog.resolve("КОФЕ") is catalog.resolve("coffee")
+
+
 async def test_setup_bot_commands_registers_telegram_menu() -> None:
     database = Database(Path(":memory:"))
     database.init_schema()
     bot = RecordingCommandMenuClient()
     services = make_test_services(database)
 
-    await setup_bot_commands(bot, services.command_access)
+    catalog = build_command_catalog(services)
+
+    await setup_bot_commands(bot, services.command_access, catalog)
 
     assert len(bot.command_menus) == 4
 
@@ -984,13 +1020,15 @@ async def test_setup_bot_commands_uses_debug_menu_for_admin_chat() -> None:
     services = make_test_services(database)
     services.debug.set_enabled(7, True)
 
-    await setup_bot_commands(bot, services.command_access)
+    catalog = build_command_catalog(services)
+
+    await setup_bot_commands(bot, services.command_access, catalog)
 
     admin_menu = bot.command_menus[3]
     assert admin_menu.scope_name == "chat"
     assert admin_menu.chat_id == 7
     assert _command_names(admin_menu.commands) == [
-        definition.name for definition in COMMANDS if definition.show_in_menu
+        definition.name for definition in catalog.definitions if definition.show_in_menu
     ]
 
     database.close()
@@ -1002,7 +1040,11 @@ async def test_setup_bot_commands_ignores_missing_admin_chat() -> None:
     bot = AdminChatNotFoundCommandMenuClient()
     services = make_test_services(database)
 
-    await setup_bot_commands(bot, services.command_access)
+    await setup_bot_commands(
+        bot,
+        services.command_access,
+        build_command_catalog(services),
+    )
 
     assert len(bot.command_menus) == 3
     assert [menu.scope_name for menu in bot.command_menus] == [
@@ -1624,6 +1666,31 @@ async def test_command_interrupts_registration_flow(tmp_path: Path) -> None:
 
     assert sent_texts(session) == []
     assert UserRepository(database).get_by_telegram_id(42) is None
+
+
+async def test_unknown_slash_command_does_not_become_registration_name(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/unknown"))
+
+    assert sent_texts(session) == []
+    assert UserRepository(database).get_by_telegram_id(42) is None
+
+    await dispatcher.feed_update(bot, make_update("Максим"))
+
+    assert sent_texts(session) == [
+        "Имя записал: Максим\n\n"
+        "Пришли email аккаунта Splitwise, чтобы я проверил тебя в офисной группе.\n"
+        "Можно написать «Пропустить»."
+    ]
 
 
 async def test_cancel_interrupts_registration_flow(tmp_path: Path) -> None:
@@ -2890,7 +2957,9 @@ async def test_admin_debug_allows_group_only_command_in_private_chat(
     assert sent_texts(session) == ["Debug включен. В личке доступны все команды."]
     assert len(session.set_command_requests) == 1
     assert _command_names(tuple(session.set_command_requests[0].commands)) == [
-        definition.name for definition in COMMANDS if definition.show_in_menu
+        definition.name
+        for definition in build_command_catalog(make_test_services(database)).definitions
+        if definition.show_in_menu
     ]
 
     session.clear_messages()
@@ -3640,7 +3709,11 @@ async def test_request_register_works_in_group_but_is_hidden_from_group_menu(
     )
     assert "request_register" not in {
         command.name
-        for command in services.command_access.visible_commands("group", 42)
+        for command in services.command_access.visible_commands(
+            build_command_catalog(services).definitions,
+            "group",
+            42,
+        )
     }
 
 
