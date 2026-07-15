@@ -1,0 +1,5 @@
+NAME_STEP_ID = "name"
+SPLITWISE_STEP_ID = "splitwise"
+LUNCH_PREFERENCE_STEP_ID = "lunch_preference"
+COFFEE_PREFERENCE_STEP_ID = "coffee_preference"
+REREGISTRATION_STEP_ID = "reregistration_confirmation"

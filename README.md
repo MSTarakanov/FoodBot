@@ -285,7 +285,8 @@ Command-related code is split by responsibility:
 
 - `commanding/` contains the reusable command lifecycle, catalog, access checks, and error pipeline;
 - `commands/` contains concrete slash commands, one command per file;
-- `controllers/` contains callback, poll, and FSM continuation handlers;
+- `flows/` contains conversational state machines, typed drafts, step validators, and transitions;
+- `controllers/` contains callback and poll handlers that are not slash commands or flows;
 - `presenters/` turns feature models into Telegram payloads;
 - `services/` and repositories contain business rules and persistence.
 
@@ -300,10 +301,10 @@ Command-related code is split by responsibility:
    not directly through `message.answer`, `bot.send_message`, or `bot.send_poll`.
 6. Keep database access inside repositories and business rules inside services. Render feature
    models in presenters instead of assembling output inside repositories.
-7. Use aiogram FSM states for multi-step flows. Ordinary text remains inside the
-   active state until it validates; slash commands clear the active flow and run
-   their own handler.
-8. Put callback, poll, and FSM continuation handlers in `controllers/` and register them in
+7. Implement multi-step conversations as a `StartableFlow` with explicit `FlowStep` objects.
+   Each step owns its parser and ordered validators, then returns `StayOnStep`, `MoveToStep`, or
+   `CompleteFlow`. Keep accumulated values in a typed feature draft.
+8. Put callback and poll handlers in `controllers/` and register them in
    `src/office_food_bot/commands/router.py`.
 9. Add or update command tests in `tests/test_commands.py`; add messenger tests
    in `tests/test_messaging.py` when introducing a new response primitive.

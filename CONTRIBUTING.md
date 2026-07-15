@@ -122,8 +122,8 @@ scripts/check
 ## Adding a command
 
 The command framework lives in `commanding/`; concrete slash commands live in
-`commands/`; callback, poll, and FSM continuation handlers live in `controllers/`;
-feature output formatting lives in `presenters/`.
+`commands/`; conversational state machines live in `flows/`; callback and poll
+handlers live in `controllers/`; feature output formatting lives in `presenters/`.
 
 1. Add `<name>Command` in `src/office_food_bot/commands/<name>.py`. Keep exactly
    one concrete slash command in the file and make the module name match its
@@ -137,9 +137,10 @@ feature output formatting lives in `presenters/`.
    not directly through `message.answer`, `bot.send_message`, or `bot.send_poll`.
 5. Keep database access inside repositories, business rules inside services, and
    feature-model formatting inside presenters.
-6. For multi-step flows, add aiogram FSM states and keep validation in the active
-   state handler until the answer is valid or the user runs another command.
-7. Put callback, poll, and FSM continuation handlers in `controllers/` and
+6. For multi-step conversations, add a `StartableFlow` with explicit steps. Each
+   step owns its parser and ordered validators and returns an explicit transition;
+   accumulated values belong in a typed feature draft.
+7. Put callback and poll handlers in `controllers/` and
    register them in `src/office_food_bot/commands/router.py`.
 8. Add or update command tests in `tests/test_commands.py`; add messenger tests
    in `tests/test_messaging.py` when introducing a new response primitive.

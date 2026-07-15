@@ -48,14 +48,15 @@ from aiogram.types import PollOption as TelegramPollOption
 
 from office_food_bot.app import create_dispatcher, create_services
 from office_food_bot.coffee_repositories import CoffeeSessionRepository
+from office_food_bot.commanding.catalog import CommandCatalog
 from office_food_bot.commanding.definition import START_TEXT
 from office_food_bot.commanding.errors.handler import UNHANDLED_ERROR_REPLY_TEXT
 from office_food_bot.commanding.menu import setup_bot_commands
-from office_food_bot.commands.factory import build_command_catalog
+from office_food_bot.commands.factory import build_command_runtime
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
 from office_food_bot.invitation_repositories import InvitationPreferenceRepository
-from office_food_bot.messaging import TextMessagePayload
+from office_food_bot.messaging import BotMessenger, TextMessagePayload
 from office_food_bot.models import (
     CoffeeSessionStatus,
     InvitationPreferences,
@@ -526,6 +527,10 @@ def make_test_services(
     return services
 
 
+def make_command_catalog(services: BotServices) -> CommandCatalog:
+    return build_command_runtime(services, BotMessenger()).catalog
+
+
 def make_dispatcher(
     database: Database,
     admin_ids: frozenset[int] = DEFAULT_ADMIN_IDS,
@@ -904,7 +909,7 @@ async def test_command_addressed_to_another_bot_is_ignored(tmp_path: Path) -> No
 def test_command_catalog_contains_each_current_slash_command_once(
     database: Database,
 ) -> None:
-    catalog = build_command_catalog(make_test_services(database))
+    catalog = make_command_catalog(make_test_services(database))
     names = tuple(command.definition.name for command in catalog.commands)
 
     assert names == (
@@ -944,7 +949,7 @@ async def test_setup_bot_commands_registers_telegram_menu() -> None:
     bot = RecordingCommandMenuClient()
     services = make_test_services(database)
 
-    catalog = build_command_catalog(services)
+    catalog = make_command_catalog(services)
 
     await setup_bot_commands(bot, services.command_access, catalog)
 
@@ -1024,7 +1029,7 @@ async def test_setup_bot_commands_uses_debug_menu_for_admin_chat() -> None:
     services = make_test_services(database)
     services.debug.set_enabled(7, True)
 
-    catalog = build_command_catalog(services)
+    catalog = make_command_catalog(services)
 
     await setup_bot_commands(bot, services.command_access, catalog)
 
@@ -1047,7 +1052,7 @@ async def test_setup_bot_commands_ignores_missing_admin_chat() -> None:
     await setup_bot_commands(
         bot,
         services.command_access,
-        build_command_catalog(services),
+        make_command_catalog(services),
     )
 
     assert len(bot.command_menus) == 3
@@ -1103,7 +1108,7 @@ async def test_register_creates_pending_user_and_notifies_admin(tmp_path: Path) 
     assert pending_registrations[0].splitwise.email == "max@example.com"
 
 
-async def test_register_with_argument_starts_step_by_step_flow(tmp_path: Path) -> None:
+async def test_register_rejects_non_numeric_argument(tmp_path: Path) -> None:
     database = make_database(tmp_path)
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
@@ -1112,11 +1117,8 @@ async def test_register_with_argument_starts_step_by_step_flow(tmp_path: Path) -
     await dispatcher.feed_update(bot, make_update("/register Максим"))
 
     assert sent_texts(session) == [
-        "Регистрация теперь пошаговая: имя нужно прислать отдельным сообщением.\n"
-        "Напиши имя одним сообщением. Например: Максим\n"
-        "Чтобы выйти из регистрации, отправь /cancel или запусти другую команду."
+        "Telegram ID должен быть числом: /register 123456789"
     ]
-    assert keyboard_texts(session.sent_messages[0]) == [["Misha"]]
     assert UserRepository(database).get_by_telegram_id(42) is None
 
 
@@ -2971,7 +2973,7 @@ async def test_admin_debug_allows_group_only_command_in_private_chat(
     assert len(session.set_command_requests) == 1
     assert _command_names(tuple(session.set_command_requests[0].commands)) == [
         definition.name
-        for definition in build_command_catalog(make_test_services(database)).definitions
+        for definition in make_command_catalog(make_test_services(database)).definitions
         if definition.show_in_menu
     ]
 
@@ -3723,7 +3725,7 @@ async def test_request_register_works_in_group_but_is_hidden_from_group_menu(
     assert "request_register" not in {
         command.name
         for command in services.command_access.visible_commands(
-            build_command_catalog(services).definitions,
+            make_command_catalog(services).definitions,
             "group",
             42,
         )

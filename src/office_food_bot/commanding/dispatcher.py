@@ -10,6 +10,7 @@ from office_food_bot.commanding.contracts import CommandContext
 from office_food_bot.commanding.definition import CommandFlowPolicy
 from office_food_bot.commanding.invocation import is_for_another_bot, parse_command
 from office_food_bot.commanding.profile import telegram_profile_from_message
+from office_food_bot.flows.runner import FlowRunner
 from office_food_bot.messaging import BotMessenger
 
 
@@ -20,11 +21,13 @@ class CommandDispatcher:
         access: CommandAccessService,
         messenger: BotMessenger,
         bot_username: str,
+        flow_runner: FlowRunner,
     ) -> None:
         self._catalog = catalog
         self._access = access
         self._messenger = messenger
         self._bot_username = bot_username
+        self._flow_runner = flow_runner
 
     async def dispatch(
         self,
@@ -42,7 +45,7 @@ class CommandDispatcher:
         if command is None:
             return
         if command.definition.flow_policy == CommandFlowPolicy.RESET_BEFORE_RUN:
-            await state.clear()
+            await self._flow_runner.abort(message, bot, state)
 
         profile = telegram_profile_from_message(message)
         telegram_user_id = None if profile is None else profile.telegram_user_id

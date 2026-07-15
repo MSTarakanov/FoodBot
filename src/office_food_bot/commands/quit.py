@@ -7,8 +7,10 @@ from office_food_bot.commanding.contracts import (
     RawArgumentsParser,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
-from office_food_bot.controllers.registration import quit_command
 from office_food_bot.services import BotServices
+
+QUIT_SUCCESS_TEXT = "Вы отрегистрированы. Если захотите вернуться, отправьте /request_register."
+QUIT_NOT_FOUND_TEXT = "Я не нашел вашу регистрацию."
 
 
 class QuitCommand(EffectCommand[RawArguments]):
@@ -29,9 +31,24 @@ class QuitCommand(EffectCommand[RawArguments]):
         context: CommandContext,
         request: RawArguments,
     ) -> None:
-        await quit_command(
+        profile = context.profile
+        if profile is None:
+            await context.messenger.reply(
+                context.message,
+                "Не вижу твой Telegram user id.",
+            )
+            return
+
+        if self._services.registration.quit_registration(profile.telegram_user_id):
+            await context.messenger.reply(
+                context.message,
+                QUIT_SUCCESS_TEXT,
+                reply_markup=context.messenger.remove_keyboard(),
+            )
+            return
+
+        await context.messenger.reply(
             context.message,
-            context.messenger,
-            self._services,
-            context.state,
+            QUIT_NOT_FOUND_TEXT,
+            reply_markup=context.messenger.remove_keyboard(),
         )

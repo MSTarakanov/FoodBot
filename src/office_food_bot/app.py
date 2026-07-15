@@ -8,7 +8,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from office_food_bot.commanding.catalog import CommandCatalog
 from office_food_bot.commanding.errors.handler import unhandled_error_handler
 from office_food_bot.commanding.errors.rendering import build_user_error_renderer
-from office_food_bot.commands.factory import build_command_catalog
+from office_food_bot.commands.factory import build_command_runtime
 from office_food_bot.commands.router import create_command_router
 from office_food_bot.config import Settings
 from office_food_bot.database import Database
@@ -43,7 +43,7 @@ class BotApplication:
 
 def create_application(services: BotServices) -> BotApplication:
     messenger = BotMessenger()
-    commands = build_command_catalog(services)
+    command_runtime = build_command_runtime(services, messenger)
     error_renderer = build_user_error_renderer()
     dispatcher = Dispatcher(
         storage=MemoryStorage(),
@@ -52,8 +52,16 @@ def create_application(services: BotServices) -> BotApplication:
         user_error_renderer=error_renderer,
     )
     dispatcher.errors.register(unhandled_error_handler)
-    dispatcher.include_router(create_command_router(services, messenger, commands, error_renderer))
-    return BotApplication(dispatcher, commands)
+    dispatcher.include_router(
+        create_command_router(
+            services,
+            messenger,
+            command_runtime.catalog,
+            error_renderer,
+            command_runtime.flow_runner,
+        )
+    )
+    return BotApplication(dispatcher, command_runtime.catalog)
 
 
 def create_dispatcher(services: BotServices) -> Dispatcher:

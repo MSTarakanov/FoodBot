@@ -12,7 +12,7 @@ from office_food_bot.commanding.definition import (
     CommandScope,
     HelpSection,
 )
-from office_food_bot.controllers.registration import cancel_registration_command
+from office_food_bot.flows.runner import FlowRunner
 
 
 class CancelCommand(EffectCommand[RawArguments]):
@@ -25,16 +25,13 @@ class CancelCommand(EffectCommand[RawArguments]):
         flow_policy=CommandFlowPolicy.MANAGED_BY_COMMAND,
     )
 
-    def __init__(self) -> None:
+    def __init__(self, runner: FlowRunner) -> None:
         super().__init__(RawArgumentsParser(), (), ())
+        self._runner = runner
 
     async def execute_effect(
         self,
         context: CommandContext,
         request: RawArguments,
     ) -> None:
-        await cancel_registration_command(
-            context.message,
-            context.messenger,
-            context.state,
-        )
+        await self._runner.cancel(context)
