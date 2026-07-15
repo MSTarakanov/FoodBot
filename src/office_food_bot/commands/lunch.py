@@ -58,7 +58,10 @@ async def lunch_command(
         )
         return
 
-    if not argument and not _is_group_chat(message):
+    if not argument and not services.command_access.can_run_group_command_in_chat(
+        str(message.chat.type),
+        profile.telegram_user_id,
+    ):
         await messenger.reply(
             message,
             services.invitations.lunch_status_text(profile.telegram_user_id),

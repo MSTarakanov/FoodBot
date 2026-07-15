@@ -2943,6 +2943,15 @@ async def test_admin_debug_allows_group_only_command_in_private_chat(
     await dispatcher.feed_update(bot, make_update("/approve 7", user_id=7, first_name="Admin"))
     session.clear_messages()
 
+    await dispatcher.feed_update(bot, make_update("/lunch", user_id=7, first_name="Admin"))
+
+    assert sent_texts(session) == [
+        "Приглашения на ланч: включены.\n\n"
+        "Изменить настройку: /lunch on или /lunch off."
+    ]
+    assert session.sent_polls == []
+
+    session.clear_messages()
     await dispatcher.feed_update(
         bot,
         make_update("/lunch rose", user_id=7, first_name="Admin"),
@@ -2965,7 +2974,7 @@ async def test_admin_debug_allows_group_only_command_in_private_chat(
     session.clear_messages()
     await dispatcher.feed_update(
         bot,
-        make_update("/lunch rose", user_id=7, first_name="Admin"),
+        make_update("/lunch", user_id=7, first_name="Admin"),
     )
 
     assert sent_texts(session) == ["Время обедать! @admin"]

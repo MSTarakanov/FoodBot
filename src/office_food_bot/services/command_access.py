@@ -123,7 +123,7 @@ class CommandAccessService:
             return False
         return self._debug.is_enabled(telegram_user_id)
 
-    def _can_run_group_command_in_chat(
+    def can_run_group_command_in_chat(
         self,
         chat_type: str,
         telegram_user_id: int | None,
@@ -157,7 +157,7 @@ class CommandAccessService:
     ) -> CommandAccessDenialReason | None:
         if scope == CommandScope.PRIVATE and chat_type != PRIVATE_CHAT_TYPE:
             return CommandAccessDenialReason.PRIVATE_ONLY
-        if scope == CommandScope.GROUP and not self._can_run_group_command_in_chat(
+        if scope == CommandScope.GROUP and not self.can_run_group_command_in_chat(
             chat_type, telegram_user_id
         ):
             return CommandAccessDenialReason.GROUP_ONLY
