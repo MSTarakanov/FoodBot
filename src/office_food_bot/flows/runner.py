@@ -13,6 +13,7 @@ from office_food_bot.flows.contracts import (
     ClosingFlowView,
     CompleteFlow,
     FlowContext,
+    FlowId,
     FlowSession,
     FlowTransition,
     FlowView,
@@ -44,7 +45,7 @@ class FlowRunner:
         await command_context.state.clear()
         context = self._from_command_context(command_context)
         transition = await flow.start(context, request)
-        await self._apply(context, flow.name, transition)
+        await self._apply(context, flow.flow_id, transition)
 
     async def handle_message(
         self,
@@ -54,12 +55,12 @@ class FlowRunner:
     ) -> None:
         context = self._from_message(message, bot, state)
         session = await self._require_session(state)
-        flow = self._catalog.resolve(session.flow_name)
+        flow = self._catalog.resolve(session.flow_id)
         if flow is None:
             await state.clear()
-            raise RuntimeError(f"Unknown active flow: {session.flow_name}")
+            raise RuntimeError(f"Unknown active flow: {session.flow_id.value}")
         transition = await flow.handle(context, session)
-        await self._apply(context, flow.name, transition)
+        await self._apply(context, flow.flow_id, transition)
 
     async def cancel(self, command_context: CommandContext) -> None:
         state = command_context.state
@@ -79,15 +80,17 @@ class FlowRunner:
             )
             return
 
-        flow = self._catalog.resolve(session.flow_name)
+        flow = self._catalog.resolve(session.flow_id)
         if flow is None:
             await state.clear()
-            raise RuntimeError(f"Unknown active flow: {session.flow_name}")
+            raise RuntimeError(f"Unknown active flow: {session.flow_id.value}")
         context = self._from_command_context(command_context)
         transition = await flow.cancel(context, session)
         if not isinstance(transition, CompleteFlow):
-            raise RuntimeError(f"Flow {flow.name} did not complete during cancellation")
-        await self._apply(context, flow.name, transition)
+            raise RuntimeError(
+                f"Flow {flow.flow_id.value} did not complete during cancellation"
+            )
+        await self._apply(context, flow.flow_id, transition)
 
     async def abort(
         self,
@@ -97,7 +100,7 @@ class FlowRunner:
     ) -> None:
         session = await self._session(state)
         if session is not None:
-            flow = self._catalog.resolve(session.flow_name)
+            flow = self._catalog.resolve(session.flow_id)
             if flow is not None:
                 await flow.abort(self._from_message(message, bot, state), session)
         await state.clear()
@@ -105,7 +108,7 @@ class FlowRunner:
     async def _apply(
         self,
         context: FlowContext,
-        flow_name: str,
+        flow_id: FlowId,
         transition: FlowTransition,
     ) -> None:
         if isinstance(transition, StayOnStep):
@@ -116,7 +119,7 @@ class FlowRunner:
             await context.state.set_data(
                 {
                     FLOW_SESSION_KEY: FlowSession(
-                        flow_name=flow_name,
+                        flow_id=flow_id,
                         step_id=transition.step_id,
                         draft=transition.draft,
                     )

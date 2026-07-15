@@ -7,14 +7,14 @@ from office_food_bot.flows.contracts import (
     FlowTransition,
 )
 from office_food_bot.flows.registration.draft import RegistrationDraft
+from office_food_bot.flows.registration.identifiers import RegistrationStepId
 from office_food_bot.flows.registration.steps.base import RegistrationStep
-from office_food_bot.flows.registration.steps.ids import REREGISTRATION_STEP_ID
 from office_food_bot.flows.registration.use_case import RegistrationFlowUseCase
 from office_food_bot.flows.registration.validation import TextFlowInput, yes_no_value
 
 
 class RegistrationConfirmationStep(RegistrationStep[TextFlowInput]):
-    step_id = REREGISTRATION_STEP_ID
+    step_id = RegistrationStepId.REREGISTRATION_CONFIRMATION
 
     def __init__(
         self,

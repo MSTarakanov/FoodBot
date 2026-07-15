@@ -9,14 +9,14 @@ from office_food_bot.flows.contracts import (
     FlowTransition,
 )
 from office_food_bot.flows.registration.draft import RegistrationDraft
+from office_food_bot.flows.registration.identifiers import RegistrationStepId
 from office_food_bot.flows.registration.steps.base import RegistrationStep
-from office_food_bot.flows.registration.steps.ids import COFFEE_PREFERENCE_STEP_ID
 from office_food_bot.flows.registration.use_case import RegistrationFlowUseCase
 from office_food_bot.flows.registration.validation import TextFlowInput, yes_no_value
 
 
 class RegistrationCoffeePreferenceStep(RegistrationStep[TextFlowInput]):
-    step_id = COFFEE_PREFERENCE_STEP_ID
+    step_id = RegistrationStepId.COFFEE_PREFERENCE
 
     def __init__(
         self,

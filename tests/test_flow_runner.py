@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import auto
 
 import pytest
 from aiogram import Bot
@@ -21,9 +22,11 @@ from office_food_bot.flows.contracts import (
     CompleteFlow,
     FlowContext,
     FlowDraft,
+    FlowId,
     FlowPostAction,
     FlowSession,
     FlowStepError,
+    FlowStepId,
     MoveToStep,
     ParsedFlowStep,
     StartableFlow,
@@ -59,6 +62,16 @@ class FixtureDraft(FlowDraft):
     value: str
 
 
+class FixtureFlowId(FlowId):
+    FIXTURE = auto()
+
+
+class FixtureStepId(FlowStepId):
+    INPUT = auto()
+    NEXT = auto()
+    FIXTURE = auto()
+
+
 class FixturePostAction(FlowPostAction):
     def __init__(self, events: list[str]) -> None:
         self._events = events
@@ -68,14 +81,18 @@ class FixturePostAction(FlowPostAction):
 
 
 class FixtureFlow(StartableFlow[str]):
-    name = "fixture"
+    flow_id = FixtureFlowId.FIXTURE
 
     def __init__(self, events: list[str]) -> None:
         self._events = events
 
     async def start(self, context: FlowContext, request: str):
         self._events.append(f"start:{request}")
-        return MoveToStep("input", FixtureDraft(request), TextFlowView("started"))
+        return MoveToStep(
+            FixtureStepId.INPUT,
+            FixtureDraft(request),
+            TextFlowView("started"),
+        )
 
     async def handle(self, context: FlowContext, session: FlowSession):
         self._events.append(f"handle:{session.step_id}")
@@ -116,8 +133,8 @@ class FixtureStepValidator:
             raise FixtureStepError
 
 
-class FixtureStep(ParsedFlowStep[FixtureDraft, str]):
-    step_id = "fixture_step"
+class FixtureStep(ParsedFlowStep[FixtureStepId, FixtureDraft, str]):
+    step_id = FixtureStepId.FIXTURE
 
     def __init__(self, events: list[str], *, fails: bool = False) -> None:
         super().__init__(
@@ -142,7 +159,11 @@ class FixtureStep(ParsedFlowStep[FixtureDraft, str]):
         value: str,
     ) -> MoveToStep:
         self._events.append("advance")
-        return MoveToStep("next", FixtureDraft(value), TextFlowView("next"))
+        return MoveToStep(
+            FixtureStepId.NEXT,
+            FixtureDraft(value),
+            TextFlowView("next"),
+        )
 
 
 class NoopCommand(Command):
@@ -166,7 +187,7 @@ async def test_parsed_flow_step_runs_parser_validator_and_transition_in_order() 
 
     assert events == ["parse", "validate", "advance"]
     assert isinstance(transition, MoveToStep)
-    assert transition.step_id == "next"
+    assert transition.step_id == FixtureStepId.NEXT
     assert transition.draft == FixtureDraft("answer")
 
 
@@ -222,10 +243,10 @@ async def test_flow_runner_cancel_delegates_to_active_flow() -> None:
     assert events == ["cancel:input", "reply:cancelled"]
 
 
-def test_flow_catalog_rejects_duplicate_names() -> None:
+def test_flow_catalog_rejects_duplicate_ids() -> None:
     events: list[str] = []
 
-    with pytest.raises(ValueError, match="Flow names must be unique"):
+    with pytest.raises(ValueError, match="Flow ids must be unique"):
         FlowCatalog((FixtureFlow(events), FixtureFlow(events)))
 
 

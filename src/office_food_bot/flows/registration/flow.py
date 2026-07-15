@@ -11,6 +11,10 @@ from office_food_bot.flows.contracts import (
     StartableFlow,
 )
 from office_food_bot.flows.registration.draft import RegistrationDraft
+from office_food_bot.flows.registration.identifiers import (
+    RegistrationFlowId,
+    RegistrationStepId,
+)
 from office_food_bot.flows.registration.rendering import (
     NAME_PROMPT_TEXT,
     name_prompt_view,
@@ -19,17 +23,16 @@ from office_food_bot.flows.registration.requests import (
     RegisterOtherRequest,
     RegisterRequest,
 )
-from office_food_bot.flows.registration.steps.ids import NAME_STEP_ID
 from office_food_bot.services.registration import RegistrationService
 
 
 class RegistrationFlow(StartableFlow[RegisterRequest]):
-    name = "registration"
+    flow_id = RegistrationFlowId.REGISTRATION
 
     def __init__(
         self,
         registration: RegistrationService,
-        steps: tuple[FlowStep, ...],
+        steps: tuple[FlowStep[RegistrationStepId], ...],
     ) -> None:
         step_ids = tuple(step.step_id for step in steps)
         if not step_ids:
@@ -37,7 +40,7 @@ class RegistrationFlow(StartableFlow[RegisterRequest]):
         if len(step_ids) != len(set(step_ids)):
             raise ValueError("Registration flow step ids must be unique")
         self._registration = registration
-        self._steps = {step.step_id: step for step in steps}
+        self._steps_by_id = {step.step_id: step for step in steps}
 
     async def start(
         self,
@@ -60,7 +63,7 @@ class RegistrationFlow(StartableFlow[RegisterRequest]):
             )
         draft = RegistrationDraft(target=target)
         return MoveToStep(
-            NAME_STEP_ID,
+            RegistrationStepId.NAME,
             draft,
             name_prompt_view(target, prompt),
         )
@@ -70,7 +73,11 @@ class RegistrationFlow(StartableFlow[RegisterRequest]):
         context: FlowContext,
         session: FlowSession,
     ) -> FlowTransition:
-        step = self._steps.get(session.step_id)
+        if not isinstance(session.step_id, RegistrationStepId):
+            raise RuntimeError(
+                f"Registration flow received unsupported step id: {session.step_id}"
+            )
+        step = self._steps_by_id.get(session.step_id)
         if step is None:
             raise RuntimeError(f"Unknown registration step: {session.step_id}")
         return await step.handle(context, session.draft)

@@ -8,11 +8,14 @@ from office_food_bot.flows.contracts import (
     ParsedFlowStep,
 )
 from office_food_bot.flows.registration.draft import RegistrationDraft
+from office_food_bot.flows.registration.identifiers import RegistrationStepId
 from office_food_bot.flows.registration.rendering import validation_error_view
 from office_food_bot.flows.registration.validation import RegistrationStepError
 
 
-class RegistrationStep[InputT](ParsedFlowStep[RegistrationDraft, InputT]):
+class RegistrationStep[InputT](
+    ParsedFlowStep[RegistrationStepId, RegistrationDraft, InputT]
+):
     def __init__(
         self,
         parser: FlowStepParser[InputT],

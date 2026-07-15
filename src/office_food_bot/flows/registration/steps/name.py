@@ -10,15 +10,15 @@ from office_food_bot.flows.contracts import (
     MoveToStep,
 )
 from office_food_bot.flows.registration.draft import RegistrationDraft
+from office_food_bot.flows.registration.identifiers import RegistrationStepId
 from office_food_bot.flows.registration.rendering import splitwise_prompt_view
 from office_food_bot.flows.registration.steps.base import RegistrationStep
-from office_food_bot.flows.registration.steps.ids import NAME_STEP_ID, SPLITWISE_STEP_ID
 from office_food_bot.flows.registration.validation import TextFlowInput, required_text
 from office_food_bot.services.registration import RegistrationService
 
 
 class RegistrationNameStep(RegistrationStep[TextFlowInput]):
-    step_id = NAME_STEP_ID
+    step_id = RegistrationStepId.NAME
 
     def __init__(
         self,
@@ -44,7 +44,7 @@ class RegistrationNameStep(RegistrationStep[TextFlowInput]):
             required_text(value),
         )
         return MoveToStep(
-            SPLITWISE_STEP_ID,
+            RegistrationStepId.SPLITWISE,
             replace(
                 draft,
                 target=profile,

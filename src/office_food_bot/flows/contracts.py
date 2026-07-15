@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Protocol, final
 
 from aiogram import Bot
@@ -12,6 +13,14 @@ from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import TelegramProfile
 
 
+class FlowId(StrEnum):
+    pass
+
+
+class FlowStepId(StrEnum):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class FlowDraft:
     pass
@@ -19,8 +28,8 @@ class FlowDraft:
 
 @dataclass(frozen=True, slots=True)
 class FlowSession:
-    flow_name: str
-    step_id: str
+    flow_id: FlowId
+    step_id: FlowStepId
     draft: FlowDraft
 
 
@@ -72,7 +81,7 @@ class StayOnStep(FlowTransition):
 
 @dataclass(frozen=True, slots=True)
 class MoveToStep(FlowTransition):
-    step_id: str
+    step_id: FlowStepId
     draft: FlowDraft
     view: FlowView
 
@@ -100,8 +109,8 @@ class FlowStepValidator[DraftT: FlowDraft, InputT](Protocol):
     ) -> None: ...
 
 
-class FlowStep(ABC):
-    step_id: str
+class FlowStep[StepIdT: FlowStepId](ABC):
+    step_id: StepIdT
 
     @abstractmethod
     async def handle(
@@ -111,7 +120,11 @@ class FlowStep(ABC):
     ) -> FlowTransition: ...
 
 
-class ParsedFlowStep[DraftT: FlowDraft, InputT](FlowStep, ABC):
+class ParsedFlowStep[
+    StepIdT: FlowStepId,
+    DraftT: FlowDraft,
+    InputT,
+](FlowStep[StepIdT], ABC):
     def __init__(
         self,
         draft_type: type[DraftT],
@@ -159,7 +172,7 @@ class ParsedFlowStep[DraftT: FlowDraft, InputT](FlowStep, ABC):
 
 
 class ActiveFlow(ABC):
-    name: str
+    flow_id: FlowId
 
     @abstractmethod
     async def handle(

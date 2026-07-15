@@ -10,17 +10,14 @@ from office_food_bot.flows.contracts import (
     MoveToStep,
 )
 from office_food_bot.flows.registration.draft import RegistrationDraft
+from office_food_bot.flows.registration.identifiers import RegistrationStepId
 from office_food_bot.flows.registration.rendering import coffee_preference_view
 from office_food_bot.flows.registration.steps.base import RegistrationStep
-from office_food_bot.flows.registration.steps.ids import (
-    COFFEE_PREFERENCE_STEP_ID,
-    LUNCH_PREFERENCE_STEP_ID,
-)
 from office_food_bot.flows.registration.validation import TextFlowInput, yes_no_value
 
 
 class RegistrationLunchPreferenceStep(RegistrationStep[TextFlowInput]):
-    step_id = LUNCH_PREFERENCE_STEP_ID
+    step_id = RegistrationStepId.LUNCH_PREFERENCE
 
     def __init__(
         self,
@@ -39,7 +36,7 @@ class RegistrationLunchPreferenceStep(RegistrationStep[TextFlowInput]):
         value: TextFlowInput,
     ) -> FlowTransition:
         return MoveToStep(
-            COFFEE_PREFERENCE_STEP_ID,
+            RegistrationStepId.COFFEE_PREFERENCE,
             replace(draft, lunch_invitations_enabled=yes_no_value(value)),
             coffee_preference_view(),
         )

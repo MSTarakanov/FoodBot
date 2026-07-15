@@ -11,6 +11,7 @@ from office_food_bot.flows.contracts import (
     MoveToStep,
 )
 from office_food_bot.flows.registration.draft import RegistrationDraft
+from office_food_bot.flows.registration.identifiers import RegistrationStepId
 from office_food_bot.flows.registration.rendering import (
     admin_registration_text,
     registration_details_changed,
@@ -20,7 +21,6 @@ from office_food_bot.flows.registration.rendering import (
     reregistration_confirmation_view,
     unchanged_registration_view,
 )
-from office_food_bot.flows.registration.steps.ids import REREGISTRATION_STEP_ID
 from office_food_bot.models import (
     InvitationPreferences,
     RegisteredUser,
@@ -136,7 +136,7 @@ class RegistrationFlowUseCase:
                 display_name,
             )
             return MoveToStep(
-                REREGISTRATION_STEP_ID,
+                RegistrationStepId.REREGISTRATION_CONFIRMATION,
                 replace(
                     draft,
                     target=profile,

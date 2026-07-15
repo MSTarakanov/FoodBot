@@ -11,16 +11,13 @@ from office_food_bot.flows.contracts import (
     StayOnStep,
 )
 from office_food_bot.flows.registration.draft import RegistrationDraft
+from office_food_bot.flows.registration.identifiers import RegistrationStepId
 from office_food_bot.flows.registration.rendering import (
     lunch_preference_view,
     splitwise_not_found_view,
     splitwise_unavailable_view,
 )
 from office_food_bot.flows.registration.steps.base import RegistrationStep
-from office_food_bot.flows.registration.steps.ids import (
-    LUNCH_PREFERENCE_STEP_ID,
-    SPLITWISE_STEP_ID,
-)
 from office_food_bot.flows.registration.use_case import RegistrationFlowUseCase
 from office_food_bot.flows.registration.validation import (
     TextFlowInput,
@@ -33,7 +30,7 @@ from office_food_bot.services.splitwise import SplitwiseLookupKind, SplitwiseSer
 
 
 class RegistrationSplitwiseStep(RegistrationStep[TextFlowInput]):
-    step_id = SPLITWISE_STEP_ID
+    step_id = RegistrationStepId.SPLITWISE
 
     def __init__(
         self,
@@ -79,7 +76,7 @@ class RegistrationSplitwiseStep(RegistrationStep[TextFlowInput]):
         ):
             return await self._use_case.complete(context, updated_draft)
         return MoveToStep(
-            LUNCH_PREFERENCE_STEP_ID,
+            RegistrationStepId.LUNCH_PREFERENCE,
             updated_draft,
             lunch_preference_view(splitwise_member),
         )
