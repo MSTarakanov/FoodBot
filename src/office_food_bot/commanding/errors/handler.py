@@ -5,8 +5,7 @@ import logging
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import ErrorEvent, Message, Update
 
-from office_food_bot.commanding.errors.models import CommonError, CommonErrorCode
-from office_food_bot.commanding.errors.rendering import ErrorRenderer
+from office_food_bot.commanding.errors.rendering import StaticErrorRenderer
 from office_food_bot.messaging import BotMessenger
 
 logger = logging.getLogger(__name__)
@@ -15,7 +14,7 @@ logger = logging.getLogger(__name__)
 async def unhandled_error_handler(
     event: ErrorEvent,
     messenger: BotMessenger,
-    user_error_renderer: ErrorRenderer,
+    internal_error_renderer: StaticErrorRenderer,
 ) -> bool:
     exception = event.exception
     logger.error(
@@ -30,7 +29,7 @@ async def unhandled_error_handler(
     try:
         await messenger.reply(
             message,
-            user_error_renderer.render(CommonError(CommonErrorCode.INTERNAL)),
+            internal_error_renderer.render(),
         )
     except TelegramAPIError:
         logger.warning("Failed to notify user about unhandled error", exc_info=True)

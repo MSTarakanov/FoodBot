@@ -22,6 +22,8 @@ TRANSITIONAL_SYMBOLS = (
     "CommandArgumentPattern",
     "CommandScopeOverride",
     "ErrorRenderContext",
+    "UserFacingError",
+    "ErrorRendererRegistration",
     "scope_overrides",
 )
 
@@ -82,3 +84,10 @@ def test_commands_and_controllers_do_not_manage_dispatch_lifecycle() -> None:
             assert "telegram_profile_from_message" not in source, path.name
             assert "context.messenger" not in source, path.name
             assert "context.catalog" not in source, path.name
+
+
+def test_error_rendering_has_no_runtime_type_dispatch_or_registry() -> None:
+    error_source = (SOURCE_ROOT / "commanding" / "errors" / "rendering.py").read_text()
+
+    assert "isinstance(" not in error_source
+    assert "_renderers" not in error_source

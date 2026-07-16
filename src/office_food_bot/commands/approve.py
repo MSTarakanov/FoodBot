@@ -13,17 +13,17 @@ from office_food_bot.commanding.definition import (
     HelpSection,
 )
 from office_food_bot.commanding.errors.models import (
-    CommandInputError,
-    CommonError,
     CommonErrorCode,
     InputErrorCode,
 )
+from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.commanding.validators import (
     TelegramIdentityValidator,
     require_telegram_profile,
 )
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import ApprovalKind
+from office_food_bot.result import Result, failure, success
 from office_food_bot.services.registration import RegistrationService
 
 
@@ -33,16 +33,19 @@ class ApproveRequest:
 
 
 class ApproveRequestParser:
-    def parse(self, raw_arguments: str | None) -> ApproveRequest:
+    def parse(
+        self,
+        raw_arguments: str | None,
+    ) -> Result[ApproveRequest, InputErrorCode]:
         normalized = (raw_arguments or "").strip()
         if not normalized:
-            raise CommandInputError(InputErrorCode.MISSING)
+            return failure(InputErrorCode.MISSING)
         if not normalized.isdecimal():
-            raise CommandInputError(InputErrorCode.INVALID_FORMAT)
+            return failure(InputErrorCode.INVALID_FORMAT)
         telegram_user_id = int(normalized)
         if telegram_user_id <= 0:
-            raise CommandInputError(InputErrorCode.INVALID_FORMAT)
-        return ApproveRequest(telegram_user_id)
+            return failure(InputErrorCode.INVALID_FORMAT)
+        return success(ApproveRequest(telegram_user_id))
 
 
 class ApproveCommand(EffectCommand[ApproveRequest]):
@@ -68,10 +71,12 @@ class ApproveCommand(EffectCommand[ApproveRequest]):
     def __init__(
         self,
         messenger: BotMessenger,
+        common_error_renderer: ErrorRenderer[CommonErrorCode],
         registration: RegistrationService,
     ) -> None:
         super().__init__(
             messenger,
+            common_error_renderer,
             ApproveRequestParser(),
             (TelegramIdentityValidator(),),
             (),
@@ -85,14 +90,16 @@ class ApproveCommand(EffectCommand[ApproveRequest]):
     ) -> None:
         approver = require_telegram_profile(context)
         if not self._registration.can_approve(approver.telegram_user_id):
-            raise CommonError(CommonErrorCode.ADMIN_REQUIRED)
+            await self._reply_common_error(context, CommonErrorCode.ADMIN_REQUIRED)
+            return
 
         result = self._registration.approve(
             approver.telegram_user_id,
             request.telegram_user_id,
         )
         if result.kind == ApprovalKind.FORBIDDEN:
-            raise CommonError(CommonErrorCode.ADMIN_REQUIRED)
+            await self._reply_common_error(context, CommonErrorCode.ADMIN_REQUIRED)
+            return
 
         if result.kind == ApprovalKind.NOT_FOUND:
             await self._messenger.reply(

@@ -7,7 +7,10 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from office_food_bot.commanding.catalog import CommandCatalog
 from office_food_bot.commanding.errors.handler import unhandled_error_handler
-from office_food_bot.commanding.errors.rendering import build_user_error_renderer
+from office_food_bot.commanding.errors.rendering import (
+    CommonErrorRenderer,
+    InternalErrorRenderer,
+)
 from office_food_bot.commands.factory import build_command_runtime
 from office_food_bot.commands.router import create_command_router
 from office_food_bot.config import Settings
@@ -42,19 +45,19 @@ class BotApplication:
 
 def create_application(services: BotServices) -> BotApplication:
     messenger = services.messenger
-    command_runtime = build_command_runtime(services)
-    error_renderer = build_user_error_renderer()
+    common_error_renderer = CommonErrorRenderer(services.telegram_bot_username)
+    command_runtime = build_command_runtime(services, common_error_renderer)
     dispatcher = Dispatcher(
         storage=MemoryStorage(),
         messenger=messenger,
-        user_error_renderer=error_renderer,
+        internal_error_renderer=InternalErrorRenderer(),
     )
     dispatcher.errors.register(unhandled_error_handler)
     dispatcher.include_router(
         create_command_router(
             services,
             command_runtime.catalog,
-            error_renderer,
+            common_error_renderer,
             command_runtime.flow_runner,
         )
     )

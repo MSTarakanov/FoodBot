@@ -6,18 +6,17 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from office_food_bot.commanding.errors.models import (
-    CommandInputError,
-    CommonError,
-    CommonErrorCode,
     InputErrorCode,
 )
 from office_food_bot.commands.vacation import VacationRequestParser
 from office_food_bot.database import Database
-from office_food_bot.models import TelegramProfile, UserStatus
+from office_food_bot.models import TelegramProfile
 from office_food_bot.presenters.vacation import render_vacation_report
 from office_food_bot.repositories import UserRepository, VacationRepository
+from office_food_bot.result import Result
 from office_food_bot.services.user_access import ActiveUserResolver
 from office_food_bot.services.vacation import (
+    VacationRequest,
     VacationRequestKind,
     VacationService,
     parse_vacation_request,
@@ -52,45 +51,31 @@ def vacation_text(
     service: VacationService,
     raw_argument: str,
 ) -> str:
-    request = VacationRequestParser(service).parse(raw_argument)
+    request = parsed_vacation_request(service, raw_argument)
     return render_vacation_report(service.execute(42, request)).text
 
 
-def test_vacation_requires_registration(
-    users: UserRepository,
-    database: Database,
-) -> None:
-    service = make_vacation_service(users, VacationRepository(database))
-
-    with pytest.raises(CommonError) as error:
-        vacation_text(service, "1")
-
-    assert error.value.code == CommonErrorCode.REGISTRATION_REQUIRED
+def parsed_vacation_request(
+    service: VacationService,
+    raw_argument: str,
+) -> VacationRequest:
+    return VacationRequestParser(service).parse(raw_argument).fold(
+        lambda request: request,
+        lambda code: pytest.fail(f"Unexpected vacation parse error: {code}"),
+    )
 
 
-def test_vacation_requires_active_user(
-    users: UserRepository,
-    database: Database,
-) -> None:
-    users.create_pending_user(make_profile(), "Максим")
-    service = make_vacation_service(users, VacationRepository(database))
-
-    with pytest.raises(CommonError) as error:
-        vacation_text(service, "1")
-
-    assert error.value.code == CommonErrorCode.REGISTRATION_PENDING
-
-    users.approve_by_telegram_id(42)
-    with database.connection:
-        database.connection.execute(
-            "UPDATE users SET status = ? WHERE display_name = ?",
-            (UserStatus.DISABLED.value, "Максим"),
-        )
-
-    with pytest.raises(CommonError) as error:
-        vacation_text(service, "1")
-
-    assert error.value.code == CommonErrorCode.REGISTRATION_INACTIVE
+def vacation_parse_error(
+    service: VacationService,
+    raw_argument: str,
+) -> InputErrorCode:
+    result: Result[VacationRequest, InputErrorCode] = VacationRequestParser(service).parse(
+        raw_argument
+    )
+    return result.fold(
+        lambda request: pytest.fail(f"Unexpected vacation request: {request}"),
+        lambda code: code,
+    )
 
 
 def test_vacation_status_text_for_inactive_vacation(
@@ -165,11 +150,8 @@ def test_vacation_rejects_invalid_arguments(
     users.approve_by_telegram_id(42)
     service = make_vacation_service(users, VacationRepository(database))
 
-    parser = VacationRequestParser(service)
     for raw_argument in ("wat", "-1", "367", "2026-07-05"):
-        with pytest.raises(CommandInputError) as error:
-            parser.parse(raw_argument)
-        assert error.value.code == InputErrorCode.INVALID_FORMAT
+        assert vacation_parse_error(service, raw_argument) == InputErrorCode.INVALID_FORMAT
 
 
 def test_parse_vacation_request_supports_day_counts_and_dates() -> None:

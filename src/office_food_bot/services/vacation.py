@@ -49,7 +49,7 @@ class VacationService:
         telegram_user_id: int,
         request: VacationRequest,
     ) -> VacationReport:
-        user = self._active_users.require(telegram_user_id)
+        user = self._active_users.require_validated(telegram_user_id)
         today = self.local_today()
         if request.kind == VacationRequestKind.STATUS:
             vacation = self._vacations.get(user.id)

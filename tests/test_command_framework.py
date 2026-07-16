@@ -24,9 +24,11 @@ from office_food_bot.commanding.definition import (
     CommandScope,
     HelpSection,
 )
-from office_food_bot.commanding.errors.models import CommonError, CommonErrorCode
+from office_food_bot.commanding.errors.models import CommonErrorCode, InputErrorCode
+from office_food_bot.commanding.errors.rendering import CommonErrorRenderer
 from office_food_bot.commanding.invocation import ParsedCommand
 from office_food_bot.messaging import BotMessenger, MessagePayload, TextMessagePayload
+from office_food_bot.result import Result, failure, success
 
 TEST_DEFINITION = CommandDefinition(
     "test",
@@ -61,30 +63,45 @@ class RecordingParser:
     def __init__(self, events: list[str]) -> None:
         self._events = events
 
-    def parse(self, raw_arguments: str | None) -> FixtureRequest:
+    def parse(
+        self,
+        raw_arguments: str | None,
+    ) -> Result[FixtureRequest, InputErrorCode]:
         self._events.append(f"parse:{raw_arguments}")
-        return FixtureRequest(raw_arguments)
+        return success(FixtureRequest(raw_arguments))
 
 
 class FixtureParser:
-    def parse(self, raw_arguments: str | None) -> FixtureRequest:
-        return FixtureRequest(raw_arguments)
+    def parse(
+        self,
+        raw_arguments: str | None,
+    ) -> Result[FixtureRequest, InputErrorCode]:
+        return success(FixtureRequest(raw_arguments))
 
 
 class RecordingContextValidator:
     def __init__(self, events: list[str]) -> None:
         self._events = events
 
-    def validate(self, context: CommandContext) -> None:
+    def validate(
+        self,
+        context: CommandContext,
+    ) -> Result[None, CommonErrorCode]:
         self._events.append(f"context:{context.invocation.name}")
+        return success(None)
 
 
 class RecordingRequestValidator:
     def __init__(self, events: list[str]) -> None:
         self._events = events
 
-    def validate(self, context: CommandContext, request: FixtureRequest) -> None:
+    def validate(
+        self,
+        context: CommandContext,
+        request: FixtureRequest,
+    ) -> Result[None, CommonErrorCode]:
         self._events.append(f"request:{request.value}")
+        return success(None)
 
 
 class FixtureRenderedCommand(RenderedCommand[FixtureRequest, str]):
@@ -97,6 +114,7 @@ class FixtureRenderedCommand(RenderedCommand[FixtureRequest, str]):
 
         super().__init__(
             messenger,
+            CommonErrorRenderer("foodbot_dev"),
             RecordingParser(events),
             (RecordingContextValidator(events),),
             (RecordingRequestValidator(events),),
@@ -113,7 +131,13 @@ class FixtureEffectCommand(EffectCommand[FixtureRequest]):
     definition = TEST_DEFINITION
 
     def __init__(self, messenger: BotMessenger, events: list[str]) -> None:
-        super().__init__(messenger, FixtureParser(), (), ())
+        super().__init__(
+            messenger,
+            CommonErrorRenderer("foodbot_dev"),
+            FixtureParser(),
+            (),
+            (),
+        )
         self._events = events
 
     async def execute_effect(
@@ -128,7 +152,13 @@ class FixtureFlowCommand(FlowCommand[FixtureRequest]):
     definition = TEST_DEFINITION
 
     def __init__(self, messenger: BotMessenger, events: list[str]) -> None:
-        super().__init__(messenger, FixtureParser(), (), ())
+        super().__init__(
+            messenger,
+            CommonErrorRenderer("foodbot_dev"),
+            FixtureParser(),
+            (),
+            (),
+        )
         self._events = events
 
     async def start_flow(
@@ -154,9 +184,12 @@ class FailingContextValidator:
     def __init__(self, events: list[str]) -> None:
         self._events = events
 
-    def validate(self, context: CommandContext) -> None:
+    def validate(
+        self,
+        context: CommandContext,
+    ) -> Result[None, CommonErrorCode]:
         self._events.append("context:error")
-        raise CommonError(CommonErrorCode.ADMIN_REQUIRED)
+        return failure(CommonErrorCode.ADMIN_REQUIRED)
 
 
 class FailingFixtureCommand(RenderedCommand[FixtureRequest, str]):
@@ -165,6 +198,7 @@ class FailingFixtureCommand(RenderedCommand[FixtureRequest, str]):
     def __init__(self, messenger: BotMessenger, events: list[str]) -> None:
         super().__init__(
             messenger,
+            CommonErrorRenderer("foodbot_dev"),
             RecordingParser(events),
             (FailingContextValidator(events),),
             (RecordingRequestValidator(events),),
@@ -182,6 +216,7 @@ class ConcurrentFixtureCommand(RenderedCommand[FixtureRequest, str]):
     def __init__(self, messenger: BotMessenger) -> None:
         super().__init__(
             messenger,
+            CommonErrorRenderer("foodbot_dev"),
             FixtureParser(),
             (),
             (),
@@ -257,12 +292,13 @@ def test_command_catalog_rejects_empty_and_duplicate_names() -> None:
 
 async def test_pipeline_stops_after_user_facing_error() -> None:
     events: list[str] = []
-    command = FailingFixtureCommand(RecordingMessenger(events), events)
+    messenger = RecordingMessenger(events)
+    command = FailingFixtureCommand(messenger, events)
 
-    with pytest.raises(CommonError):
-        await command.handle(make_context("minutes"))
+    await command.handle(make_context("minutes"))
 
-    assert events == ["context:error"]
+    assert events == ["context:error", "reply"]
+    assert payload_texts(messenger) == ["Команда доступна только админам."]
 
 
 async def test_single_command_instance_keeps_parallel_requests_isolated() -> None:

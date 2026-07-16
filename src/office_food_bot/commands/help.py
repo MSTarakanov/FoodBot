@@ -11,6 +11,8 @@ from office_food_bot.commanding.contracts import (
     NoArgumentsParser,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
+from office_food_bot.commanding.errors.models import CommonErrorCode
+from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.presenters.help import HELP_RENDERER
 
@@ -27,10 +29,11 @@ class HelpCommand(EffectCommand[NoArguments]):
     def __init__(
         self,
         messenger: BotMessenger,
+        common_error_renderer: ErrorRenderer[CommonErrorCode],
         access: CommandAccessService,
         catalog: CommandCatalogProvider,
     ) -> None:
-        super().__init__(messenger, NoArgumentsParser(), (), ())
+        super().__init__(messenger, common_error_renderer, NoArgumentsParser(), (), ())
         self._access = access
         self._catalog = catalog
 

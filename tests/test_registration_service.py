@@ -2,12 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-import pytest
-
-from office_food_bot.commanding.errors.models import (
-    RegistrationError,
-    RegistrationErrorCode,
-)
+from office_food_bot.commanding.errors.models import RegistrationErrorCode
 from office_food_bot.database import Database
 from office_food_bot.invitation_repositories import InvitationPreferenceRepository
 from office_food_bot.models import (
@@ -23,6 +18,7 @@ from office_food_bot.repositories import (
     TelegramAccountRepository,
     UserRepository,
 )
+from office_food_bot.result import Failure, Success
 from office_food_bot.services.registration import RegistrationService
 
 DEFAULT_ADMIN_IDS = frozenset({7})
@@ -275,20 +271,28 @@ def test_request_registration_eligibility_depends_on_status(
 ) -> None:
     service = make_service(database)
 
-    service.ensure_registration_can_be_requested(42)
+    assert service.registration_request_eligibility(42) == Success[
+        None,
+        RegistrationErrorCode,
+    ](None)
 
     service.register(make_profile(), "Максим", None)
-    with pytest.raises(RegistrationError) as pending_error:
-        service.ensure_registration_can_be_requested(42)
-    assert pending_error.value.code == RegistrationErrorCode.REQUEST_ALREADY_PENDING
+    assert service.registration_request_eligibility(42) == Failure[
+        None,
+        RegistrationErrorCode,
+    ](RegistrationErrorCode.REQUEST_ALREADY_PENDING)
 
     service.approve(7, 42)
-    with pytest.raises(RegistrationError) as active_error:
-        service.ensure_registration_can_be_requested(42)
-    assert active_error.value.code == RegistrationErrorCode.REQUEST_ALREADY_ACTIVE
+    assert service.registration_request_eligibility(42) == Failure[
+        None,
+        RegistrationErrorCode,
+    ](RegistrationErrorCode.REQUEST_ALREADY_ACTIVE)
 
     assert service.quit_registration(42)
-    service.ensure_registration_can_be_requested(42)
+    assert service.registration_request_eligibility(42) == Success[
+        None,
+        RegistrationErrorCode,
+    ](None)
 
 
 def test_quit_registration_returns_false_for_unknown_or_abandoned_user(

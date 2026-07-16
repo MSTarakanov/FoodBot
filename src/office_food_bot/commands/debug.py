@@ -15,17 +15,17 @@ from office_food_bot.commanding.definition import (
     HelpSection,
 )
 from office_food_bot.commanding.errors.models import (
-    CommandInputError,
-    CommonError,
     CommonErrorCode,
     InputErrorCode,
 )
+from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.commanding.menu import setup_private_admin_commands
 from office_food_bot.commanding.validators import (
     TelegramIdentityValidator,
     require_telegram_profile,
 )
 from office_food_bot.messaging import BotMessenger
+from office_food_bot.result import Result, failure, success
 from office_food_bot.services.debug import DebugService
 
 DEBUG_ON_VALUES = frozenset({"1", "on", "true", "вкл"})
@@ -48,15 +48,18 @@ class DebugToggleRequest(DebugRequest):
 
 
 class DebugRequestParser:
-    def parse(self, raw_arguments: str | None) -> DebugRequest:
+    def parse(
+        self,
+        raw_arguments: str | None,
+    ) -> Result[DebugRequest, InputErrorCode]:
         normalized = (raw_arguments or "").strip().casefold()
         if not normalized:
-            return DebugStatusRequest()
+            return success(DebugStatusRequest())
         if normalized in DEBUG_ON_VALUES:
-            return DebugToggleRequest(True)
+            return success(DebugToggleRequest(True))
         if normalized in DEBUG_OFF_VALUES:
-            return DebugToggleRequest(False)
-        raise CommandInputError(InputErrorCode.INVALID_CHOICE)
+            return success(DebugToggleRequest(False))
+        return failure(InputErrorCode.INVALID_CHOICE)
 
 
 def _debug_status_text(enabled: bool) -> str:
@@ -84,12 +87,14 @@ class DebugCommand(EffectCommand[DebugRequest]):
     def __init__(
         self,
         messenger: BotMessenger,
+        common_error_renderer: ErrorRenderer[CommonErrorCode],
         debug: DebugService,
         access: CommandAccessService,
         catalog: CommandCatalogProvider,
     ) -> None:
         super().__init__(
             messenger,
+            common_error_renderer,
             DebugRequestParser(),
             (TelegramIdentityValidator(),),
             (),
@@ -105,7 +110,8 @@ class DebugCommand(EffectCommand[DebugRequest]):
     ) -> None:
         profile = require_telegram_profile(context)
         if not self._access.is_admin(profile.telegram_user_id):
-            raise CommonError(CommonErrorCode.ADMIN_REQUIRED)
+            await self._reply_common_error(context, CommonErrorCode.ADMIN_REQUIRED)
+            return
 
         if isinstance(request, DebugStatusRequest):
             await self._messenger.reply(

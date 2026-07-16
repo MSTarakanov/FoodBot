@@ -15,12 +15,12 @@ from office_food_bot.commanding.definition import (
     HelpSection,
 )
 from office_food_bot.commanding.errors.models import (
-    CommandInputError,
-    CommonError,
     CommonErrorCode,
     InputErrorCode,
 )
+from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.commanding.validators import (
+    ActiveUserValidator,
     TelegramIdentityValidator,
     require_telegram_profile,
 )
@@ -28,6 +28,7 @@ from office_food_bot.execution import CommandExecutionMode
 from office_food_bot.invitation_models import InvitationKind
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.presenters.invitations import render_invitation_setting
+from office_food_bot.result import Result, failure, success
 from office_food_bot.services.invitations import InvitationPreferenceService
 from office_food_bot.services.lunch_auto import LunchPollPublisher
 from office_food_bot.services.lunch_polls import (
@@ -63,39 +64,43 @@ class LunchPublishRequest(LunchRequest):
 
 
 class LunchRequestParser:
-    def parse(self, raw_arguments: str | None) -> LunchRequest:
+    def parse(
+        self,
+        raw_arguments: str | None,
+    ) -> Result[LunchRequest, InputErrorCode]:
         argument = (raw_arguments or "").strip().casefold()
         if not argument:
-            return LunchDefaultRequest()
+            return success(LunchDefaultRequest())
         if argument in {"on", "off"}:
-            return LunchToggleRequest(argument == "on")
+            return success(LunchToggleRequest(argument == "on"))
         office_selection = parse_lunch_office_selection(argument)
         if office_selection is None:
-            raise CommandInputError(InputErrorCode.INVALID_CHOICE)
-        return LunchPublishRequest(office_selection)
+            return failure(InputErrorCode.INVALID_CHOICE)
+        return success(LunchPublishRequest(office_selection))
 
 
 class LunchPublishValidator:
     def __init__(
         self,
         access: CommandAccessService,
-        active_users: ActiveUserResolver,
     ) -> None:
         self._access = access
-        self._active_users = active_users
 
-    def validate(self, context: CommandContext, request: LunchRequest) -> None:
+    def validate(
+        self,
+        context: CommandContext,
+        request: LunchRequest,
+    ) -> Result[None, CommonErrorCode]:
         if isinstance(request, LunchToggleRequest):
-            return
+            return success(None)
         profile = require_telegram_profile(context)
         can_publish = self._access.can_run_group_command_in_chat(
             str(context.message.chat.type),
             profile.telegram_user_id,
         )
         if isinstance(request, LunchPublishRequest) and not can_publish:
-            raise CommonError(CommonErrorCode.GROUP_CHAT_REQUIRED)
-        if can_publish:
-            self._active_users.require(profile.telegram_user_id)
+            return failure(CommonErrorCode.GROUP_CHAT_REQUIRED)
+        return success(None)
 
 
 class LunchCommand(EffectCommand[LunchRequest]):
@@ -138,6 +143,7 @@ class LunchCommand(EffectCommand[LunchRequest]):
     def __init__(
         self,
         messenger: BotMessenger,
+        common_error_renderer: ErrorRenderer[CommonErrorCode],
         access: CommandAccessService,
         invitations: InvitationPreferenceService,
         active_users: ActiveUserResolver,
@@ -145,9 +151,13 @@ class LunchCommand(EffectCommand[LunchRequest]):
     ) -> None:
         super().__init__(
             messenger,
+            common_error_renderer,
             LunchRequestParser(),
             (TelegramIdentityValidator(),),
-            (LunchPublishValidator(access, active_users),),
+            (
+                LunchPublishValidator(access),
+                ActiveUserValidator(active_users),
+            ),
         )
         self._access = access
         self._invitations = invitations

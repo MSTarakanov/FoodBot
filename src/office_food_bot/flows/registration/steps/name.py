@@ -13,7 +13,11 @@ from office_food_bot.flows.registration.draft import RegistrationDraft
 from office_food_bot.flows.registration.identifiers import RegistrationStepId
 from office_food_bot.flows.registration.rendering import splitwise_prompt_view
 from office_food_bot.flows.registration.steps.base import RegistrationStep
-from office_food_bot.flows.registration.validation import TextFlowInput, required_text
+from office_food_bot.flows.registration.validation import (
+    RegistrationStepErrorCode,
+    TextFlowInput,
+    required_text,
+)
 from office_food_bot.services.registration import RegistrationService
 
 
@@ -24,7 +28,11 @@ class RegistrationNameStep(RegistrationStep[TextFlowInput]):
         self,
         parser: FlowStepParser[TextFlowInput],
         validators: tuple[
-            FlowStepValidator[RegistrationDraft, TextFlowInput],
+            FlowStepValidator[
+                RegistrationDraft,
+                TextFlowInput,
+                RegistrationStepErrorCode,
+            ],
             ...,
         ],
         registration: RegistrationService,

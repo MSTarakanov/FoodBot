@@ -50,6 +50,7 @@ from office_food_bot.app import create_dispatcher, create_services
 from office_food_bot.coffee_repositories import CoffeeSessionRepository
 from office_food_bot.commanding.catalog import CommandCatalog
 from office_food_bot.commanding.definition import START_TEXT
+from office_food_bot.commanding.errors.rendering import CommonErrorRenderer
 from office_food_bot.commanding.menu import setup_bot_commands
 from office_food_bot.commands.factory import build_command_runtime
 from office_food_bot.config import RuntimeEnvironment, Settings
@@ -527,7 +528,10 @@ def make_test_services(
 
 
 def make_command_catalog(services: BotServices) -> CommandCatalog:
-    return build_command_runtime(services).catalog
+    return build_command_runtime(
+        services,
+        CommonErrorRenderer(services.telegram_bot_username),
+    ).catalog
 
 
 async def create_or_reschedule_coffee(
@@ -541,7 +545,7 @@ async def create_or_reschedule_coffee(
     await services.coffee.create_or_reschedule(
         bot,
         -100,
-        telegram_user_id,
+        services.active_users.require_validated(telegram_user_id),
         resolution.scheduled_at,
     )
 

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from office_food_bot.commanding.errors.models import CommonError, CommonErrorCode
-from office_food_bot.models import TelegramProfile
+from office_food_bot.commanding.errors.models import CommonErrorCode
+from office_food_bot.models import RegisteredUser, TelegramProfile
 from office_food_bot.repositories import UserRepository
+from office_food_bot.result import Failure
 from office_food_bot.services.user_access import ActiveUserResolver
 
 
@@ -13,10 +14,10 @@ def make_profile() -> TelegramProfile:
 
 
 def test_active_user_resolver_requires_registration(users: UserRepository) -> None:
-    with pytest.raises(CommonError) as error:
-        ActiveUserResolver(users).require(42)
-
-    assert error.value.code == CommonErrorCode.REGISTRATION_REQUIRED
+    assert ActiveUserResolver(users).resolve(42) == Failure[
+        RegisteredUser,
+        CommonErrorCode,
+    ](CommonErrorCode.REGISTRATION_REQUIRED)
 
 
 def test_active_user_resolver_requires_approved_registration(
@@ -24,17 +25,20 @@ def test_active_user_resolver_requires_approved_registration(
 ) -> None:
     users.create_pending_user(make_profile(), "Максим")
 
-    with pytest.raises(CommonError) as error:
-        ActiveUserResolver(users).require(42)
-
-    assert error.value.code == CommonErrorCode.REGISTRATION_PENDING
+    assert ActiveUserResolver(users).resolve(42) == Failure[
+        RegisteredUser,
+        CommonErrorCode,
+    ](CommonErrorCode.REGISTRATION_PENDING)
 
 
 def test_active_user_resolver_returns_active_user(users: UserRepository) -> None:
     users.create_pending_user(make_profile(), "Максим")
     users.approve_by_telegram_id(42)
 
-    user = ActiveUserResolver(users).require(42)
+    user = ActiveUserResolver(users).resolve(42).fold(
+        lambda resolved: resolved,
+        lambda code: pytest.fail(f"Unexpected active user error: {code}"),
+    )
 
     assert user.telegram_user_id == 42
     assert user.display_name == "Максим"
@@ -45,7 +49,7 @@ def test_active_user_resolver_rejects_inactive_user(users: UserRepository) -> No
     users.approve_by_telegram_id(42)
     users.abandon_by_telegram_id(42)
 
-    with pytest.raises(CommonError) as error:
-        ActiveUserResolver(users).require(42)
-
-    assert error.value.code == CommonErrorCode.REGISTRATION_INACTIVE
+    assert ActiveUserResolver(users).resolve(42) == Failure[
+        RegisteredUser,
+        CommonErrorCode,
+    ](CommonErrorCode.REGISTRATION_INACTIVE)

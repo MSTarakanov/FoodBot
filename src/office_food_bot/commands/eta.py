@@ -10,7 +10,8 @@ from office_food_bot.commanding.definition import (
     CommandScope,
     HelpSection,
 )
-from office_food_bot.commanding.errors.models import InputErrorCode
+from office_food_bot.commanding.errors.models import CommonErrorCode, InputErrorCode
+from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.commanding.validators import (
     ActiveUserValidator,
     TelegramIdentityValidator,
@@ -55,11 +56,13 @@ class EtaCommand(RenderedCommand[EtaRequest, PresenceReport]):
     def __init__(
         self,
         messenger: BotMessenger,
+        common_error_renderer: ErrorRenderer[CommonErrorCode],
         presence: PresenceService,
         active_users: ActiveUserResolver,
     ) -> None:
         super().__init__(
             messenger,
+            common_error_renderer,
             EtaRequestParser(),
             (TelegramIdentityValidator(),),
             (ActiveUserValidator(active_users),),

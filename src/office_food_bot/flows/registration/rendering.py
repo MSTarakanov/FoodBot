@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import assert_never
+
 from office_food_bot.flows.contracts import (
     ChoiceFlowView,
     ClosingFlowView,
@@ -7,7 +9,6 @@ from office_food_bot.flows.contracts import (
     TextFlowView,
 )
 from office_food_bot.flows.registration.validation import (
-    RegistrationStepError,
     RegistrationStepErrorCode,
 )
 from office_food_bot.models import (
@@ -123,25 +124,26 @@ def reregistration_confirmation_view(
     )
 
 
-def validation_error_view(error: RegistrationStepError) -> FlowView:
-    if error.code == RegistrationStepErrorCode.NAME_TEXT_REQUIRED:
-        return TextFlowView("Напиши имя текстом. Например: Максим")
-    if error.code == RegistrationStepErrorCode.NAME_EMPTY:
-        return TextFlowView("Имя не может быть пустым. Напиши имя, например: Максим")
-    if error.code == RegistrationStepErrorCode.SPLITWISE_TEXT_REQUIRED:
-        return ChoiceFlowView(
-            "Пришли email текстом или нажми «Пропустить».",
-            SPLITWISE_SKIP_CHOICES,
-            columns=1,
-            one_time_keyboard=False,
-        )
-    if error.code == RegistrationStepErrorCode.LUNCH_CHOICE_REQUIRED:
-        return ChoiceFlowView(LUNCH_PREFERENCE_PROMPT, PREFERENCE_CHOICES)
-    if error.code == RegistrationStepErrorCode.COFFEE_CHOICE_REQUIRED:
-        return ChoiceFlowView(COFFEE_PREFERENCE_PROMPT, PREFERENCE_CHOICES)
-    if error.code == RegistrationStepErrorCode.REREGISTRATION_CHOICE_REQUIRED:
-        return ChoiceFlowView("Выбери: перерегистрировать вас?", PREFERENCE_CHOICES)
-    raise RuntimeError(f"Unsupported registration step error: {error.code.value}")
+def validation_error_view(code: RegistrationStepErrorCode) -> FlowView:
+    match code:
+        case RegistrationStepErrorCode.NAME_TEXT_REQUIRED:
+            return TextFlowView("Напиши имя текстом. Например: Максим")
+        case RegistrationStepErrorCode.NAME_EMPTY:
+            return TextFlowView("Имя не может быть пустым. Напиши имя, например: Максим")
+        case RegistrationStepErrorCode.SPLITWISE_TEXT_REQUIRED:
+            return ChoiceFlowView(
+                "Пришли email текстом или нажми «Пропустить».",
+                SPLITWISE_SKIP_CHOICES,
+                columns=1,
+                one_time_keyboard=False,
+            )
+        case RegistrationStepErrorCode.LUNCH_CHOICE_REQUIRED:
+            return ChoiceFlowView(LUNCH_PREFERENCE_PROMPT, PREFERENCE_CHOICES)
+        case RegistrationStepErrorCode.COFFEE_CHOICE_REQUIRED:
+            return ChoiceFlowView(COFFEE_PREFERENCE_PROMPT, PREFERENCE_CHOICES)
+        case RegistrationStepErrorCode.REREGISTRATION_CHOICE_REQUIRED:
+            return ChoiceFlowView("Выбери: перерегистрировать вас?", PREFERENCE_CHOICES)
+    assert_never(code)
 
 
 def registration_reply_text(

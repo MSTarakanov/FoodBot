@@ -5,24 +5,29 @@ from office_food_bot.commanding.contracts import (
     CommandContext,
     NoArguments,
     NoArgumentsParser,
-    RenderedCommand,
+    ResultRenderedCommand,
 )
 from office_food_bot.commanding.definition import (
     CommandDefinition,
     CommandScope,
     HelpSection,
 )
+from office_food_bot.commanding.errors.models import BalanceErrorCode, CommonErrorCode
+from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.commanding.validators import (
     ActiveUserValidator,
     TelegramIdentityValidator,
 )
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.presenters import render_balance_message
+from office_food_bot.result import Result
 from office_food_bot.services.balances import BalanceService
 from office_food_bot.services.user_access import ActiveUserResolver
 
 
-class BalanceCommand(RenderedCommand[NoArguments, BalanceReport]):
+class BalanceCommand(
+    ResultRenderedCommand[NoArguments, BalanceReport, BalanceErrorCode]
+):
     definition = CommandDefinition(
         "balance",
         "показать баланс Splitwise",
@@ -34,15 +39,19 @@ class BalanceCommand(RenderedCommand[NoArguments, BalanceReport]):
     def __init__(
         self,
         messenger: BotMessenger,
+        common_error_renderer: ErrorRenderer[CommonErrorCode],
         balances: BalanceService,
         active_users: ActiveUserResolver,
+        error_renderer: ErrorRenderer[BalanceErrorCode],
     ) -> None:
         super().__init__(
             messenger,
+            common_error_renderer,
             NoArgumentsParser(),
             (TelegramIdentityValidator(),),
             (ActiveUserValidator(active_users),),
             render_balance_message,
+            error_renderer,
         )
         self._balances = balances
 
@@ -50,6 +59,6 @@ class BalanceCommand(RenderedCommand[NoArguments, BalanceReport]):
         self,
         context: CommandContext,
         request: NoArguments,
-    ) -> BalanceReport:
+    ) -> Result[BalanceReport, BalanceErrorCode]:
         del context, request
         return await self._balances.balance()

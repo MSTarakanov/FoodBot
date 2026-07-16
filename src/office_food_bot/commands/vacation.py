@@ -11,7 +11,8 @@ from office_food_bot.commanding.definition import (
     CommandScope,
     HelpSection,
 )
-from office_food_bot.commanding.errors.models import CommandInputError, InputErrorCode
+from office_food_bot.commanding.errors.models import CommonErrorCode, InputErrorCode
+from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.commanding.validators import (
     ActiveUserValidator,
     TelegramIdentityValidator,
@@ -19,6 +20,7 @@ from office_food_bot.commanding.validators import (
 )
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.presenters.vacation import render_vacation_report
+from office_food_bot.result import Result, failure, success
 from office_food_bot.services.user_access import ActiveUserResolver
 from office_food_bot.services.vacation import (
     VacationRequest,
@@ -38,14 +40,17 @@ class VacationRequestParser:
     def __init__(self, vacation: VacationService) -> None:
         self._vacation = vacation
 
-    def parse(self, raw_arguments: str | None) -> VacationRequest:
+    def parse(
+        self,
+        raw_arguments: str | None,
+    ) -> Result[VacationRequest, InputErrorCode]:
         request = parse_vacation_request(
             raw_arguments or "",
             self._vacation.local_today(),
         )
         if request.kind == VacationRequestKind.INVALID:
-            raise CommandInputError(InputErrorCode.INVALID_FORMAT)
-        return request
+            return failure(InputErrorCode.INVALID_FORMAT)
+        return success(request)
 
 
 class VacationCommand(RenderedCommand[VacationRequest, VacationReport]):
@@ -78,11 +83,13 @@ class VacationCommand(RenderedCommand[VacationRequest, VacationReport]):
     def __init__(
         self,
         messenger: BotMessenger,
+        common_error_renderer: ErrorRenderer[CommonErrorCode],
         vacation: VacationService,
         active_users: ActiveUserResolver,
     ) -> None:
         super().__init__(
             messenger,
+            common_error_renderer,
             VacationRequestParser(vacation),
             (TelegramIdentityValidator(),),
             (ActiveUserValidator(active_users),),

@@ -109,7 +109,6 @@ def build_services(
     coffee_time = CoffeeTimeResolver(timezone_name, clock)
     coffee = CoffeeService(
         users,
-        active_users,
         invitations,
         coffee_sessions,
         lunch_attendance,

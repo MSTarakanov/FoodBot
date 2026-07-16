@@ -11,6 +11,7 @@ from aiogram.types import Message
 
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import TelegramProfile
+from office_food_bot.result import Result, success
 
 
 class FlowId(StrEnum):
@@ -92,21 +93,17 @@ class CompleteFlow(FlowTransition):
     post_action: FlowPostAction | None = None
 
 
-class FlowStepError(Exception):
-    pass
-
-
 class FlowStepParser[InputT](Protocol):
     def parse(self, message: Message) -> InputT: ...
 
 
-class FlowStepValidator[DraftT: FlowDraft, InputT](Protocol):
+class FlowStepValidator[DraftT: FlowDraft, InputT, ErrorT](Protocol):
     def validate(
         self,
         context: FlowContext,
         draft: DraftT,
         value: InputT,
-    ) -> None: ...
+    ) -> Result[None, ErrorT]: ...
 
 
 class FlowStep[StepIdT: FlowStepId](ABC):
@@ -124,12 +121,13 @@ class ParsedFlowStep[
     StepIdT: FlowStepId,
     DraftT: FlowDraft,
     InputT,
+    ErrorT,
 ](FlowStep[StepIdT], ABC):
     def __init__(
         self,
         draft_type: type[DraftT],
         parser: FlowStepParser[InputT],
-        validators: tuple[FlowStepValidator[DraftT, InputT], ...],
+        validators: tuple[FlowStepValidator[DraftT, InputT, ErrorT], ...],
     ) -> None:
         self._draft_type = draft_type
         self._parser = parser
@@ -146,21 +144,31 @@ class ParsedFlowStep[
                 f"Step {self.step_id} received unsupported draft {type(draft).__name__}"
             )
 
-        try:
-            value = self._parser.parse(context.message)
-            for validator in self._validators:
-                validator.validate(context, draft, value)
-        except FlowStepError as error:
-            return StayOnStep(self.render_validation_error(error, draft))
-
-        return await self.advance(context, draft, value)
+        value = self._parser.parse(context.message)
+        validation = _validate_flow_input(
+            context,
+            draft,
+            value,
+            self._validators,
+        )
+        return await validation.fold(
+            lambda _: self.advance(context, draft, value),
+            lambda error: self._validation_failure(error, draft),
+        )
 
     @abstractmethod
     def render_validation_error(
         self,
-        error: FlowStepError,
+        error: ErrorT,
         draft: DraftT,
     ) -> FlowView: ...
+
+    async def _validation_failure(
+        self,
+        error: ErrorT,
+        draft: DraftT,
+    ) -> FlowTransition:
+        return StayOnStep(self.render_validation_error(error, draft))
 
     @abstractmethod
     async def advance(
@@ -203,3 +211,22 @@ class StartableFlow[RequestT](ActiveFlow, ABC):
         context: FlowContext,
         request: RequestT,
     ) -> FlowTransition: ...
+
+
+def _validate_flow_input[DraftT: FlowDraft, InputT, ErrorT](
+    context: FlowContext,
+    draft: DraftT,
+    value: InputT,
+    validators: tuple[FlowStepValidator[DraftT, InputT, ErrorT], ...],
+) -> Result[None, ErrorT]:
+    result: Result[None, ErrorT] = success(None)
+    for validator in validators:
+
+        def validate_next(
+            _: None,
+            current: FlowStepValidator[DraftT, InputT, ErrorT] = validator,
+        ) -> Result[None, ErrorT]:
+            return current.validate(context, draft, value)
+
+        result = result.and_then(validate_next)
+    return result

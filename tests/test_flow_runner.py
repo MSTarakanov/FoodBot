@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import auto
+from enum import StrEnum, auto
 
 import pytest
 from aiogram import Bot
@@ -23,7 +23,6 @@ from office_food_bot.flows.contracts import (
     FlowId,
     FlowPostAction,
     FlowSession,
-    FlowStepError,
     FlowStepId,
     MoveToStep,
     ParsedFlowStep,
@@ -34,6 +33,7 @@ from office_food_bot.flows.contracts import (
 from office_food_bot.flows.runner import ActiveFlowState, FlowRunner
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import TelegramProfile
+from office_food_bot.result import Result, failure, success
 
 
 class RecordingFlowMessenger(BotMessenger):
@@ -107,8 +107,8 @@ class FixtureFlow(StartableFlow[str]):
         self._events.append(f"abort:{session.step_id}")
 
 
-class FixtureStepError(FlowStepError):
-    pass
+class FixtureStepErrorCode(StrEnum):
+    INVALID = "invalid"
 
 
 class FixtureStepParser:
@@ -125,13 +125,21 @@ class FixtureStepValidator:
         self._events = events
         self._fails = fails
 
-    def validate(self, context: FlowContext, draft: FixtureDraft, value: str) -> None:
+    def validate(
+        self,
+        context: FlowContext,
+        draft: FixtureDraft,
+        value: str,
+    ) -> Result[None, FixtureStepErrorCode]:
         self._events.append("validate")
         if self._fails:
-            raise FixtureStepError
+            return failure(FixtureStepErrorCode.INVALID)
+        return success(None)
 
 
-class FixtureStep(ParsedFlowStep[FixtureStepId, FixtureDraft, str]):
+class FixtureStep(
+    ParsedFlowStep[FixtureStepId, FixtureDraft, str, FixtureStepErrorCode]
+):
     step_id = FixtureStepId.FIXTURE
 
     def __init__(self, events: list[str], *, fails: bool = False) -> None:
@@ -144,7 +152,7 @@ class FixtureStep(ParsedFlowStep[FixtureStepId, FixtureDraft, str]):
 
     def render_validation_error(
         self,
-        error: FlowStepError,
+        error: FixtureStepErrorCode,
         draft: FixtureDraft,
     ) -> TextFlowView:
         self._events.append("render_error")

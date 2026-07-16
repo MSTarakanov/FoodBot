@@ -3,6 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from office_food_bot.commanding.catalog import CommandCatalog
+from office_food_bot.commanding.errors.models import CommonErrorCode
+from office_food_bot.commanding.errors.rendering import (
+    BalanceErrorRenderer,
+    ErrorRenderer,
+    RegistrationErrorRenderer,
+)
 from office_food_bot.commanding.validators import TelegramIdentityValidator
 from office_food_bot.commands.approve import ApproveCommand
 from office_food_bot.commands.balance import BalanceCommand
@@ -42,7 +48,10 @@ class CommandRuntime:
     flow_runner: FlowRunner
 
 
-def build_command_runtime(services: BotServices) -> CommandRuntime:
+def build_command_runtime(
+    services: BotServices,
+    common_error_renderer: ErrorRenderer[CommonErrorCode],
+) -> CommandRuntime:
     messenger = services.messenger
     registration_flow = build_registration_flow(
         services.registration,
@@ -59,39 +68,78 @@ def build_command_runtime(services: BotServices) -> CommandRuntime:
 
     catalog = CommandCatalog(
         (
-            StartCommand(messenger),
-            HelpCommand(messenger, services.command_access, catalog_provider),
+            StartCommand(messenger, common_error_renderer),
+            HelpCommand(
+                messenger,
+                common_error_renderer,
+                services.command_access,
+                catalog_provider,
+            ),
             HiCommand(
                 messenger,
+                common_error_renderer,
                 services.telegram_interactions,
                 services.telegram_bot_username,
             ),
             RegisterCommand(
                 messenger,
+                common_error_renderer,
                 RegisterRequestParser(),
                 (TelegramIdentityValidator(),),
                 (RegisterOtherAdminValidator(services.registration),),
                 flow_runner,
                 registration_flow,
             ),
-            RequestRegisterCommand(messenger, services.registration),
-            QuitCommand(messenger, services.registration),
-            CancelCommand(messenger, flow_runner),
-            ApproveCommand(messenger, services.registration),
-            RegisterRequestsListCommand(messenger, services.registration),
+            RequestRegisterCommand(
+                messenger,
+                common_error_renderer,
+                services.registration,
+                RegistrationErrorRenderer(),
+            ),
+            QuitCommand(messenger, common_error_renderer, services.registration),
+            CancelCommand(messenger, common_error_renderer, flow_runner),
+            ApproveCommand(messenger, common_error_renderer, services.registration),
+            RegisterRequestsListCommand(
+                messenger,
+                common_error_renderer,
+                services.registration,
+            ),
             DebugCommand(
                 messenger,
+                common_error_renderer,
                 services.debug,
                 services.command_access,
                 catalog_provider,
             ),
-            TestCommand(messenger, MESSAGE_PREVIEWS),
-            MetaCommand(messenger, services.presence, services.active_users),
-            EtaCommand(messenger, services.presence, services.active_users),
-            BalanceCommand(messenger, services.balances, services.active_users),
-            VacationCommand(messenger, services.vacation, services.active_users),
+            TestCommand(messenger, common_error_renderer, MESSAGE_PREVIEWS),
+            MetaCommand(
+                messenger,
+                common_error_renderer,
+                services.presence,
+                services.active_users,
+            ),
+            EtaCommand(
+                messenger,
+                common_error_renderer,
+                services.presence,
+                services.active_users,
+            ),
+            BalanceCommand(
+                messenger,
+                common_error_renderer,
+                services.balances,
+                services.active_users,
+                BalanceErrorRenderer(),
+            ),
+            VacationCommand(
+                messenger,
+                common_error_renderer,
+                services.vacation,
+                services.active_users,
+            ),
             LunchCommand(
                 messenger,
+                common_error_renderer,
                 services.command_access,
                 services.invitations,
                 services.active_users,
@@ -99,15 +147,29 @@ def build_command_runtime(services: BotServices) -> CommandRuntime:
             ),
             CoffeeCommand(
                 messenger,
+                common_error_renderer,
                 services.coffee,
                 services.coffee_time,
                 CoffeeCommandRenderer(services.timezone_name),
                 services.invitations,
                 services.command_access,
+                services.active_users,
             ),
-            LunchAutoOnCommand(messenger, services.lunch_auto_chats),
-            LunchAutoOffCommand(messenger, services.lunch_auto_chats),
-            LunchAutoStatusCommand(messenger, services.lunch_auto_chats),
+            LunchAutoOnCommand(
+                messenger,
+                common_error_renderer,
+                services.lunch_auto_chats,
+            ),
+            LunchAutoOffCommand(
+                messenger,
+                common_error_renderer,
+                services.lunch_auto_chats,
+            ),
+            LunchAutoStatusCommand(
+                messenger,
+                common_error_renderer,
+                services.lunch_auto_chats,
+            ),
         )
     )
     return CommandRuntime(catalog, flow_runner)

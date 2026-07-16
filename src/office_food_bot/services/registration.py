@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from office_food_bot.commanding.errors.models import (
-    RegistrationError,
-    RegistrationErrorCode,
-)
+from office_food_bot.commanding.errors.models import RegistrationErrorCode
 from office_food_bot.models import (
     ApprovalKind,
     KnownTelegramAccount,
@@ -24,6 +21,7 @@ from office_food_bot.repositories import (
     UserRepository,
     normalize_display_name,
 )
+from office_food_bot.result import Result, failure, success
 
 REGISTRATION_SUGGESTIONS_LIMIT = 10
 
@@ -159,15 +157,18 @@ class RegistrationService:
             last_name=user.last_name,
         )
 
-    def ensure_registration_can_be_requested(self, telegram_user_id: int) -> None:
+    def registration_request_eligibility(
+        self,
+        telegram_user_id: int,
+    ) -> Result[None, RegistrationErrorCode]:
         user = self._users.get_by_telegram_id(telegram_user_id)
         if user is None or user.status == UserStatus.ABANDONED:
-            return
+            return success(None)
         if user.status == UserStatus.PENDING:
-            raise RegistrationError(RegistrationErrorCode.REQUEST_ALREADY_PENDING)
+            return failure(RegistrationErrorCode.REQUEST_ALREADY_PENDING)
         if user.status == UserStatus.ACTIVE:
-            raise RegistrationError(RegistrationErrorCode.REQUEST_ALREADY_ACTIVE)
-        raise RegistrationError(RegistrationErrorCode.REQUEST_UNAVAILABLE)
+            return failure(RegistrationErrorCode.REQUEST_ALREADY_ACTIVE)
+        return failure(RegistrationErrorCode.REQUEST_UNAVAILABLE)
 
     def should_ask_initial_preferences(self, telegram_user_id: int) -> bool:
         user = self._users.get_by_telegram_id(telegram_user_id)

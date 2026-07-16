@@ -17,12 +17,12 @@ from office_food_bot.commanding.definition import (
     HelpSection,
 )
 from office_food_bot.commanding.errors.models import (
-    CommandInputError,
-    CommonError,
     CommonErrorCode,
     InputErrorCode,
 )
+from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.commanding.validators import (
+    ActiveUserValidator,
     TelegramIdentityValidator,
     require_telegram_profile,
 )
@@ -30,8 +30,10 @@ from office_food_bot.invitation_models import InvitationKind
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.presenters.coffee import CoffeeCommandRenderer
 from office_food_bot.presenters.invitations import render_invitation_setting
+from office_food_bot.result import Result, failure, success
 from office_food_bot.services.coffee import CoffeeService, CoffeeTimeResolver
 from office_food_bot.services.invitations import InvitationPreferenceService
+from office_food_bot.services.user_access import ActiveUserResolver
 
 COFFEE_TIME_ERROR = (
     "Не понял время. Напиши минуты или время сегодня: /coffee 15 или /coffee 16:30."
@@ -63,36 +65,44 @@ class CoffeeRequestParser:
     def __init__(self, coffee_time: CoffeeTimeResolver) -> None:
         self._coffee_time = coffee_time
 
-    def parse(self, raw_arguments: str | None) -> CoffeeRequest:
+    def parse(
+        self,
+        raw_arguments: str | None,
+    ) -> Result[CoffeeRequest, InputErrorCode]:
         argument = (raw_arguments or "").strip()
         if not argument:
-            return CoffeeStatusRequest()
+            return success(CoffeeStatusRequest())
         normalized = argument.casefold()
         if normalized in {"on", "off"}:
-            return CoffeeToggleRequest(normalized == "on")
+            return success(CoffeeToggleRequest(normalized == "on"))
         resolution = self._coffee_time.resolve(argument)
         if resolution.kind == CoffeeTimeResolutionKind.INVALID_FORMAT:
-            raise CommandInputError(InputErrorCode.INVALID_FORMAT)
+            return failure(InputErrorCode.INVALID_FORMAT)
         if resolution.kind == CoffeeTimeResolutionKind.OUT_OF_RANGE:
-            raise CommandInputError(InputErrorCode.OUT_OF_RANGE)
+            return failure(InputErrorCode.OUT_OF_RANGE)
         if resolution.scheduled_at is None:
             raise RuntimeError("Valid coffee schedule has no timestamp")
-        return CoffeeScheduleRequest(resolution.scheduled_at)
+        return success(CoffeeScheduleRequest(resolution.scheduled_at))
 
 
 class CoffeeScheduleScopeValidator:
     def __init__(self, access: CommandAccessService) -> None:
         self._access = access
 
-    def validate(self, context: CommandContext, request: CoffeeRequest) -> None:
+    def validate(
+        self,
+        context: CommandContext,
+        request: CoffeeRequest,
+    ) -> Result[None, CommonErrorCode]:
         if not isinstance(request, CoffeeScheduleRequest):
-            return
+            return success(None)
         profile = require_telegram_profile(context)
         if not self._access.can_run_group_command_in_chat(
             str(context.message.chat.type),
             profile.telegram_user_id,
         ):
-            raise CommonError(CommonErrorCode.GROUP_CHAT_REQUIRED)
+            return failure(CommonErrorCode.GROUP_CHAT_REQUIRED)
+        return success(None)
 
 
 class CoffeeCommand(EffectCommand[CoffeeRequest]):
@@ -134,21 +144,28 @@ class CoffeeCommand(EffectCommand[CoffeeRequest]):
     def __init__(
         self,
         messenger: BotMessenger,
+        common_error_renderer: ErrorRenderer[CommonErrorCode],
         coffee: CoffeeService,
         coffee_time: CoffeeTimeResolver,
         renderer: CoffeeCommandRenderer,
         invitations: InvitationPreferenceService,
         access: CommandAccessService,
+        active_users: ActiveUserResolver,
     ) -> None:
         super().__init__(
             messenger,
+            common_error_renderer,
             CoffeeRequestParser(coffee_time),
             (TelegramIdentityValidator(),),
-            (CoffeeScheduleScopeValidator(access),),
+            (
+                CoffeeScheduleScopeValidator(access),
+                ActiveUserValidator(active_users),
+            ),
         )
         self._coffee = coffee
         self._renderer = renderer
         self._invitations = invitations
+        self._active_users = active_users
 
     async def execute_effect(
         self,
@@ -157,11 +174,12 @@ class CoffeeCommand(EffectCommand[CoffeeRequest]):
     ) -> None:
         profile = require_telegram_profile(context)
         if isinstance(request, CoffeeStatusRequest):
+            user = self._active_users.require_validated(profile.telegram_user_id)
             await self._messenger.reply(
                 context.message,
                 self._renderer.status(
                     self._coffee.status(
-                        profile.telegram_user_id,
+                        user,
                         context.message.chat.id,
                     )
                 ),
@@ -183,9 +201,10 @@ class CoffeeCommand(EffectCommand[CoffeeRequest]):
 
         if not isinstance(request, CoffeeScheduleRequest):
             raise RuntimeError(f"Unsupported coffee request: {type(request).__name__}")
+        user = self._active_users.require_validated(profile.telegram_user_id)
         await self._coffee.create_or_reschedule(
             context.bot,
             context.message.chat.id,
-            profile.telegram_user_id,
+            user,
             request.scheduled_at,
         )

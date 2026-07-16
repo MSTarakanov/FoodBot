@@ -7,8 +7,11 @@ from office_food_bot.commanding.contracts import (
     EffectCommand,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
+from office_food_bot.commanding.errors.models import CommonErrorCode, InputErrorCode
+from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.previews.catalog import MessagePreviewCatalog
+from office_food_bot.result import Result, success
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,8 +20,11 @@ class PreviewRequest:
 
 
 class PreviewRequestParser:
-    def parse(self, raw_arguments: str | None) -> PreviewRequest:
-        return PreviewRequest((raw_arguments or "").strip().casefold())
+    def parse(
+        self,
+        raw_arguments: str | None,
+    ) -> Result[PreviewRequest, InputErrorCode]:
+        return success(PreviewRequest((raw_arguments or "").strip().casefold()))
 
 
 class TestCommand(EffectCommand[PreviewRequest]):
@@ -35,9 +41,16 @@ class TestCommand(EffectCommand[PreviewRequest]):
     def __init__(
         self,
         messenger: BotMessenger,
+        common_error_renderer: ErrorRenderer[CommonErrorCode],
         previews: MessagePreviewCatalog,
     ) -> None:
-        super().__init__(messenger, PreviewRequestParser(), (), ())
+        super().__init__(
+            messenger,
+            common_error_renderer,
+            PreviewRequestParser(),
+            (),
+            (),
+        )
         self._previews = previews
 
     async def execute_effect(

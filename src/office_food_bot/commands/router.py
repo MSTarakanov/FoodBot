@@ -4,10 +4,10 @@ from aiogram import F, Router
 
 from office_food_bot.commanding.catalog import CommandCatalog
 from office_food_bot.commanding.dispatcher import CommandDispatcher
-from office_food_bot.commanding.errors.middleware import UserFacingErrorMiddleware
+from office_food_bot.commanding.errors.models import CommonErrorCode
 from office_food_bot.commanding.errors.rendering import (
-    BotUsernameErrorRenderer,
-    CallbackErrorRenderer,
+    CallbackCommonErrorRenderer,
+    CoffeeErrorRenderer,
     ErrorRenderer,
 )
 from office_food_bot.controllers.coffee import CoffeeCallbackController
@@ -20,26 +20,18 @@ from office_food_bot.services import BotServices
 def create_command_router(
     services: BotServices,
     catalog: CommandCatalog,
-    error_renderer: ErrorRenderer,
+    common_error_renderer: ErrorRenderer[CommonErrorCode],
     flow_runner: FlowRunner,
 ) -> Router:
     messenger = services.messenger
     router = Router(name="commands")
-    router.message.outer_middleware(
-        UserFacingErrorMiddleware(
-            catalog,
-            BotUsernameErrorRenderer(
-                error_renderer,
-                services.telegram_bot_username,
-            ),
-            messenger,
-        )
-    )
     command_dispatcher = CommandDispatcher(
         catalog,
         services.command_access,
         services.telegram_bot_username,
         flow_runner,
+        messenger,
+        common_error_renderer,
     )
     router.message.register(
         command_dispatcher.dispatch,
@@ -47,8 +39,10 @@ def create_command_router(
     )
     coffee_callbacks = CoffeeCallbackController(
         services.coffee,
+        services.active_users,
         CoffeeCommandRenderer(services.timezone_name),
-        CallbackErrorRenderer(error_renderer),
+        CallbackCommonErrorRenderer(common_error_renderer),
+        CoffeeErrorRenderer(),
     )
     poll_answers = PollAnswerController(services.poll_tracking, services.lunch_publisher)
     router.callback_query.register(

@@ -26,7 +26,7 @@ class InvitationPreferenceService:
         telegram_user_id: int,
         kind: InvitationKind,
     ) -> InvitationSettingReport:
-        user = self._active_users.require(telegram_user_id)
+        user = self._active_users.require_validated(telegram_user_id)
         preferences = self._preferences.get(user.id)
         enabled = (
             preferences.lunch_enabled
@@ -41,7 +41,7 @@ class InvitationPreferenceService:
         kind: InvitationKind,
         enabled: bool,
     ) -> InvitationSettingReport:
-        user = self._active_users.require(telegram_user_id)
+        user = self._active_users.require_validated(telegram_user_id)
         if kind == InvitationKind.LUNCH:
             self._preferences.set_lunch_enabled(user.id, enabled)
         else:

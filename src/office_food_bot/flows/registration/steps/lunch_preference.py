@@ -13,7 +13,11 @@ from office_food_bot.flows.registration.draft import RegistrationDraft
 from office_food_bot.flows.registration.identifiers import RegistrationStepId
 from office_food_bot.flows.registration.rendering import coffee_preference_view
 from office_food_bot.flows.registration.steps.base import RegistrationStep
-from office_food_bot.flows.registration.validation import TextFlowInput, yes_no_value
+from office_food_bot.flows.registration.validation import (
+    RegistrationStepErrorCode,
+    TextFlowInput,
+    yes_no_value,
+)
 
 
 class RegistrationLunchPreferenceStep(RegistrationStep[TextFlowInput]):
@@ -23,7 +27,11 @@ class RegistrationLunchPreferenceStep(RegistrationStep[TextFlowInput]):
         self,
         parser: FlowStepParser[TextFlowInput],
         validators: tuple[
-            FlowStepValidator[RegistrationDraft, TextFlowInput],
+            FlowStepValidator[
+                RegistrationDraft,
+                TextFlowInput,
+                RegistrationStepErrorCode,
+            ],
             ...,
         ],
     ) -> None:

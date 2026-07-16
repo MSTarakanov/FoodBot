@@ -4,27 +4,33 @@ from aiogram import Bot
 from aiogram.types import CallbackQuery
 
 from office_food_bot.coffee_callbacks import CoffeeCallbackData
+from office_food_bot.coffee_models import CoffeeParticipationReport
 from office_food_bot.commanding.errors.models import (
-    CoffeeError,
     CoffeeErrorCode,
-    UserFacingError,
+    CommonErrorCode,
 )
 from office_food_bot.commanding.errors.rendering import (
     ErrorRenderer,
 )
+from office_food_bot.models import RegisteredUser
 from office_food_bot.presenters.coffee import CoffeeCommandRenderer
 from office_food_bot.services.coffee import CoffeeService
+from office_food_bot.services.user_access import ActiveUserResolver
 
 
 class CoffeeCallbackController:
     def __init__(
         self,
         coffee: CoffeeService,
+        active_users: ActiveUserResolver,
         coffee_renderer: CoffeeCommandRenderer,
-        error_renderer: ErrorRenderer,
+        common_error_renderer: ErrorRenderer[CommonErrorCode],
+        error_renderer: ErrorRenderer[CoffeeErrorCode],
     ) -> None:
         self._coffee = coffee
+        self._active_users = active_users
         self._coffee_renderer = coffee_renderer
+        self._common_error_renderer = common_error_renderer
         self._error_renderer = error_renderer
 
     async def handle(
@@ -32,22 +38,62 @@ class CoffeeCallbackController:
         callback_query: CallbackQuery,
         bot: Bot,
     ) -> None:
-        try:
-            callback_data = CoffeeCallbackData.unpack(callback_query.data or "")
-            if callback_data is None:
-                raise CoffeeError(CoffeeErrorCode.INVALID_CALLBACK)
-            result = await self._coffee.update_participation(
-                bot,
-                callback_query.from_user.id,
-                callback_data,
-            )
-        except UserFacingError as error:
-            await callback_query.answer(
-                self._error_renderer.render(error),
-                show_alert=True,
+        callback_data = CoffeeCallbackData.unpack(callback_query.data or "")
+        if callback_data is None:
+            await self._answer_coffee_error(
+                callback_query,
+                CoffeeErrorCode.INVALID_CALLBACK,
             )
             return
+        await self._active_users.resolve(callback_query.from_user.id).fold(
+            lambda user: self._update_participation(
+                callback_query,
+                bot,
+                user,
+                callback_data,
+            ),
+            lambda code: self._answer_common_error(callback_query, code),
+        )
+
+    async def _update_participation(
+        self,
+        callback_query: CallbackQuery,
+        bot: Bot,
+        user: RegisteredUser,
+        callback_data: CoffeeCallbackData,
+    ) -> None:
+        result = await self._coffee.update_participation(bot, user, callback_data)
+        await result.fold(
+            lambda report: self._answer_success(callback_query, report),
+            lambda code: self._answer_coffee_error(callback_query, code),
+        )
+
+    async def _answer_success(
+        self,
+        callback_query: CallbackQuery,
+        report: CoffeeParticipationReport,
+    ) -> None:
         await callback_query.answer(
-            self._coffee_renderer.participation(result),
+            self._coffee_renderer.participation(report),
             show_alert=False,
+        )
+
+    async def _answer_common_error(
+        self,
+        callback_query: CallbackQuery,
+        code: CommonErrorCode,
+    ) -> None:
+        await callback_query.answer(
+            self._common_error_renderer.render(code),
+            show_alert=True,
+        )
+
+    async def _answer_coffee_error(
+        self,
+        callback_query: CallbackQuery,
+        code: CoffeeErrorCode,
+    ) -> None:
+        await callback_query.answer(
+            self._error_renderer.render(code),
+            show_alert=True,
         )

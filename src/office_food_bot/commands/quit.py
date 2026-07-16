@@ -7,6 +7,8 @@ from office_food_bot.commanding.contracts import (
     NoArgumentsParser,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
+from office_food_bot.commanding.errors.models import CommonErrorCode
+from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.commanding.validators import (
     TelegramIdentityValidator,
     require_telegram_profile,
@@ -30,10 +32,12 @@ class QuitCommand(EffectCommand[NoArguments]):
     def __init__(
         self,
         messenger: BotMessenger,
+        common_error_renderer: ErrorRenderer[CommonErrorCode],
         registration: RegistrationService,
     ) -> None:
         super().__init__(
             messenger,
+            common_error_renderer,
             NoArgumentsParser(),
             (TelegramIdentityValidator(),),
             (),

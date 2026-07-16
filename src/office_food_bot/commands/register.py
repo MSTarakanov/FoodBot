@@ -13,7 +13,8 @@ from office_food_bot.commanding.definition import (
     CommandScope,
     HelpSection,
 )
-from office_food_bot.commanding.errors.models import InputErrorCode
+from office_food_bot.commanding.errors.models import CommonErrorCode, InputErrorCode
+from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.flows.registration.flow import RegistrationFlow
 from office_food_bot.flows.registration.requests import RegisterRequest
 from office_food_bot.flows.runner import FlowRunner
@@ -38,13 +39,20 @@ class RegisterCommand(FlowCommand[RegisterRequest]):
     def __init__(
         self,
         messenger: BotMessenger,
+        common_error_renderer: ErrorRenderer[CommonErrorCode],
         parser: Parser[RegisterRequest],
         context_validators: tuple[ContextValidator, ...],
         validators: tuple[Validator[RegisterRequest], ...],
         runner: FlowRunner,
         flow: RegistrationFlow,
     ) -> None:
-        super().__init__(messenger, parser, context_validators, validators)
+        super().__init__(
+            messenger,
+            common_error_renderer,
+            parser,
+            context_validators,
+            validators,
+        )
         self._runner = runner
         self._flow = flow
 

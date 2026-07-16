@@ -25,7 +25,7 @@ class PresenceService:
         request: EtaRequest,
         kind: PresenceKind,
     ) -> PresenceReport:
-        user = self._active_users.require(telegram_user_id)
+        user = self._active_users.require_validated(telegram_user_id)
         now = self._local_now()
         return PresenceReport(
             kind=kind,

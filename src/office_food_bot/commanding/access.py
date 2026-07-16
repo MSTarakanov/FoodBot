@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import assert_never
 
 from office_food_bot.commanding.definition import (
     CommandDefinition,
@@ -10,7 +11,8 @@ from office_food_bot.commanding.definition import (
     CommandScope,
     VisibleCommandHelpEntry,
 )
-from office_food_bot.commanding.errors.models import CommonError, CommonErrorCode
+from office_food_bot.commanding.errors.models import CommonErrorCode
+from office_food_bot.result import Result, failure, success
 from office_food_bot.services.debug import DebugService
 from office_food_bot.services.registration import RegistrationService
 
@@ -61,19 +63,20 @@ class CommandAccessService:
 
         return _allowed()
 
-    def validate_run(
+    def authorize_run(
         self,
         definition: CommandDefinition,
         chat_type: str,
         telegram_user_id: int | None,
-    ) -> None:
+    ) -> Result[None, CommonErrorCode]:
         denial = self.can_run(
             definition,
             chat_type,
             telegram_user_id,
         ).denial_reason
-        if denial is not None:
-            raise CommonError(_common_error_code(denial))
+        if denial is None:
+            return success(None)
+        return failure(_common_error_code(denial))
 
     def visible_commands(
         self,
@@ -198,10 +201,11 @@ def _denied(reason: CommandAccessDenialReason) -> CommandAccessResult:
 
 
 def _common_error_code(reason: CommandAccessDenialReason) -> CommonErrorCode:
-    if reason == CommandAccessDenialReason.PRIVATE_ONLY:
-        return CommonErrorCode.PRIVATE_CHAT_REQUIRED
-    if reason == CommandAccessDenialReason.GROUP_ONLY:
-        return CommonErrorCode.GROUP_CHAT_REQUIRED
-    if reason == CommandAccessDenialReason.ADMIN_ONLY:
-        return CommonErrorCode.ADMIN_REQUIRED
-    raise ValueError(f"Unsupported command access denial: {reason}")
+    match reason:
+        case CommandAccessDenialReason.PRIVATE_ONLY:
+            return CommonErrorCode.PRIVATE_CHAT_REQUIRED
+        case CommandAccessDenialReason.GROUP_ONLY:
+            return CommonErrorCode.GROUP_CHAT_REQUIRED
+        case CommandAccessDenialReason.ADMIN_ONLY:
+            return CommonErrorCode.ADMIN_REQUIRED
+    assert_never(reason)

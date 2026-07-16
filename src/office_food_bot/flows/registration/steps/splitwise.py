@@ -20,6 +20,7 @@ from office_food_bot.flows.registration.rendering import (
 from office_food_bot.flows.registration.steps.base import RegistrationStep
 from office_food_bot.flows.registration.use_case import RegistrationFlowUseCase
 from office_food_bot.flows.registration.validation import (
+    RegistrationStepErrorCode,
     TextFlowInput,
     is_splitwise_skip,
     required_text,
@@ -36,7 +37,11 @@ class RegistrationSplitwiseStep(RegistrationStep[TextFlowInput]):
         self,
         parser: FlowStepParser[TextFlowInput],
         validators: tuple[
-            FlowStepValidator[RegistrationDraft, TextFlowInput],
+            FlowStepValidator[
+                RegistrationDraft,
+                TextFlowInput,
+                RegistrationStepErrorCode,
+            ],
             ...,
         ],
         registration: RegistrationService,

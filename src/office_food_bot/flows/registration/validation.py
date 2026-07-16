@@ -5,8 +5,9 @@ from enum import StrEnum
 
 from aiogram.types import Message
 
-from office_food_bot.flows.contracts import FlowContext, FlowStepError
+from office_food_bot.flows.contracts import FlowContext
 from office_food_bot.flows.registration.draft import RegistrationDraft
+from office_food_bot.result import Result, failure, success
 
 SPLITWISE_SKIP_ANSWERS = frozenset({"пропустить", "skip"})
 YES_ANSWERS = frozenset({"да", "yes", "y"})
@@ -20,12 +21,6 @@ class RegistrationStepErrorCode(StrEnum):
     LUNCH_CHOICE_REQUIRED = "lunch_choice_required"
     COFFEE_CHOICE_REQUIRED = "coffee_choice_required"
     REREGISTRATION_CHOICE_REQUIRED = "reregistration_choice_required"
-
-
-class RegistrationStepError(FlowStepError):
-    def __init__(self, code: RegistrationStepErrorCode) -> None:
-        super().__init__(code.value)
-        self.code = code
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,11 +39,12 @@ class RegistrationNameValidator:
         context: FlowContext,
         draft: RegistrationDraft,
         value: TextFlowInput,
-    ) -> None:
+    ) -> Result[None, RegistrationStepErrorCode]:
         if value.text is None:
-            raise RegistrationStepError(RegistrationStepErrorCode.NAME_TEXT_REQUIRED)
+            return failure(RegistrationStepErrorCode.NAME_TEXT_REQUIRED)
         if not value.text.strip():
-            raise RegistrationStepError(RegistrationStepErrorCode.NAME_EMPTY)
+            return failure(RegistrationStepErrorCode.NAME_EMPTY)
+        return success(None)
 
 
 class SplitwiseAnswerValidator:
@@ -57,9 +53,10 @@ class SplitwiseAnswerValidator:
         context: FlowContext,
         draft: RegistrationDraft,
         value: TextFlowInput,
-    ) -> None:
+    ) -> Result[None, RegistrationStepErrorCode]:
         if value.text is None or not value.text.strip():
-            raise RegistrationStepError(RegistrationStepErrorCode.SPLITWISE_TEXT_REQUIRED)
+            return failure(RegistrationStepErrorCode.SPLITWISE_TEXT_REQUIRED)
+        return success(None)
 
 
 class LunchPreferenceValidator:
@@ -68,8 +65,11 @@ class LunchPreferenceValidator:
         context: FlowContext,
         draft: RegistrationDraft,
         value: TextFlowInput,
-    ) -> None:
-        _validate_yes_no(value, RegistrationStepErrorCode.LUNCH_CHOICE_REQUIRED)
+    ) -> Result[None, RegistrationStepErrorCode]:
+        return _validate_yes_no(
+            value,
+            RegistrationStepErrorCode.LUNCH_CHOICE_REQUIRED,
+        )
 
 
 class CoffeePreferenceValidator:
@@ -78,8 +78,11 @@ class CoffeePreferenceValidator:
         context: FlowContext,
         draft: RegistrationDraft,
         value: TextFlowInput,
-    ) -> None:
-        _validate_yes_no(value, RegistrationStepErrorCode.COFFEE_CHOICE_REQUIRED)
+    ) -> Result[None, RegistrationStepErrorCode]:
+        return _validate_yes_no(
+            value,
+            RegistrationStepErrorCode.COFFEE_CHOICE_REQUIRED,
+        )
 
 
 class ReregistrationDecisionValidator:
@@ -88,8 +91,8 @@ class ReregistrationDecisionValidator:
         context: FlowContext,
         draft: RegistrationDraft,
         value: TextFlowInput,
-    ) -> None:
-        _validate_yes_no(
+    ) -> Result[None, RegistrationStepErrorCode]:
+        return _validate_yes_no(
             value,
             RegistrationStepErrorCode.REREGISTRATION_CHOICE_REQUIRED,
         )
@@ -117,10 +120,11 @@ def required_text(value: TextFlowInput) -> str:
 def _validate_yes_no(
     value: TextFlowInput,
     error_code: RegistrationStepErrorCode,
-) -> None:
+) -> Result[None, RegistrationStepErrorCode]:
     normalized = _normalized(value)
     if normalized not in YES_ANSWERS and normalized not in NO_ANSWERS:
-        raise RegistrationStepError(error_code)
+        return failure(error_code)
+    return success(None)
 
 
 def _normalized(value: TextFlowInput) -> str:

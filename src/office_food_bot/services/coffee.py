@@ -20,15 +20,15 @@ from office_food_bot.coffee_models import (
     CoffeeTimeResolutionKind,
 )
 from office_food_bot.coffee_repositories import CoffeeSessionRepository
-from office_food_bot.commanding.errors.models import CoffeeError, CoffeeErrorCode
+from office_food_bot.commanding.errors.models import CoffeeErrorCode
 from office_food_bot.messaging import BotMessenger, InlineChoice
 from office_food_bot.models import CoffeeSession, CoffeeSessionStatus, RegisteredUser
 from office_food_bot.presenters.coffee import CoffeeCardRenderer
 from office_food_bot.repositories import UserRepository
+from office_food_bot.result import Result, failure, success
 from office_food_bot.services.invitations import InvitationPreferenceService
 from office_food_bot.services.job_scheduler import JobScheduler
 from office_food_bot.services.lunch_attendance import LunchAttendanceService
-from office_food_bot.services.user_access import ActiveUserResolver
 from office_food_bot.services.user_references import format_user_reference
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,6 @@ class CoffeeService:
     def __init__(
         self,
         users: UserRepository,
-        active_users: ActiveUserResolver,
         preferences: InvitationPreferenceService,
         sessions: CoffeeSessionRepository,
         attendance: LunchAttendanceService,
@@ -71,7 +70,6 @@ class CoffeeService:
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._users = users
-        self._active_users = active_users
         self._preferences = preferences
         self._sessions = sessions
         self._attendance = attendance
@@ -82,8 +80,7 @@ class CoffeeService:
         self._clock = clock or (lambda: datetime.now(tz=UTC))
         self._chat_locks: dict[int, asyncio.Lock] = {}
 
-    def status(self, telegram_user_id: int, chat_id: int) -> CoffeeStatusReport:
-        user = self._active_users.require(telegram_user_id)
+    def status(self, user: RegisteredUser, chat_id: int) -> CoffeeStatusReport:
         invitations_enabled = self._preferences.for_user(user.id).coffee_enabled
         session = self._sessions.get_open_for_chat(chat_id)
         if session is None:
@@ -99,11 +96,9 @@ class CoffeeService:
         self,
         bot: Bot,
         chat_id: int,
-        telegram_user_id: int,
+        user: RegisteredUser,
         scheduled_at: datetime,
     ) -> None:
-        user = self._active_users.require(telegram_user_id)
-
         async with self._lock(chat_id):
             session = self._sessions.get_open_for_chat(chat_id)
             is_new = session is None
@@ -153,17 +148,16 @@ class CoffeeService:
     async def update_participation(
         self,
         bot: Bot,
-        telegram_user_id: int,
+        user: RegisteredUser,
         callback: CoffeeCallbackData,
-    ) -> CoffeeParticipationReport:
-        user = self._active_users.require(telegram_user_id)
+    ) -> Result[CoffeeParticipationReport, CoffeeErrorCode]:
         session = self._sessions.get(callback.session_id)
         if session is None or session.status != CoffeeSessionStatus.ACTIVE:
-            raise CoffeeError(CoffeeErrorCode.SESSION_ENDED)
+            return failure(CoffeeErrorCode.SESSION_ENDED)
         async with self._lock(session.chat_id):
             current = self._sessions.get(callback.session_id)
             if current is None or current.status != CoffeeSessionStatus.ACTIVE:
-                raise CoffeeError(CoffeeErrorCode.SESSION_ENDED)
+                return failure(CoffeeErrorCode.SESSION_ENDED)
             participant_ids = {
                 participant.id
                 for participant in self._sessions.list_participants(current.id)
@@ -171,12 +165,16 @@ class CoffeeService:
             was_participant = user.id in participant_ids
             if callback.action == CoffeeParticipantAction.JOIN:
                 if was_participant:
-                    return CoffeeParticipationReport(CoffeeParticipationKind.UNCHANGED)
+                    return success(
+                        CoffeeParticipationReport(CoffeeParticipationKind.UNCHANGED)
+                    )
                 self._sessions.join(current.id, user.id)
                 result_kind = CoffeeParticipationKind.JOINED
             else:
                 if not was_participant:
-                    return CoffeeParticipationReport(CoffeeParticipationKind.UNCHANGED)
+                    return success(
+                        CoffeeParticipationReport(CoffeeParticipationKind.UNCHANGED)
+                    )
                 self._sessions.leave(current.id, user.id)
                 result_kind = CoffeeParticipationKind.LEFT
             try:
@@ -188,7 +186,7 @@ class CoffeeService:
                 else:
                     self._sessions.leave(current.id, user.id)
                 raise
-            return CoffeeParticipationReport(result_kind)
+            return success(CoffeeParticipationReport(result_kind))
 
     async def restore_jobs(self, bot: Bot) -> None:
         now = self._clock()

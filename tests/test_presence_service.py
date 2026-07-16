@@ -6,17 +6,14 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from office_food_bot.commanding.errors.models import (
-    CommandInputError,
-    CommonError,
-    CommonErrorCode,
     InputErrorCode,
 )
 from office_food_bot.commands.presence import EtaRequestParser
-from office_food_bot.database import Database
-from office_food_bot.models import TelegramProfile, UserStatus
-from office_food_bot.presence_models import PresenceKind
+from office_food_bot.models import TelegramProfile
+from office_food_bot.presence_models import EtaRequest, PresenceKind
 from office_food_bot.presenters.presence import render_presence_report
 from office_food_bot.repositories import UserRepository
+from office_food_bot.result import Result
 from office_food_bot.services.presence import PresenceService
 from office_food_bot.services.user_access import ActiveUserResolver
 
@@ -50,48 +47,28 @@ def presence_text(
     raw_minutes: str,
     kind: PresenceKind,
 ) -> str:
-    request = EtaRequestParser().parse(raw_minutes)
+    request = parsed_eta(raw_minutes)
     return render_presence_report(presence.report(42, request, kind)).text
+
+
+def parsed_eta(raw_minutes: str) -> EtaRequest:
+    return EtaRequestParser().parse(raw_minutes).fold(
+        lambda request: request,
+        lambda code: pytest.fail(f"Unexpected ETA parse error: {code}"),
+    )
+
+
+def eta_parse_error(raw_minutes: str) -> InputErrorCode:
+    result: Result[EtaRequest, InputErrorCode] = EtaRequestParser().parse(raw_minutes)
+    return result.fold(
+        lambda request: pytest.fail(f"Unexpected ETA request: {request}"),
+        lambda code: code,
+    )
 
 
 def create_active_user(users: UserRepository) -> None:
     users.create_pending_user(make_profile(), "Максим")
     users.approve_by_telegram_id(42)
-
-
-def test_meta_requires_registration(users: UserRepository) -> None:
-    with pytest.raises(CommonError) as error:
-        presence_text(make_presence(users), "25", PresenceKind.META)
-
-    assert error.value.code == CommonErrorCode.REGISTRATION_REQUIRED
-
-
-def test_meta_requires_approved_registration(users: UserRepository) -> None:
-    users.create_pending_user(make_profile(), "Максим")
-
-    with pytest.raises(CommonError) as error:
-        presence_text(make_presence(users), "25", PresenceKind.META)
-
-    assert error.value.code == CommonErrorCode.REGISTRATION_PENDING
-
-
-def test_meta_rejects_inactive_registration(
-    database: Database,
-    users: UserRepository,
-) -> None:
-    users.create_pending_user(make_profile(), "Максим")
-    user = users.get_by_telegram_id(42)
-    assert user is not None
-    with database.connection:
-        database.connection.execute(
-            "UPDATE users SET status = ? WHERE id = ?",
-            (UserStatus.DISABLED.value, user.id),
-        )
-
-    with pytest.raises(CommonError) as error:
-        presence_text(make_presence(users), "25", PresenceKind.META)
-
-    assert error.value.code == CommonErrorCode.REGISTRATION_INACTIVE
 
 
 @pytest.mark.parametrize(
@@ -102,12 +79,7 @@ def test_meta_rejects_invalid_minutes_format(
     raw_minutes: str,
     users: UserRepository,
 ) -> None:
-    create_active_user(users)
-
-    with pytest.raises(CommandInputError) as error:
-        presence_text(make_presence(users), raw_minutes, PresenceKind.META)
-
-    assert error.value.code == InputErrorCode.INVALID_FORMAT
+    assert eta_parse_error(raw_minutes) == InputErrorCode.INVALID_FORMAT
 
 
 @pytest.mark.parametrize("raw_minutes", ["-1", "527041", "9999999999", "0-527041"])
@@ -115,21 +87,11 @@ def test_meta_rejects_out_of_range_minutes(
     raw_minutes: str,
     users: UserRepository,
 ) -> None:
-    create_active_user(users)
-
-    with pytest.raises(CommandInputError) as error:
-        presence_text(make_presence(users), raw_minutes, PresenceKind.META)
-
-    assert error.value.code == InputErrorCode.OUT_OF_RANGE
+    assert eta_parse_error(raw_minutes) == InputErrorCode.OUT_OF_RANGE
 
 
 def test_meta_rejects_reversed_minutes_range(users: UserRepository) -> None:
-    create_active_user(users)
-
-    with pytest.raises(CommandInputError) as error:
-        presence_text(make_presence(users), "30-20", PresenceKind.META)
-
-    assert error.value.code == InputErrorCode.REVERSED_RANGE
+    assert eta_parse_error("30-20") == InputErrorCode.REVERSED_RANGE
 
 
 def test_meta_uses_display_name_and_fixed_clock(users: UserRepository) -> None:
@@ -220,13 +182,6 @@ def test_meta_formats_cross_day_range(users: UserRepository) -> None:
     )
 
 
-def test_delivery_eta_requires_registration(users: UserRepository) -> None:
-    with pytest.raises(CommonError) as error:
-        presence_text(make_presence(users), "20", PresenceKind.DELIVERY_ETA)
-
-    assert error.value.code == CommonErrorCode.REGISTRATION_REQUIRED
-
-
 @pytest.mark.parametrize(
     "raw_minutes",
     ["abc", "20--30", "20-", "1.5"],
@@ -235,12 +190,7 @@ def test_delivery_eta_rejects_invalid_minutes_format(
     raw_minutes: str,
     users: UserRepository,
 ) -> None:
-    create_active_user(users)
-
-    with pytest.raises(CommandInputError) as error:
-        presence_text(make_presence(users), raw_minutes, PresenceKind.DELIVERY_ETA)
-
-    assert error.value.code == InputErrorCode.INVALID_FORMAT
+    assert eta_parse_error(raw_minutes) == InputErrorCode.INVALID_FORMAT
 
 
 @pytest.mark.parametrize("raw_minutes", ["-1", "527041", "9999999999", "0-527041"])
@@ -248,21 +198,11 @@ def test_delivery_eta_rejects_out_of_range_minutes(
     raw_minutes: str,
     users: UserRepository,
 ) -> None:
-    create_active_user(users)
-
-    with pytest.raises(CommandInputError) as error:
-        presence_text(make_presence(users), raw_minutes, PresenceKind.DELIVERY_ETA)
-
-    assert error.value.code == InputErrorCode.OUT_OF_RANGE
+    assert eta_parse_error(raw_minutes) == InputErrorCode.OUT_OF_RANGE
 
 
 def test_delivery_eta_rejects_reversed_minutes_range(users: UserRepository) -> None:
-    create_active_user(users)
-
-    with pytest.raises(CommandInputError) as error:
-        presence_text(make_presence(users), "30-20", PresenceKind.DELIVERY_ETA)
-
-    assert error.value.code == InputErrorCode.REVERSED_RANGE
+    assert eta_parse_error("30-20") == InputErrorCode.REVERSED_RANGE
 
 
 def test_delivery_eta_uses_fixed_clock(users: UserRepository) -> None:

@@ -4,13 +4,9 @@ from decimal import Decimal
 from typing import Protocol
 
 from office_food_bot.balance_models import BalanceEntry, BalanceReport
-from office_food_bot.commanding.errors.models import (
-    BalanceError,
-    BalanceErrorCode,
-    ExternalDependency,
-    InfrastructureUnavailableError,
-)
+from office_food_bot.commanding.errors.models import BalanceErrorCode
 from office_food_bot.models import ActiveSplitwiseUser, SplitwiseMember
+from office_food_bot.result import Result, failure, success
 from office_food_bot.services.splitwise import SplitwiseGroupKind, SplitwiseService
 
 BALANCE_CURRENCY_CODE = "RSD"
@@ -29,14 +25,14 @@ class BalanceService:
         self._users = users
         self._splitwise = splitwise
 
-    async def balance(self) -> BalanceReport:
+    async def balance(self) -> Result[BalanceReport, BalanceErrorCode]:
         linked_users = self._users.list_active_splitwise_users()
         if not linked_users:
-            raise BalanceError(BalanceErrorCode.NO_SPLITWISE_USERS)
+            return failure(BalanceErrorCode.NO_SPLITWISE_USERS)
 
         splitwise_result = await self._splitwise.group_members()
         if splitwise_result.kind == SplitwiseGroupKind.UNAVAILABLE:
-            raise InfrastructureUnavailableError(ExternalDependency.SPLITWISE)
+            return failure(BalanceErrorCode.SPLITWISE_UNAVAILABLE)
 
         members_by_id = {member.splitwise_user_id: member for member in splitwise_result.members}
         entries = tuple(
@@ -49,9 +45,9 @@ class BalanceService:
             if (member := members_by_id.get(linked_user.splitwise_user_id)) is not None
         )
         if not entries:
-            raise BalanceError(BalanceErrorCode.NO_SPLITWISE_USERS)
+            return failure(BalanceErrorCode.NO_SPLITWISE_USERS)
 
-        return BalanceReport(entries)
+        return success(BalanceReport(entries))
 
 
 def _rsd_balance(member: SplitwiseMember) -> Decimal:

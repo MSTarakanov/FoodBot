@@ -12,6 +12,8 @@ from office_food_bot.commanding.definition import (
     CommandScope,
     HelpSection,
 )
+from office_food_bot.commanding.errors.models import CommonErrorCode
+from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.messaging import BotMessenger
 
 
@@ -24,8 +26,12 @@ class StartCommand(EffectCommand[NoArguments]):
         HelpSection.SERVICE,
     )
 
-    def __init__(self, messenger: BotMessenger) -> None:
-        super().__init__(messenger, NoArgumentsParser(), (), ())
+    def __init__(
+        self,
+        messenger: BotMessenger,
+        common_error_renderer: ErrorRenderer[CommonErrorCode],
+    ) -> None:
+        super().__init__(messenger, common_error_renderer, NoArgumentsParser(), (), ())
 
     async def execute_effect(
         self,
