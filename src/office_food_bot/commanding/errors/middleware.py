@@ -6,7 +6,10 @@ from aiogram.types import Message, TelegramObject
 
 from office_food_bot.commanding.catalog import CommandCatalog
 from office_food_bot.commanding.errors.models import UserFacingError
-from office_food_bot.commanding.errors.rendering import ErrorRenderContext, UserErrorRenderer
+from office_food_bot.commanding.errors.rendering import (
+    CommandErrorRenderer,
+    ErrorRenderer,
+)
 from office_food_bot.commanding.invocation import parse_command
 from office_food_bot.messaging import BotMessenger
 
@@ -15,14 +18,12 @@ class UserFacingErrorMiddleware:
     def __init__(
         self,
         catalog: CommandCatalog,
-        renderer: UserErrorRenderer,
+        renderer: ErrorRenderer,
         messenger: BotMessenger,
-        bot_username: str,
     ) -> None:
         self._catalog = catalog
         self._renderer = renderer
         self._messenger = messenger
-        self._bot_username = bot_username
 
     async def __call__[MiddlewareDataT](
         self,
@@ -40,12 +41,11 @@ class UserFacingErrorMiddleware:
                 raise
             parsed = parse_command(event.text)
             command = None if parsed is None else self._catalog.resolve(parsed.name)
-            definition = None if command is None else command.definition
+            renderer: ErrorRenderer = self._renderer
+            if command is not None:
+                renderer = CommandErrorRenderer(renderer, command.definition)
             await self._messenger.reply(
                 event,
-                self._renderer.render(
-                    error,
-                    ErrorRenderContext(self._bot_username, definition),
-                ),
+                renderer.render(error),
             )
             return None

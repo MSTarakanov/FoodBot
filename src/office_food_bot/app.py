@@ -47,7 +47,6 @@ def create_application(services: BotServices) -> BotApplication:
     dispatcher = Dispatcher(
         storage=MemoryStorage(),
         messenger=messenger,
-        bot_username=services.telegram_bot_username,
         user_error_renderer=error_renderer,
     )
     dispatcher.errors.register(unhandled_error_handler)

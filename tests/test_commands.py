@@ -50,7 +50,6 @@ from office_food_bot.app import create_dispatcher, create_services
 from office_food_bot.coffee_repositories import CoffeeSessionRepository
 from office_food_bot.commanding.catalog import CommandCatalog
 from office_food_bot.commanding.definition import START_TEXT
-from office_food_bot.commanding.errors.handler import UNHANDLED_ERROR_REPLY_TEXT
 from office_food_bot.commanding.menu import setup_bot_commands
 from office_food_bot.commands.factory import build_command_runtime
 from office_food_bot.config import RuntimeEnvironment, Settings
@@ -907,7 +906,7 @@ async def test_unhandled_command_error_replies_with_generic_message(tmp_path: Pa
 
     await dispatcher.feed_update(bot, make_update("/boom"))
 
-    assert sent_texts(session) == [UNHANDLED_ERROR_REPLY_TEXT]
+    assert sent_texts(session) == ["Произошла ошибка. Попробуй позже."]
 
 
 async def test_command_addressed_to_another_bot_is_ignored(tmp_path: Path) -> None:

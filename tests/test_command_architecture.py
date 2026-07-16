@@ -21,6 +21,7 @@ TRANSITIONAL_SYMBOLS = (
     "CommandObject",
     "CommandArgumentPattern",
     "CommandScopeOverride",
+    "ErrorRenderContext",
     "scope_overrides",
 )
 

@@ -5,7 +5,11 @@ from aiogram import F, Router
 from office_food_bot.commanding.catalog import CommandCatalog
 from office_food_bot.commanding.dispatcher import CommandDispatcher
 from office_food_bot.commanding.errors.middleware import UserFacingErrorMiddleware
-from office_food_bot.commanding.errors.rendering import UserErrorRenderer
+from office_food_bot.commanding.errors.rendering import (
+    BotUsernameErrorRenderer,
+    CallbackErrorRenderer,
+    ErrorRenderer,
+)
 from office_food_bot.controllers.coffee import CoffeeCallbackController
 from office_food_bot.controllers.polls import PollAnswerController
 from office_food_bot.flows.runner import ActiveFlowState, FlowRunner
@@ -16,7 +20,7 @@ from office_food_bot.services import BotServices
 def create_command_router(
     services: BotServices,
     catalog: CommandCatalog,
-    error_renderer: UserErrorRenderer,
+    error_renderer: ErrorRenderer,
     flow_runner: FlowRunner,
 ) -> Router:
     messenger = services.messenger
@@ -24,9 +28,11 @@ def create_command_router(
     router.message.outer_middleware(
         UserFacingErrorMiddleware(
             catalog,
-            error_renderer,
+            BotUsernameErrorRenderer(
+                error_renderer,
+                services.telegram_bot_username,
+            ),
             messenger,
-            services.telegram_bot_username,
         )
     )
     command_dispatcher = CommandDispatcher(
@@ -42,8 +48,7 @@ def create_command_router(
     coffee_callbacks = CoffeeCallbackController(
         services.coffee,
         CoffeeCommandRenderer(services.timezone_name),
-        error_renderer,
-        services.telegram_bot_username,
+        CallbackErrorRenderer(error_renderer),
     )
     poll_answers = PollAnswerController(services.poll_tracking, services.lunch_publisher)
     router.callback_query.register(

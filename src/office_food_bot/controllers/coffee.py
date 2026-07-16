@@ -10,9 +10,7 @@ from office_food_bot.commanding.errors.models import (
     UserFacingError,
 )
 from office_food_bot.commanding.errors.rendering import (
-    ErrorRenderContext,
-    ErrorRenderSurface,
-    UserErrorRenderer,
+    ErrorRenderer,
 )
 from office_food_bot.presenters.coffee import CoffeeCommandRenderer
 from office_food_bot.services.coffee import CoffeeService
@@ -23,17 +21,11 @@ class CoffeeCallbackController:
         self,
         coffee: CoffeeService,
         coffee_renderer: CoffeeCommandRenderer,
-        error_renderer: UserErrorRenderer,
-        bot_username: str,
+        error_renderer: ErrorRenderer,
     ) -> None:
         self._coffee = coffee
         self._coffee_renderer = coffee_renderer
         self._error_renderer = error_renderer
-        self._error_context = ErrorRenderContext(
-            bot_username,
-            None,
-            ErrorRenderSurface.CALLBACK,
-        )
 
     async def handle(
         self,
@@ -51,7 +43,7 @@ class CoffeeCallbackController:
             )
         except UserFacingError as error:
             await callback_query.answer(
-                self._error_renderer.render(error, self._error_context),
+                self._error_renderer.render(error),
                 show_alert=True,
             )
             return
