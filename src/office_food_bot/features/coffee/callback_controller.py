@@ -4,6 +4,7 @@ from aiogram import Bot
 from aiogram.types import CallbackQuery
 
 from office_food_bot.application.users.errors import ActiveUserErrorCode
+from office_food_bot.application.users.models import RegisteredUser
 from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.commanding.errors.mapping import common_error_for_active_user
 from office_food_bot.commanding.errors.models import CommonErrorCode
@@ -14,14 +15,13 @@ from office_food_bot.features.coffee.callbacks import CoffeeCallbackData
 from office_food_bot.features.coffee.errors import CoffeeErrorCode
 from office_food_bot.features.coffee.models import CoffeeParticipationReport
 from office_food_bot.features.coffee.rendering import CoffeeCommandRenderer
-from office_food_bot.features.coffee.service import CoffeeService
-from office_food_bot.models import RegisteredUser
+from office_food_bot.features.coffee.session import CoffeeSessionService
 
 
-class CoffeeCallbackController:
+class CoffeeCardCallbackController:
     def __init__(
         self,
-        coffee: CoffeeService,
+        coffee: CoffeeSessionService,
         active_users: ActiveUserResolver,
         coffee_renderer: CoffeeCommandRenderer,
         common_error_renderer: ErrorRenderer[CommonErrorCode],

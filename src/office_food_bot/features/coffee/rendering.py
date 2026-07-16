@@ -7,12 +7,13 @@ from math import ceil
 from typing import assert_never
 from zoneinfo import ZoneInfo
 
+from office_food_bot.application.users.models import RegisteredUser
 from office_food_bot.features.coffee.models import (
     CoffeeParticipationKind,
     CoffeeParticipationReport,
+    CoffeeSession,
     CoffeeStatusReport,
 )
-from office_food_bot.models import CoffeeSession, RegisteredUser
 
 COFFEE_TIME_USAGE = "Создать или перенести встречу: /coffee 15 или /coffee 16:30."
 COFFEE_COUNTDOWN_WINDOW = timedelta(minutes=60)

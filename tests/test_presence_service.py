@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from office_food_bot.application.users.models import TelegramProfile
 from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.commanding.errors.models import (
     InputErrorCode,
@@ -13,8 +14,7 @@ from office_food_bot.commands.presence import EtaRequestParser, EtaRequestResolv
 from office_food_bot.features.presence.models import EtaRequest, PresenceKind
 from office_food_bot.features.presence.rendering import render_presence_report
 from office_food_bot.features.presence.service import PresenceService
-from office_food_bot.models import TelegramProfile
-from office_food_bot.repositories import UserRepository
+from office_food_bot.infrastructure.persistence.users import UserRepository
 from office_food_bot.result import Result
 
 

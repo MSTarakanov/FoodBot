@@ -1,33 +1,72 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import assert_never
+from typing import Protocol, assert_never
 
+from office_food_bot.application.splitwise.models import SplitwiseMember
+from office_food_bot.application.users.models import (
+    KnownTelegramAccount,
+    RegisteredUser,
+    TelegramProfile,
+    UserStatus,
+)
+from office_food_bot.application.users.names import normalize_display_name
 from office_food_bot.features.registration.details import (
     registration_details,
     registration_details_changed,
 )
 from office_food_bot.features.registration.errors import RegistrationErrorCode
-from office_food_bot.models import (
+from office_food_bot.features.registration.models import (
     ApprovalKind,
-    KnownTelegramAccount,
     PendingRegistration,
-    RegisteredUser,
     RegistrationDetails,
     RegistrationKind,
-    SplitwiseMember,
-    TelegramProfile,
-    UserStatus,
-)
-from office_food_bot.repositories import (
-    RegistrationRequestRepository,
-    TelegramAccountRepository,
-    UserRepository,
-    normalize_display_name,
 )
 from office_food_bot.result import Result, failure, success
 
 REGISTRATION_SUGGESTIONS_LIMIT = 10
+
+
+class RegistrationUserStore(Protocol):
+    def get_by_telegram_id(self, telegram_user_id: int) -> RegisteredUser | None: ...
+
+    def get_registration_details_by_telegram_id(
+        self,
+        telegram_user_id: int,
+    ) -> RegistrationDetails | None: ...
+
+    def refresh_telegram_profile(self, profile: TelegramProfile) -> None: ...
+
+    def abandon_by_telegram_id(self, telegram_user_id: int) -> RegisteredUser | None: ...
+
+    def approve_by_telegram_id(self, telegram_user_id: int) -> RegisteredUser | None: ...
+
+    def is_active_admin(self, telegram_user_id: int) -> bool: ...
+
+    def list_pending_registrations(self) -> tuple[PendingRegistration, ...]: ...
+
+    def save_pending_registration(
+        self,
+        profile: TelegramProfile,
+        display_name: str,
+        splitwise_member: SplitwiseMember | None,
+    ) -> RegisteredUser: ...
+
+
+class TelegramAccountStore(Protocol):
+    def remember(self, profile: TelegramProfile) -> None: ...
+
+    def get(self, telegram_user_id: int) -> KnownTelegramAccount | None: ...
+
+    def list_seen(self, limit: int) -> tuple[KnownTelegramAccount, ...]: ...
+
+
+class RegistrationRequestStore(Protocol):
+    def request(self, telegram_user_id: int) -> None: ...
+
+    def clear(self, telegram_user_id: int) -> None: ...
+
+    def list_requested(self, limit: int) -> tuple[KnownTelegramAccount, ...]: ...
 
 
 @dataclass(frozen=True)
@@ -46,9 +85,9 @@ class ApprovalResult:
 class RegistrationService:
     def __init__(
         self,
-        users: UserRepository,
-        telegram_accounts: TelegramAccountRepository,
-        registration_requests: RegistrationRequestRepository,
+        users: RegistrationUserStore,
+        telegram_accounts: TelegramAccountStore,
+        registration_requests: RegistrationRequestStore,
         admin_ids: frozenset[int],
     ) -> None:
         self._users = users

@@ -1,33 +1,59 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime
 from enum import StrEnum
-from typing import assert_never
+from typing import Protocol, assert_never
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import Message
 
+from office_food_bot.application.users.models import RegisteredUser
 from office_food_bot.execution import CommandExecutionMode
 from office_food_bot.features.invitations.service import InvitationPreferenceService
 from office_food_bot.features.lunch.calendar import BusinessCalendarService
+from office_food_bot.features.lunch.models import LunchAutoChat
 from office_food_bot.features.lunch.pins import LunchPinService
 from office_food_bot.features.lunch.polls import LunchOfficeSelection, LunchPollCatalog
 from office_food_bot.features.lunch.rendering import lunch_announcement_text
 from office_food_bot.features.polls.models import PollDefinition
 from office_food_bot.features.polls.tracking import PollTrackingService
-from office_food_bot.infrastructure.scheduler import JobScheduler
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.models import LunchAutoChat, RegisteredUser
-from office_food_bot.repositories import (
-    LunchAutoChatRepository,
-    UserRepository,
-    VacationRepository,
-)
 
 AUTO_LUNCH_JOB_ID = "auto_lunch"
+
+AsyncJob = Callable[[], Awaitable[None]]
+
+
+class LunchAutoChatStore(Protocol):
+    def enable(self, chat_id: int, title: str | None) -> LunchAutoChat: ...
+
+    def disable(self, chat_id: int) -> LunchAutoChat | None: ...
+
+    def get(self, chat_id: int) -> LunchAutoChat | None: ...
+
+    def list_enabled(self) -> tuple[LunchAutoChat, ...]: ...
+
+
+class LunchUserReader(Protocol):
+    def list_active_users(self) -> tuple[RegisteredUser, ...]: ...
+
+
+class VacationReader(Protocol):
+    def active_user_ids(self, today: date) -> frozenset[int]: ...
+
+
+class LunchJobScheduler(Protocol):
+    def add_daily_cron(
+        self,
+        job_id: str,
+        callback: AsyncJob,
+        *,
+        hour: int,
+        minute: int,
+    ) -> None: ...
 
 
 class LunchPublishKind(StrEnum):
@@ -36,7 +62,7 @@ class LunchPublishKind(StrEnum):
 
 
 class LunchAutoChatService:
-    def __init__(self, chats: LunchAutoChatRepository) -> None:
+    def __init__(self, chats: LunchAutoChatStore) -> None:
         self._chats = chats
 
     def enable(self, chat_id: int, title: str | None) -> LunchAutoChat:
@@ -58,8 +84,8 @@ class LunchPollPublisher:
         self,
         messenger: BotMessenger,
         poll_tracking: PollTrackingService,
-        users: UserRepository,
-        vacations: VacationRepository,
+        users: LunchUserReader,
+        vacations: VacationReader,
         invitation_preferences: InvitationPreferenceService,
         lunch_pins: LunchPinService,
         poll_catalog: LunchPollCatalog,
@@ -169,7 +195,7 @@ class LunchSchedulerService:
         calendar: BusinessCalendarService,
         publisher: LunchPollPublisher,
         lunch_pins: LunchPinService,
-        scheduler: JobScheduler,
+        scheduler: LunchJobScheduler,
         timezone_name: str,
         clock: Callable[[], datetime] | None = None,
     ) -> None:

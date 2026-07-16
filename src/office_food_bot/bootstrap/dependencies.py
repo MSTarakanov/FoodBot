@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.commanding.access import CommandAccessService
 from office_food_bot.features.balance.use_case import GetBalanceReport
-from office_food_bot.features.coffee.service import CoffeeService, CoffeeTimeResolver
+from office_food_bot.features.coffee.jobs import CoffeeJobCoordinator
+from office_food_bot.features.coffee.session import CoffeeSessionService
+from office_food_bot.features.coffee.time import CoffeeTimeResolver
 from office_food_bot.features.debug.service import DebugService
 from office_food_bot.features.invitations.service import InvitationPreferenceService
 from office_food_bot.features.lunch.attendance import LunchAttendanceService
@@ -37,7 +39,8 @@ class BotDependencies:
     command_access: CommandAccessService
     active_users: ActiveUserResolver
     invitations: InvitationPreferenceService
-    coffee: CoffeeService
+    coffee: CoffeeSessionService
+    coffee_jobs: CoffeeJobCoordinator
     coffee_time: CoffeeTimeResolver
     business_calendar: BusinessCalendarService
     presence: PresenceService

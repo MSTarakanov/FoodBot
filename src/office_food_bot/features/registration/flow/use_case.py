@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import assert_never
 
+from office_food_bot.application.splitwise.models import SplitwiseMember
+from office_food_bot.application.users.models import RegisteredUser
+from office_food_bot.features.invitations.models import InvitationPreferences
 from office_food_bot.features.invitations.service import InvitationPreferenceService
 from office_food_bot.features.registration.details import (
     registration_details,
@@ -17,6 +20,10 @@ from office_food_bot.features.registration.flow.rendering import (
     reregistration_confirmation_view,
     unchanged_registration_view,
 )
+from office_food_bot.features.registration.models import (
+    RegistrationDetails,
+    RegistrationKind,
+)
 from office_food_bot.features.registration.service import RegistrationService
 from office_food_bot.flows.contracts import (
     ClosingFlowView,
@@ -25,13 +32,6 @@ from office_food_bot.flows.contracts import (
     FlowPostAction,
     FlowTransition,
     MoveToStep,
-)
-from office_food_bot.models import (
-    InvitationPreferences,
-    RegisteredUser,
-    RegistrationDetails,
-    RegistrationKind,
-    SplitwiseMember,
 )
 
 

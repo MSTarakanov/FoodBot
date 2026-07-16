@@ -10,10 +10,10 @@ from office_food_bot.features.polls.models import (
     PollAction,
     PollDefinition,
     PollDefinitionCatalog,
+    PollKind,
     PollOptionActionDefinition,
 )
 from office_food_bot.features.polls.options import PollOption
-from office_food_bot.models import PollKind
 
 LUNCH_POLL_QUESTION = "Обед в офисе сегодня"
 LUNCH_PLACE_POLL_QUESTION = "Что едим / заказываем?"

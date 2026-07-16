@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Protocol, assert_never
 
 from office_food_bot.application.users.errors import ActiveUserErrorCode
-from office_food_bot.models import RegisteredUser, UserStatus
+from office_food_bot.application.users.models import RegisteredUser, UserStatus
 from office_food_bot.result import Result, failure, success
 
 

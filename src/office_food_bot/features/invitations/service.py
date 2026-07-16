@@ -1,18 +1,30 @@
 from __future__ import annotations
 
-from typing import assert_never
+from typing import Protocol, assert_never
 
 from office_food_bot.application.users.resolver import ActiveUserResolver
-from office_food_bot.features.invitations.models import InvitationKind, InvitationSettingReport
-from office_food_bot.features.invitations.repository import InvitationPreferenceRepository
-from office_food_bot.models import InvitationPreferences
+from office_food_bot.features.invitations.models import (
+    InvitationKind,
+    InvitationPreferences,
+    InvitationSettingReport,
+)
+
+
+class InvitationPreferenceStore(Protocol):
+    def get(self, user_id: int) -> InvitationPreferences: ...
+
+    def save(self, user_id: int, preferences: InvitationPreferences) -> None: ...
+
+    def set_lunch_enabled(self, user_id: int, enabled: bool) -> None: ...
+
+    def set_coffee_enabled(self, user_id: int, enabled: bool) -> None: ...
 
 
 class InvitationPreferenceService:
     def __init__(
         self,
         active_users: ActiveUserResolver,
-        preferences: InvitationPreferenceRepository,
+        preferences: InvitationPreferenceStore,
     ) -> None:
         self._active_users = active_users
         self._preferences = preferences

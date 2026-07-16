@@ -13,14 +13,14 @@ from office_food_bot.commands.register import RegisterCommand
 from office_food_bot.commands.request_register import RequestRegisterCommand
 from office_food_bot.commands.test import TestCommand as PreviewCommand
 from office_food_bot.database import Database
+from office_food_bot.features.debug.repository import DebugRepository
 from office_food_bot.features.debug.service import DebugService
-from office_food_bot.features.registration.service import RegistrationService
-from office_food_bot.repositories import (
-    DebugRepository,
+from office_food_bot.features.registration.repository import (
     RegistrationRequestRepository,
     TelegramAccountRepository,
-    UserRepository,
 )
+from office_food_bot.features.registration.service import RegistrationService
+from office_food_bot.infrastructure.persistence.users import UserRepository
 
 
 def make_access_service(database: Database) -> CommandAccessService:

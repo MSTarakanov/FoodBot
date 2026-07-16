@@ -30,7 +30,8 @@ from office_food_bot.commanding.validators import (
 )
 from office_food_bot.features.coffee.models import CoffeeTimeResolutionKind
 from office_food_bot.features.coffee.rendering import CoffeeCommandRenderer
-from office_food_bot.features.coffee.service import CoffeeService, CoffeeTimeResolver
+from office_food_bot.features.coffee.session import CoffeeSessionService
+from office_food_bot.features.coffee.time import CoffeeTimeResolver
 from office_food_bot.features.invitations.models import InvitationKind
 from office_food_bot.features.invitations.rendering import render_invitation_setting
 from office_food_bot.features.invitations.service import InvitationPreferenceService
@@ -194,7 +195,7 @@ class CoffeeCommand(EffectCommand[CoffeeInput, CoffeeRequest]):
         self,
         messenger: BotMessenger,
         common_error_renderer: ErrorRenderer[CommonErrorCode],
-        coffee: CoffeeService,
+        coffee: CoffeeSessionService,
         coffee_time: CoffeeTimeResolver,
         renderer: CoffeeCommandRenderer,
         invitations: InvitationPreferenceService,

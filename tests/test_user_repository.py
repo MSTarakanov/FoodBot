@@ -5,18 +5,22 @@ from datetime import date
 
 import pytest
 
+from office_food_bot.application.splitwise.models import SplitwiseMember
+from office_food_bot.application.users.models import TelegramProfile, UserRole, UserStatus
 from office_food_bot.database import Database
 from office_food_bot.database.migrations import MigrationRunner, load_migrations
-from office_food_bot.models import SplitwiseMember, TelegramProfile, UserRole, UserStatus
-from office_food_bot.repositories import (
-    DebugRepository,
+from office_food_bot.features.balance.repository import BalanceRepository
+from office_food_bot.features.debug.repository import DebugRepository
+from office_food_bot.features.lunch.repository import (
     LunchAutoChatRepository,
     LunchPinRepository,
+)
+from office_food_bot.features.registration.repository import (
     RegistrationRequestRepository,
     TelegramAccountRepository,
-    UserRepository,
-    VacationRepository,
 )
+from office_food_bot.features.vacation.repository import VacationRepository
+from office_food_bot.infrastructure.persistence.users import UserRepository
 
 LEGACY_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -136,6 +140,7 @@ def test_approve_by_telegram_id_returns_none_for_unknown_user(
 
 
 def test_abandon_by_telegram_id_marks_user_abandoned_and_removes_splitwise(
+    database: Database,
     users: UserRepository,
 ) -> None:
     users.save_pending_registration(
@@ -154,7 +159,7 @@ def test_abandon_by_telegram_id_marks_user_abandoned_and_removes_splitwise(
 
     assert user is not None
     assert user.status == UserStatus.ABANDONED
-    assert users.list_active_splitwise_users() == ()
+    assert BalanceRepository(database).list_active_splitwise_users() == ()
     details = users.get_registration_details_by_telegram_id(42)
     assert details is not None
     assert details.splitwise is None
@@ -277,6 +282,7 @@ def test_save_pending_registration_with_skip_removes_existing_splitwise_member(
 
 
 def test_list_active_splitwise_users_returns_only_active_linked_users(
+    database: Database,
     users: UserRepository,
 ) -> None:
     users.save_pending_registration(
@@ -303,7 +309,7 @@ def test_list_active_splitwise_users_returns_only_active_linked_users(
     users.create_pending_user(make_profile(telegram_user_id=44, username="unlinked"), "Без Связи")
     users.approve_by_telegram_id(44)
 
-    active_splitwise_users = users.list_active_splitwise_users()
+    active_splitwise_users = BalanceRepository(database).list_active_splitwise_users()
 
     assert len(active_splitwise_users) == 1
     assert active_splitwise_users[0].username == "misha"

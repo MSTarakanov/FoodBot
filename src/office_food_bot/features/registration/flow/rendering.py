@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import assert_never
 
+from office_food_bot.application.splitwise.models import SplitwiseMember
+from office_food_bot.application.users.models import RegisteredUser, TelegramProfile
+from office_food_bot.features.invitations.models import InvitationPreferences
 from office_food_bot.features.registration.details import (
     same_splitwise_connection,
     splitwise_connection_from_member,
@@ -9,19 +12,15 @@ from office_food_bot.features.registration.details import (
 from office_food_bot.features.registration.flow.validation import (
     RegistrationStepErrorCode,
 )
+from office_food_bot.features.registration.models import (
+    RegistrationDetails,
+    SplitwiseConnection,
+)
 from office_food_bot.flows.contracts import (
     ChoiceFlowView,
     ClosingFlowView,
     FlowView,
     TextFlowView,
-)
-from office_food_bot.models import (
-    InvitationPreferences,
-    RegisteredUser,
-    RegistrationDetails,
-    SplitwiseConnection,
-    SplitwiseMember,
-    TelegramProfile,
 )
 
 NAME_PROMPT_TEXT = (

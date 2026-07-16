@@ -33,3 +33,26 @@ class CoffeeTimeResolutionKind(StrEnum):
 class CoffeeTimeResolution:
     kind: CoffeeTimeResolutionKind
     scheduled_at: datetime | None = None
+
+
+class CoffeeSessionStatus(StrEnum):
+    CREATING = "creating"
+    ACTIVE = "active"
+    COMPLETING = "completing"
+    COMPLETED = "completed"
+    EXPIRED = "expired"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class CoffeeSession:
+    id: int
+    chat_id: int
+    message_id: int | None
+    initiator_user_id: int
+    last_proposer_user_id: int
+    scheduled_at: datetime
+    status: CoffeeSessionStatus
+    notification_attempts: int
+    next_attempt_at: datetime | None
+    retry_until: datetime | None

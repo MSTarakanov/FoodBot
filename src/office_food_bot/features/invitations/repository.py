@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from office_food_bot.database import Database
-from office_food_bot.database.invitation_preference_queries import (
+from office_food_bot.features.invitations.models import InvitationPreferences
+from office_food_bot.features.invitations.queries import (
     GET_INVITATION_PREFERENCES_SQL,
     UPSERT_COFFEE_INVITATION_PREFERENCE_SQL,
     UPSERT_INVITATION_PREFERENCES_SQL,
     UPSERT_LUNCH_INVITATION_PREFERENCE_SQL,
 )
-from office_food_bot.models import InvitationPreferences
 
 
 class InvitationPreferenceRepository:

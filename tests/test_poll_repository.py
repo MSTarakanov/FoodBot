@@ -4,20 +4,19 @@ from datetime import UTC, date, datetime
 
 import pytest
 
+from office_food_bot.application.users.models import TelegramProfile
 from office_food_bot.database import Database
 from office_food_bot.features.lunch.attendance import LunchAttendanceService
 from office_food_bot.features.polls.models import (
     PollDefinition,
     PollDefinitionCatalog,
-)
-from office_food_bot.features.polls.options import PollOption
-from office_food_bot.features.polls.tracking import PollTrackingService
-from office_food_bot.models import (
     PollKind,
     StoredPoll,
-    TelegramProfile,
 )
-from office_food_bot.repositories import PollRepository, UserRepository
+from office_food_bot.features.polls.options import PollOption
+from office_food_bot.features.polls.repository import PollRepository
+from office_food_bot.features.polls.tracking import PollTrackingService
+from office_food_bot.infrastructure.persistence.users import UserRepository
 
 
 def test_poll_selection_stores_key_independently_of_display_text(

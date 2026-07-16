@@ -1,11 +1,28 @@
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import date
+from typing import Protocol
 
+from office_food_bot.application.users.models import RegisteredUser
 from office_food_bot.features.lunch.polls import ROSE_LUNCH_POLLS, SKYLINE_LUNCH_POLLS
+from office_food_bot.features.polls.models import PollKind, StoredPoll
 from office_food_bot.features.polls.options import PollOption
-from office_food_bot.models import PollKind, RegisteredUser
-from office_food_bot.repositories import PollRepository
+
+
+class LunchPollStore(Protocol):
+    def latest_for_kinds(
+        self,
+        chat_id: int,
+        context_date: date,
+        kinds: Collection[PollKind],
+    ) -> StoredPoll | None: ...
+
+    def list_active_users_with_any_option(
+        self,
+        poll_id: str,
+        options: Collection[PollOption],
+    ) -> tuple[RegisteredUser, ...]: ...
 
 OFFICE_ATTENDANCE_OPTIONS = frozenset(
     {
@@ -30,7 +47,7 @@ LUNCH_PLACE_KINDS = tuple(poll.kind for poll in _LUNCH_PLACE_POLLS)
 
 
 class LunchAttendanceService:
-    def __init__(self, polls: PollRepository) -> None:
+    def __init__(self, polls: LunchPollStore) -> None:
         self._polls = polls
 
     def list_office_users(

@@ -12,6 +12,7 @@ from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Chat, Message, User
 
+from office_food_bot.application.users.models import TelegramProfile
 from office_food_bot.commanding.contracts import CommandContext
 from office_food_bot.commanding.invocation import ParsedCommand
 from office_food_bot.flows.catalog import FlowCatalog
@@ -32,7 +33,6 @@ from office_food_bot.flows.contracts import (
 )
 from office_food_bot.flows.runner import ActiveFlowState, FlowRunner
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.models import TelegramProfile
 from office_food_bot.result import Result, failure, success
 
 

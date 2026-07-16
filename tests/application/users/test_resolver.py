@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 
 from office_food_bot.application.users.errors import ActiveUserErrorCode
+from office_food_bot.application.users.models import RegisteredUser, TelegramProfile
 from office_food_bot.application.users.resolver import ActiveUserResolver
-from office_food_bot.models import RegisteredUser, TelegramProfile
-from office_food_bot.repositories import UserRepository
+from office_food_bot.infrastructure.persistence.users import UserRepository
 from office_food_bot.result import Failure
 
 

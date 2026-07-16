@@ -8,6 +8,7 @@ from aiogram import Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from office_food_bot.application.users.models import TelegramProfile
 from office_food_bot.commanding.definition import CommandDefinition
 from office_food_bot.commanding.errors.models import CommonErrorCode, InputErrorCode
 from office_food_bot.commanding.errors.rendering import (
@@ -16,7 +17,6 @@ from office_food_bot.commanding.errors.rendering import (
 )
 from office_food_bot.commanding.invocation import ParsedCommand
 from office_food_bot.messaging import BotMessenger, MessagePayload, TextMessagePayload
-from office_food_bot.models import TelegramProfile
 from office_food_bot.result import Result, success
 
 

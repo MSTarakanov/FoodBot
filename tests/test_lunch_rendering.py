@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from office_food_bot.application.users.models import TelegramProfile
 from office_food_bot.features.lunch.rendering import lunch_announcement_text
-from office_food_bot.models import TelegramProfile
-from office_food_bot.repositories import UserRepository
+from office_food_bot.infrastructure.persistence.users import UserRepository
 
 
 def make_profile(

@@ -5,10 +5,11 @@ from datetime import UTC, datetime
 
 import pytest
 
+from office_food_bot.application.users.models import TelegramProfile
 from office_food_bot.database import Database
+from office_food_bot.features.coffee.models import CoffeeSessionStatus
 from office_food_bot.features.coffee.repository import CoffeeSessionRepository
-from office_food_bot.models import CoffeeSessionStatus, TelegramProfile
-from office_food_bot.repositories import UserRepository
+from office_food_bot.infrastructure.persistence.users import UserRepository
 
 
 def create_user(users: UserRepository, telegram_user_id: int, name: str) -> int:

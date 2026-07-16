@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from office_food_bot.application.users.models import TelegramProfile
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
@@ -17,7 +18,6 @@ from office_food_bot.commanding.validators import (
 from office_food_bot.features.registration.errors import RegistrationErrorCode
 from office_food_bot.features.registration.service import RegistrationService
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.models import TelegramProfile
 
 REQUEST_REGISTER_REPLY_TEXT = (
     "Запрос на регистрацию отправлен админам. "

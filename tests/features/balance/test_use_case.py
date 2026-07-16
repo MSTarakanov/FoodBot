@@ -4,15 +4,15 @@ from decimal import Decimal
 
 import pytest
 
+from office_food_bot.application.splitwise.models import SplitwiseBalance, SplitwiseMember
 from office_food_bot.features.balance.errors import BalanceErrorCode
-from office_food_bot.features.balance.models import BalanceEntry, BalanceReport
+from office_food_bot.features.balance.models import (
+    ActiveSplitwiseUser,
+    BalanceEntry,
+    BalanceReport,
+)
 from office_food_bot.features.balance.use_case import GetBalanceReport
 from office_food_bot.integrations.splitwise import SplitwiseService, SplitwiseUnavailableError
-from office_food_bot.models import (
-    ActiveSplitwiseUser,
-    SplitwiseBalance,
-    SplitwiseMember,
-)
 from office_food_bot.result import Result
 
 

@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from office_food_bot.application.users.models import TelegramProfile
 from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.commanding.errors.models import (
     InputErrorCode,
@@ -15,14 +16,14 @@ from office_food_bot.commands.vacation import (
 )
 from office_food_bot.database import Database
 from office_food_bot.features.vacation.rendering import render_vacation_report
+from office_food_bot.features.vacation.repository import VacationRepository
 from office_food_bot.features.vacation.service import (
     VacationRequest,
     VacationRequestKind,
     VacationService,
     parse_vacation_request,
 )
-from office_food_bot.models import TelegramProfile
-from office_food_bot.repositories import UserRepository, VacationRepository
+from office_food_bot.infrastructure.persistence.users import UserRepository
 from office_food_bot.result import Result
 
 

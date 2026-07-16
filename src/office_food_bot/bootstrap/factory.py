@@ -7,10 +7,16 @@ from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.bootstrap.dependencies import BotDependencies
 from office_food_bot.commanding.access import CommandAccessService
 from office_food_bot.database import Database
+from office_food_bot.features.balance.repository import BalanceRepository
 from office_food_bot.features.balance.use_case import GetBalanceReport
+from office_food_bot.features.coffee.jobs import CoffeeJobCoordinator
+from office_food_bot.features.coffee.locks import CoffeeChatLocks
+from office_food_bot.features.coffee.publisher import CoffeeCardPublisher
 from office_food_bot.features.coffee.rendering import CoffeeCardRenderer
 from office_food_bot.features.coffee.repository import CoffeeSessionRepository
-from office_food_bot.features.coffee.service import CoffeeService, CoffeeTimeResolver
+from office_food_bot.features.coffee.session import CoffeeSessionService
+from office_food_bot.features.coffee.time import CoffeeTimeResolver
+from office_food_bot.features.debug.repository import DebugRepository
 from office_food_bot.features.debug.service import DebugService
 from office_food_bot.features.invitations.repository import InvitationPreferenceRepository
 from office_food_bot.features.invitations.service import InvitationPreferenceService
@@ -26,10 +32,21 @@ from office_food_bot.features.lunch.polls import (
     LUNCH_POLL_DEFINITION_CATALOG,
     LunchPollCatalog,
 )
+from office_food_bot.features.lunch.repository import (
+    LunchAutoChatRepository,
+    LunchPinRepository,
+)
+from office_food_bot.features.polls.repository import PollRepository
 from office_food_bot.features.polls.tracking import PollTrackingService
 from office_food_bot.features.presence.service import PresenceService
+from office_food_bot.features.registration.repository import (
+    RegistrationRequestRepository,
+    TelegramAccountRepository,
+)
 from office_food_bot.features.registration.service import RegistrationService
+from office_food_bot.features.vacation.repository import VacationRepository
 from office_food_bot.features.vacation.service import VacationService
+from office_food_bot.infrastructure.persistence.users import UserRepository
 from office_food_bot.infrastructure.scheduler import JobScheduler
 from office_food_bot.infrastructure.telegram_interactions import TelegramInteractionService
 from office_food_bot.integrations.splitwise import (
@@ -38,16 +55,6 @@ from office_food_bot.integrations.splitwise import (
     SplitwiseService,
 )
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.repositories import (
-    DebugRepository,
-    LunchAutoChatRepository,
-    LunchPinRepository,
-    PollRepository,
-    RegistrationRequestRepository,
-    TelegramAccountRepository,
-    UserRepository,
-    VacationRepository,
-)
 
 
 def build_dependencies(
@@ -70,6 +77,7 @@ def build_dependencies(
     vacations = VacationRepository(database)
     invitation_preferences = InvitationPreferenceRepository(database)
     coffee_sessions = CoffeeSessionRepository(database)
+    balance_repository = BalanceRepository(database)
     client = splitwise_client
     if client is None and splitwise_api_key is not None:
         client = HttpSplitwiseClient(splitwise_api_key)
@@ -107,15 +115,29 @@ def build_dependencies(
     job_scheduler = JobScheduler(timezone_name)
     lunch_attendance = LunchAttendanceService(poll_repository)
     coffee_time = CoffeeTimeResolver(timezone_name, clock)
-    coffee = CoffeeService(
+    coffee_locks = CoffeeChatLocks()
+    coffee_publisher = CoffeeCardPublisher(
         users,
         invitations,
-        coffee_sessions,
         lunch_attendance,
         messenger,
-        job_scheduler,
         CoffeeCardRenderer(timezone_name),
         timezone_name,
+        clock,
+    )
+    coffee_jobs = CoffeeJobCoordinator(
+        coffee_sessions,
+        coffee_publisher,
+        job_scheduler,
+        coffee_locks,
+        clock,
+    )
+    coffee = CoffeeSessionService(
+        invitations,
+        coffee_sessions,
+        coffee_publisher,
+        coffee_jobs,
+        coffee_locks,
         clock,
     )
     return BotDependencies(
@@ -129,10 +151,11 @@ def build_dependencies(
         active_users=active_users,
         invitations=invitations,
         coffee=coffee,
+        coffee_jobs=coffee_jobs,
         coffee_time=coffee_time,
         business_calendar=business_calendar,
         presence=PresenceService(active_users, timezone_name, clock),
-        get_balance_report=GetBalanceReport(users, splitwise),
+        get_balance_report=GetBalanceReport(balance_repository, splitwise),
         lunch_attendance=lunch_attendance,
         vacation=VacationService(active_users, vacations, timezone_name, clock),
         lunch_auto_chats=lunch_auto_chats,

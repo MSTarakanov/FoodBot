@@ -6,7 +6,7 @@ from aiogram import Bot
 
 from office_food_bot.database import Database
 from office_food_bot.features.lunch.pins import LunchPinService
-from office_food_bot.repositories import LunchPinRepository
+from office_food_bot.features.lunch.repository import LunchPinRepository
 
 
 class RecordingPinMessenger:

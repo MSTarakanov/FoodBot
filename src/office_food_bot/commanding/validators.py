@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import Protocol
 
 from office_food_bot.application.users.errors import ActiveUserErrorCode
+from office_food_bot.application.users.models import RegisteredUser, TelegramProfile
 from office_food_bot.commanding.contracts import CommandContext
 from office_food_bot.commanding.errors.mapping import common_error_for_active_user
 from office_food_bot.commanding.errors.models import CommonErrorCode
-from office_food_bot.models import RegisteredUser, TelegramProfile
 from office_food_bot.result import Result, failure, success
 
 

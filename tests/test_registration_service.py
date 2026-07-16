@@ -2,23 +2,19 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from office_food_bot.application.splitwise.models import SplitwiseMember
+from office_food_bot.application.users.models import TelegramProfile, UserStatus
 from office_food_bot.database import Database
+from office_food_bot.features.invitations.models import InvitationPreferences
 from office_food_bot.features.invitations.repository import InvitationPreferenceRepository
 from office_food_bot.features.registration.errors import RegistrationErrorCode
-from office_food_bot.features.registration.service import RegistrationService
-from office_food_bot.models import (
-    ApprovalKind,
-    InvitationPreferences,
-    RegistrationKind,
-    SplitwiseMember,
-    TelegramProfile,
-    UserStatus,
-)
-from office_food_bot.repositories import (
+from office_food_bot.features.registration.models import ApprovalKind, RegistrationKind
+from office_food_bot.features.registration.repository import (
     RegistrationRequestRepository,
     TelegramAccountRepository,
-    UserRepository,
 )
+from office_food_bot.features.registration.service import RegistrationService
+from office_food_bot.infrastructure.persistence.users import UserRepository
 from office_food_bot.result import Failure, Success
 
 DEFAULT_ADMIN_IDS = frozenset({7})

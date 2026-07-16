@@ -14,3 +14,11 @@ class BalanceEntry:
 @dataclass(frozen=True, slots=True)
 class BalanceReport:
     entries: tuple[BalanceEntry, ...]
+
+
+@dataclass(frozen=True)
+class ActiveSplitwiseUser:
+    username: str | None
+    display_name: str
+    splitwise_user_id: int
+    email: str | None

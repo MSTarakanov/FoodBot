@@ -14,3 +14,9 @@ class InvitationSettingReport:
     kind: InvitationKind
     enabled: bool
     updated: bool
+
+
+@dataclass(frozen=True, slots=True)
+class InvitationPreferences:
+    lunch_enabled: bool = True
+    coffee_enabled: bool = True

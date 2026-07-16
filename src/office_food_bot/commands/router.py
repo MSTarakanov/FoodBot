@@ -10,7 +10,9 @@ from office_food_bot.commanding.errors.rendering import (
     CallbackCommonErrorRenderer,
     ErrorRenderer,
 )
-from office_food_bot.features.coffee.controller import CoffeeCallbackController
+from office_food_bot.features.coffee.callback_controller import (
+    CoffeeCardCallbackController,
+)
 from office_food_bot.features.coffee.errors import CoffeeErrorRenderer
 from office_food_bot.features.coffee.rendering import CoffeeCommandRenderer
 from office_food_bot.features.lunch.poll_controller import PollAnswerController
@@ -37,7 +39,7 @@ def create_command_router(
         command_dispatcher.dispatch,
         F.text.startswith("/"),
     )
-    coffee_callbacks = CoffeeCallbackController(
+    coffee_callbacks = CoffeeCardCallbackController(
         dependencies.coffee,
         dependencies.active_users,
         CoffeeCommandRenderer(dependencies.timezone_name),

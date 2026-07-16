@@ -5,18 +5,29 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
-from typing import assert_never
+from typing import Protocol, assert_never
 from zoneinfo import ZoneInfo
 
 from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.boolean_input import parse_toggle
-from office_food_bot.features.vacation.models import VacationReport, VacationReportKind
-from office_food_bot.repositories import VacationRepository
+from office_food_bot.features.vacation.models import (
+    UserVacation,
+    VacationReport,
+    VacationReportKind,
+)
 
 MAX_VACATION_DAYS = 366
 _DAY_COUNT_PATTERN = re.compile(r"[+-]?\d+")
 _ISO_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
 _SHORT_DATE_PATTERN = re.compile(r"(\d{1,2})([./])(\d{1,2})(?:\2(\d{4}))?")
+
+
+class VacationStore(Protocol):
+    def get(self, user_id: int) -> UserVacation | None: ...
+
+    def set_until_date(self, user_id: int, until_date: date) -> UserVacation: ...
+
+    def clear(self, user_id: int) -> None: ...
 
 
 class VacationRequestKind(StrEnum):
@@ -36,7 +47,7 @@ class VacationService:
     def __init__(
         self,
         active_users: ActiveUserResolver,
-        vacations: VacationRepository,
+        vacations: VacationStore,
         timezone_name: str,
         clock: Callable[[], datetime] | None = None,
     ) -> None:

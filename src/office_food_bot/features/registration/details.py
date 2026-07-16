@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from office_food_bot.models import (
-    RegisteredUser,
+from office_food_bot.application.splitwise.models import SplitwiseMember
+from office_food_bot.application.users.models import RegisteredUser
+from office_food_bot.features.registration.models import (
     RegistrationDetails,
     SplitwiseConnection,
-    SplitwiseMember,
 )
 
 

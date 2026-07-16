@@ -47,6 +47,8 @@ from aiogram.types import (
 from aiogram.types import PollOption as TelegramPollOption
 
 from office_food_bot.app import create_dependencies, create_dispatcher
+from office_food_bot.application.splitwise.models import SplitwiseBalance, SplitwiseMember
+from office_food_bot.application.users.models import TelegramProfile, UserStatus
 from office_food_bot.bootstrap import BotDependencies
 from office_food_bot.commanding.catalog import CommandCatalog
 from office_food_bot.commanding.definition import START_TEXT
@@ -55,7 +57,10 @@ from office_food_bot.commanding.menu import setup_bot_commands
 from office_food_bot.commands.factory import build_command_runtime
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
+from office_food_bot.features.balance.repository import BalanceRepository
+from office_food_bot.features.coffee.models import CoffeeSessionStatus
 from office_food_bot.features.coffee.repository import CoffeeSessionRepository
+from office_food_bot.features.invitations.models import InvitationPreferences
 from office_food_bot.features.invitations.repository import InvitationPreferenceRepository
 from office_food_bot.features.lunch.polls import (
     LUNCH_OTHER_FOOD_POLL,
@@ -63,27 +68,21 @@ from office_food_bot.features.lunch.polls import (
     SKYLINE_LUNCH_POLLS,
     OfficeLunchPolls,
 )
-from office_food_bot.features.polls.options import PollOption
-from office_food_bot.integrations.splitwise import SplitwiseUnavailableError
-from office_food_bot.messaging import TextMessagePayload
-from office_food_bot.models import (
-    CoffeeSessionStatus,
-    InvitationPreferences,
-    PollKind,
-    SplitwiseBalance,
-    SplitwiseMember,
-    TelegramProfile,
-    UserStatus,
-)
-from office_food_bot.previews.registry import MESSAGE_PREVIEWS
-from office_food_bot.repositories import (
+from office_food_bot.features.lunch.repository import (
     LunchAutoChatRepository,
     LunchPinRepository,
+)
+from office_food_bot.features.polls.models import PollKind
+from office_food_bot.features.polls.options import PollOption
+from office_food_bot.features.registration.repository import (
     RegistrationRequestRepository,
     TelegramAccountRepository,
-    UserRepository,
-    VacationRepository,
 )
+from office_food_bot.features.vacation.repository import VacationRepository
+from office_food_bot.infrastructure.persistence.users import UserRepository
+from office_food_bot.integrations.splitwise import SplitwiseUnavailableError
+from office_food_bot.messaging import TextMessagePayload
+from office_food_bot.previews.registry import MESSAGE_PREVIEWS
 
 DEFAULT_ADMIN_IDS = frozenset({7})
 DEFAULT_SPLITWISE_GROUP_ID = 55
@@ -1365,7 +1364,7 @@ async def test_quit_marks_user_abandoned_and_removes_splitwise_link(
     user = users.get_by_telegram_id(42)
     assert user is not None
     assert user.status == UserStatus.ABANDONED
-    assert users.list_active_splitwise_users() == ()
+    assert BalanceRepository(database).list_active_splitwise_users() == ()
     details = users.get_registration_details_by_telegram_id(42)
     assert details is not None
     assert details.splitwise is None
@@ -3428,7 +3427,7 @@ async def test_coffee_countdown_edits_existing_card_without_new_message(
     session.clear_messages()
     now[0] = datetime(2026, 6, 30, 12, 16, tzinfo=ZoneInfo("Europe/Belgrade"))
 
-    await services.coffee.refresh_countdown(bot, coffee_session.id)
+    await services.coffee_jobs.refresh_countdown(bot, coffee_session.id)
 
     assert session.sent_messages == []
     assert len(session.edited_messages) == 1
@@ -3660,7 +3659,7 @@ async def test_coffee_leave_button_makes_empty_session_complete_silently(
     session.clear_messages()
     now[0] = datetime(2026, 6, 30, 12, 30, tzinfo=ZoneInfo("Europe/Belgrade"))
 
-    await services.coffee.complete(bot, coffee_session.id)
+    await services.coffee_jobs.complete(bot, coffee_session.id)
 
     assert sent_texts(session) == []
     assert len(session.unpin_requests) == 1
@@ -3730,7 +3729,7 @@ async def test_coffee_completion_exhausts_retries_and_marks_failed(
     session.fail_methods("SendMessage")
 
     for _ in range(4):
-        await services.coffee.complete(bot, coffee_session.id)
+        await services.coffee_jobs.complete(bot, coffee_session.id)
 
     failed = CoffeeSessionRepository(database).require(coffee_session.id)
     assert failed.status == CoffeeSessionStatus.FAILED
@@ -3750,7 +3749,7 @@ async def test_coffee_completion_unpins_card_and_calls_participants(
     assert coffee_session is not None
     session.clear_messages()
 
-    await services.coffee.complete(bot, coffee_session.id)
+    await services.coffee_jobs.complete(bot, coffee_session.id)
 
     assert len(session.unpin_requests) == 1
     assert session.unpin_requests[0].message_id == coffee_session.message_id
@@ -3782,7 +3781,7 @@ async def test_coffee_recovery_expires_session_older_than_grace_period(
     )
     bot = Bot(token="123456:test-token", session=RecordingSession())
 
-    await services.coffee.restore_jobs(bot)
+    await services.coffee_jobs.restore_jobs(bot)
 
     expired = sessions.require(coffee_session.id)
     assert expired.status == CoffeeSessionStatus.EXPIRED
@@ -3934,7 +3933,7 @@ async def test_coffee_recovery_repins_active_card(tmp_path: Path) -> None:
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
 
-    await services.coffee.restore_jobs(bot)
+    await services.coffee_jobs.restore_jobs(bot)
 
     assert len(session.pin_requests) == 1
     assert session.pin_requests[0].message_id == 77

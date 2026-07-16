@@ -3,10 +3,14 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Protocol, assert_never
 
+from office_food_bot.application.splitwise.models import SplitwiseMember
 from office_food_bot.features.balance.errors import BalanceErrorCode
-from office_food_bot.features.balance.models import BalanceEntry, BalanceReport
+from office_food_bot.features.balance.models import (
+    ActiveSplitwiseUser,
+    BalanceEntry,
+    BalanceReport,
+)
 from office_food_bot.integrations.splitwise import SplitwiseGroupKind, SplitwiseService
-from office_food_bot.models import ActiveSplitwiseUser, SplitwiseMember
 from office_food_bot.result import Result, failure, success
 
 BALANCE_CURRENCY_CODE = "RSD"

@@ -8,8 +8,8 @@ from office_food_bot.features.lunch.polls import (
     ROSE_LUNCH_POLLS,
 )
 from office_food_bot.features.polls.models import PollAction
+from office_food_bot.features.polls.repository import PollRepository
 from office_food_bot.features.polls.tracking import PollTrackingService
-from office_food_bot.repositories import PollRepository
 
 
 def make_service(database: Database) -> PollTrackingService:

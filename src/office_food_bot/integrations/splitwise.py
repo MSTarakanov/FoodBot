@@ -7,7 +7,7 @@ from typing import Protocol, assert_never
 
 import httpx
 
-from office_food_bot.models import SplitwiseBalance, SplitwiseMember
+from office_food_bot.application.splitwise.models import SplitwiseBalance, SplitwiseMember
 
 SPLITWISE_API_BASE_URL = "https://secure.splitwise.com/api/v3.0"
 SPLITWISE_USER_AGENT = "OfficeFoodBot/0.1"

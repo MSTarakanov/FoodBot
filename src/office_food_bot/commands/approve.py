@@ -22,9 +22,9 @@ from office_food_bot.commanding.validators import (
     TelegramIdentityValidator,
     require_telegram_profile,
 )
+from office_food_bot.features.registration.models import ApprovalKind
 from office_food_bot.features.registration.service import RegistrationService
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.models import ApprovalKind
 from office_food_bot.result import Result, failure, success
 
 

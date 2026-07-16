@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from aiogram.types import Message
 
-from office_food_bot.models import TelegramProfile
+from office_food_bot.application.users.models import TelegramProfile
 
 
 def telegram_profile_from_message(message: Message) -> TelegramProfile | None:

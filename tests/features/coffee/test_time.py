@@ -4,7 +4,10 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from office_food_bot.features.coffee.rendering import coffee_countdown_text
-from office_food_bot.features.coffee.service import next_coffee_countdown_update, parse_coffee_time
+from office_food_bot.features.coffee.time import (
+    next_coffee_countdown_update,
+    parse_coffee_time,
+)
 
 BELGRADE = ZoneInfo("Europe/Belgrade")
 NOW = datetime(2026, 7, 7, 12, 15, tzinfo=BELGRADE)

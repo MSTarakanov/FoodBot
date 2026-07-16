@@ -1,4 +1,4 @@
-from office_food_bot.models import RegisteredUser
+from office_food_bot.application.users.models import RegisteredUser
 
 
 def format_user_reference(user: RegisteredUser) -> str:

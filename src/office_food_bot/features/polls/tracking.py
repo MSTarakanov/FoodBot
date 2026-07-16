@@ -1,12 +1,31 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from typing import Protocol
 
-from office_food_bot.features.polls.models import PollAction, PollDefinition, PollDefinitionCatalog
-from office_food_bot.models import StoredPoll
-from office_food_bot.repositories import PollRepository
+from office_food_bot.features.polls.models import (
+    PollAction,
+    PollDefinition,
+    PollDefinitionCatalog,
+    StoredPoll,
+)
+from office_food_bot.features.polls.options import PollOption
+
+
+class PollTrackingStore(Protocol):
+    def save(self, poll: StoredPoll) -> None: ...
+
+    def get(self, poll_id: str) -> StoredPoll | None: ...
+
+    def replace_selected_options(
+        self,
+        poll_id: str,
+        telegram_user_id: int,
+        options: Collection[PollOption],
+        selected_at: datetime,
+    ) -> frozenset[PollOption]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,7 +39,7 @@ class PollActionRequest:
 class PollTrackingService:
     def __init__(
         self,
-        polls: PollRepository,
+        polls: PollTrackingStore,
         definitions: PollDefinitionCatalog,
         clock: Callable[[], datetime] | None = None,
     ) -> None:

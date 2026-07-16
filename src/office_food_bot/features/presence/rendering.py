@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import assert_never
 
+from office_food_bot.application.users.models import RegisteredUser
 from office_food_bot.features.presence.models import PresenceKind, PresenceReport
 from office_food_bot.messaging import TextMessagePayload
-from office_food_bot.models import RegisteredUser
 
 _MONTH_NAMES = (
     "января",

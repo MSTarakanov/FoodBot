@@ -1,18 +1,32 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Protocol
 
 from aiogram import Bot
 
+from office_food_bot.features.lunch.models import LunchPinnedMessage
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.repositories import LunchPinRepository
+
+
+class LunchPinStore(Protocol):
+    def get(self, chat_id: int) -> LunchPinnedMessage | None: ...
+
+    def upsert(
+        self,
+        chat_id: int,
+        message_id: int,
+        lunch_date: date,
+    ) -> LunchPinnedMessage: ...
+
+    def clear(self, chat_id: int) -> None: ...
 
 
 class LunchPinService:
     def __init__(
         self,
         messenger: BotMessenger,
-        pins: LunchPinRepository,
+        pins: LunchPinStore,
     ) -> None:
         self._messenger = messenger
         self._pins = pins

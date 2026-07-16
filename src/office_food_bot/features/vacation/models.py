@@ -17,3 +17,9 @@ class VacationReport:
     kind: VacationReportKind
     display_name: str
     until_date: date | None = None
+
+
+@dataclass(frozen=True)
+class UserVacation:
+    user_id: int
+    until_date: date

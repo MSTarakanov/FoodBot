@@ -5,6 +5,7 @@ from decimal import Decimal
 import httpx
 import pytest
 
+from office_food_bot.application.splitwise.models import SplitwiseBalance, SplitwiseMember
 from office_food_bot.integrations.splitwise import (
     HttpSplitwiseClient,
     SplitwiseGroupKind,
@@ -12,7 +13,6 @@ from office_food_bot.integrations.splitwise import (
     SplitwiseService,
     SplitwiseUnavailableError,
 )
-from office_food_bot.models import SplitwiseBalance, SplitwiseMember
 
 
 class FakeSplitwiseClient:

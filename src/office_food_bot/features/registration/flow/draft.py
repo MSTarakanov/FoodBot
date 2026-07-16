@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from office_food_bot.application.splitwise.models import SplitwiseMember
+from office_food_bot.application.users.models import TelegramProfile
+from office_food_bot.features.registration.models import RegistrationDetails
 from office_food_bot.flows.contracts import FlowDraft
-from office_food_bot.models import (
-    RegistrationDetails,
-    SplitwiseMember,
-    TelegramProfile,
-)
 
 
 @dataclass(frozen=True, slots=True)

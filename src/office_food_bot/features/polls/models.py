@@ -1,10 +1,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, datetime
 from enum import StrEnum
 
 from office_food_bot.features.polls.options import PollOption
-from office_food_bot.models import PollKind
+
+
+class PollKind(StrEnum):
+    LUNCH_ATTENDANCE_V1 = "lunch_attendance_v1"
+    LUNCH_PLACE_SKYLINE_V1 = "lunch_place_skyline_v1"
+    LUNCH_PLACE_ROSE_V1 = "lunch_place_rose_v1"
+    LUNCH_OTHER_FOOD_V1 = "lunch_other_food_v1"
+
+
+@dataclass(frozen=True)
+class StoredPoll:
+    poll_id: str
+    chat_id: int
+    message_id: int
+    kind: PollKind
+    context_date: date
+    published_at: datetime
 
 
 class PollAction(StrEnum):

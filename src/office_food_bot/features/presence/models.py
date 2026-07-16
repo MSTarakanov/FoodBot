@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
 
-from office_food_bot.models import RegisteredUser
+from office_food_bot.application.users.models import RegisteredUser
 
 
 class PresenceKind(StrEnum):

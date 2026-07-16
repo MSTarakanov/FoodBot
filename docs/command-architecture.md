@@ -10,12 +10,15 @@ Use it together with `CONTRIBUTING.md` when adding or changing commands.
 - `commands/` owns one concrete slash command per file. A command coordinates
   dependencies but does not own persistence or reusable business rules.
 - `flows/` owns the reusable conversational flow engine and transitions.
-- `features/<name>/` owns feature models, errors, repositories, use cases,
-  rendering, callbacks, and feature-specific flows.
+- `features/<name>/` owns feature models, errors, repository ports and SQLite
+  adapters, use cases, rendering, callbacks, and feature-specific flows.
 - `application/` owns policies shared by multiple features, such as resolving an
   active user.
 - `bootstrap/` constructs long-lived command, flow, service, and repository
   instances and injects their dependencies.
+- `database/` owns only the connection, schema, and migration runner. SQL queries
+  live beside the feature repository that owns them. Shared user persistence is
+  under `infrastructure/persistence/users.py` and `user_queries.py`.
 
 Do not store update-specific data on command instances. The catalog reuses the
 same command objects for concurrent Telegram updates; per-update state belongs in
@@ -83,6 +86,11 @@ Expected errors are handled at the layer that understands them:
 Finite enums are handled with exhaustive `match` and `assert_never`. Do not use
 runtime type registries or `isinstance` dispatch for error rendering.
 
+Feature behavior depends on small `Protocol` ports, not concrete SQLite classes.
+The concrete adapter and its queries live in the feature package and are wired in
+`bootstrap/factory.py`. This keeps service tests independent from SQLite and makes
+the dependency direction visible.
+
 ## Example: `/hi`
 
 Source: [`commands/hi.py`](../src/office_food_bot/commands/hi.py).
@@ -121,7 +129,7 @@ checked it. Transport access improves UX; the service check protects the action.
 
 Sources: [`commands/coffee.py`](../src/office_food_bot/commands/coffee.py),
 [`features/coffee/`](../src/office_food_bot/features/coffee), and
-[`features/coffee/controller.py`](../src/office_food_bot/features/coffee/controller.py).
+[`features/coffee/callback_controller.py`](../src/office_food_bot/features/coffee/callback_controller.py).
 
 `CoffeeCommand` demonstrates one command with several typed variants:
 
@@ -141,10 +149,19 @@ The flow is:
 5. `execute_effect` delegates status, invitation settings, or scheduling to the
    corresponding feature service and renderer.
 
-Buttons on a coffee card are not slash commands. `CoffeeCallbackController`
-unpacks typed callback data, resolves the active user, calls the same coffee
-service, and answers the callback with common or coffee-specific error rendering.
-The controller is registered separately in
+Coffee orchestration is split by responsibility:
+
+- `CoffeeSessionService` owns user-driven session state changes and compensation;
+- `CoffeeCardPublisher` sends or edits cards, notifications, and pins;
+- `CoffeeJobCoordinator` owns recovery, countdown, completion, and retries;
+- `CoffeeChatLocks` is shared by session state and jobs so both serialize changes
+  for the same chat;
+- `CoffeeCardCallbackController` translates card button callbacks into session
+  service calls.
+
+Buttons on a coffee card are not slash commands. The callback controller unpacks
+typed callback data, resolves the active user, and answers the callback with common
+or coffee-specific error rendering. It is registered separately in
 [`commands/router.py`](../src/office_food_bot/commands/router.py).
 
 ## Example: `/register`
@@ -191,7 +208,8 @@ belong to `RegistrationFlowUseCase`.
 2. Choose the command type from the table above.
 3. Add ordered context and variant validators.
 4. Keep syntax in the parser and semantic conversion in the resolver.
-5. Put feature behavior, models, errors, and rendering under `features/<name>/`.
+5. Put feature behavior, models, errors, rendering, repository adapter, and SQL
+   under `features/<name>/`; make behavior depend on a `Protocol` port.
 6. Register the constructed command in `commands/factory.py`.
 7. Register callbacks, polls, or background adapters separately in the router.
 8. Test the pipeline through the dispatcher and unit-test parsers, resolvers,

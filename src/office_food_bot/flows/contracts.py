@@ -9,8 +9,8 @@ from aiogram import Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from office_food_bot.application.users.models import TelegramProfile
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.models import TelegramProfile
 from office_food_bot.result import Result, success
 
 

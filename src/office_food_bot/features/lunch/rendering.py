@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from office_food_bot.models import RegisteredUser
+from office_food_bot.application.users.models import RegisteredUser
 
 LUNCH_ANNOUNCEMENT_TEXT = "Время обедать!"
 

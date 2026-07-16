@@ -3,8 +3,13 @@ from __future__ import annotations
 import sqlite3
 from datetime import UTC, datetime
 
+from office_food_bot.application.users.models import RegisteredUser, UserRole, UserStatus
 from office_food_bot.database import Database
-from office_food_bot.database.coffee_queries import (
+from office_food_bot.features.coffee.models import (
+    CoffeeSession,
+    CoffeeSessionStatus,
+)
+from office_food_bot.features.coffee.queries import (
     ACTIVATE_COFFEE_SESSION_SQL,
     CREATE_COFFEE_SESSION_SQL,
     DELETE_COFFEE_PARTICIPANT_SQL,
@@ -18,13 +23,6 @@ from office_food_bot.database.coffee_queries import (
     MARK_COFFEE_TERMINAL_SQL,
     RESCHEDULE_COFFEE_SESSION_SQL,
     UPDATE_COFFEE_MESSAGE_SQL,
-)
-from office_food_bot.models import (
-    CoffeeSession,
-    CoffeeSessionStatus,
-    RegisteredUser,
-    UserRole,
-    UserStatus,
 )
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import assert_never
 
+from office_food_bot.application.splitwise.models import SplitwiseMember
 from office_food_bot.features.registration.flow.draft import RegistrationDraft
 from office_food_bot.features.registration.flow.identifiers import RegistrationStepId
 from office_food_bot.features.registration.flow.rendering import (
@@ -28,7 +29,6 @@ from office_food_bot.flows.contracts import (
     StayOnStep,
 )
 from office_food_bot.integrations.splitwise import SplitwiseLookupKind, SplitwiseService
-from office_food_bot.models import SplitwiseMember
 
 
 class RegistrationSplitwiseStep(RegistrationStep[TextFlowInput]):
