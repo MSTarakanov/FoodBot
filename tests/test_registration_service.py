@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from office_food_bot.commanding.errors.models import RegistrationErrorCode
 from office_food_bot.database import Database
-from office_food_bot.invitation_repositories import InvitationPreferenceRepository
+from office_food_bot.features.invitations.repository import InvitationPreferenceRepository
+from office_food_bot.features.registration.errors import RegistrationErrorCode
+from office_food_bot.features.registration.service import RegistrationService
 from office_food_bot.models import (
     ApprovalKind,
     InvitationPreferences,
@@ -19,7 +20,6 @@ from office_food_bot.repositories import (
     UserRepository,
 )
 from office_food_bot.result import Failure, Success
-from office_food_bot.services.registration import RegistrationService
 
 DEFAULT_ADMIN_IDS = frozenset({7})
 

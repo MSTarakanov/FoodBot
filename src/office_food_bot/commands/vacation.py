@@ -21,17 +21,17 @@ from office_food_bot.commanding.validators import (
     TelegramIdentityValidator,
     require_telegram_profile,
 )
-from office_food_bot.messaging import BotMessenger
-from office_food_bot.presenters.vacation import render_vacation_report
-from office_food_bot.result import Result, failure, success
-from office_food_bot.services.user_access import ActiveUserResolver
-from office_food_bot.services.vacation import (
+from office_food_bot.features.users.access import ActiveUserResolver
+from office_food_bot.features.vacation.models import VacationReport
+from office_food_bot.features.vacation.rendering import render_vacation_report
+from office_food_bot.features.vacation.service import (
     VacationRequest,
     VacationRequestKind,
     VacationService,
     parse_vacation_request,
 )
-from office_food_bot.vacation_models import VacationReport
+from office_food_bot.messaging import BotMessenger
+from office_food_bot.result import Result, failure, success
 
 VACATION_DATE_FORMAT_ERROR_TEXT = (
     "Не понял дату. Напиши количество дней или дату: "

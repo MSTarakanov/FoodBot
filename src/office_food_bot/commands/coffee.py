@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import assert_never
 
 from office_food_bot.boolean_input import parse_toggle
-from office_food_bot.coffee_models import CoffeeTimeResolutionKind
 from office_food_bot.commanding.access import CommandAccessService
 from office_food_bot.commanding.contracts import (
     CommandContext,
@@ -28,14 +27,15 @@ from office_food_bot.commanding.validators import (
     TelegramIdentityValidator,
     require_telegram_profile,
 )
-from office_food_bot.invitation_models import InvitationKind
+from office_food_bot.features.coffee.models import CoffeeTimeResolutionKind
+from office_food_bot.features.coffee.rendering import CoffeeCommandRenderer
+from office_food_bot.features.coffee.service import CoffeeService, CoffeeTimeResolver
+from office_food_bot.features.invitations.models import InvitationKind
+from office_food_bot.features.invitations.rendering import render_invitation_setting
+from office_food_bot.features.invitations.service import InvitationPreferenceService
+from office_food_bot.features.users.access import ActiveUserResolver
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.presenters.coffee import CoffeeCommandRenderer
-from office_food_bot.presenters.invitations import render_invitation_setting
 from office_food_bot.result import Result, failure, success
-from office_food_bot.services.coffee import CoffeeService, CoffeeTimeResolver
-from office_food_bot.services.invitations import InvitationPreferenceService
-from office_food_bot.services.user_access import ActiveUserResolver
 
 COFFEE_TIME_ERROR = (
     "Не понял время. Напиши минуты или время сегодня: /coffee 15 или /coffee 16:30."

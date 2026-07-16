@@ -4,11 +4,8 @@ from typing import Protocol, assert_never
 
 from office_food_bot.commanding.definition import CommandDefinition
 from office_food_bot.commanding.errors.models import (
-    BalanceErrorCode,
-    CoffeeErrorCode,
     CommonErrorCode,
     InputErrorCode,
-    RegistrationErrorCode,
 )
 
 
@@ -67,47 +64,6 @@ class CallbackCommonErrorRenderer:
                 "администратор."
             )
         return self._common.render(code)
-
-
-class BalanceErrorRenderer:
-    def render(self, code: BalanceErrorCode) -> str:
-        match code:
-            case BalanceErrorCode.NO_SPLITWISE_USERS:
-                return "Splitwise пока не подключен."
-            case BalanceErrorCode.SPLITWISE_UNAVAILABLE:
-                return "Не смог получить балансы Splitwise. Попробуй позже."
-        assert_never(code)
-
-
-class CoffeeErrorRenderer:
-    def render(self, code: CoffeeErrorCode) -> str:
-        match code:
-            case CoffeeErrorCode.INVALID_CALLBACK:
-                return "Не понял действие."
-            case CoffeeErrorCode.SESSION_ENDED:
-                return "Эта встреча уже завершена."
-        assert_never(code)
-
-
-class RegistrationErrorRenderer:
-    def render(self, code: RegistrationErrorCode) -> str:
-        match code:
-            case RegistrationErrorCode.REQUEST_ALREADY_PENDING:
-                return (
-                    "Заявка уже ждет аппрува. "
-                    "Если хотите отменить регистрацию, отправьте /quit."
-                )
-            case RegistrationErrorCode.REQUEST_ALREADY_ACTIVE:
-                return (
-                    "Вы уже зарегистрированы. "
-                    "Если хотите отрегистрироваться, отправьте /quit."
-                )
-            case RegistrationErrorCode.REQUEST_UNAVAILABLE:
-                return (
-                    "Регистрация сейчас недоступна. "
-                    "Если хотите отрегистрироваться, отправьте /quit."
-                )
-        assert_never(code)
 
 
 class InternalErrorRenderer:

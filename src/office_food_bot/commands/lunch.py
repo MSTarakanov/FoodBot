@@ -26,17 +26,17 @@ from office_food_bot.commanding.validators import (
     require_telegram_profile,
 )
 from office_food_bot.execution import CommandExecutionMode
-from office_food_bot.invitation_models import InvitationKind
-from office_food_bot.messaging import BotMessenger
-from office_food_bot.presenters.invitations import render_invitation_setting
-from office_food_bot.result import Result, failure, success
-from office_food_bot.services.invitations import InvitationPreferenceService
-from office_food_bot.services.lunch_auto import LunchPollPublisher
-from office_food_bot.services.lunch_polls import (
+from office_food_bot.features.invitations.models import InvitationKind
+from office_food_bot.features.invitations.rendering import render_invitation_setting
+from office_food_bot.features.invitations.service import InvitationPreferenceService
+from office_food_bot.features.lunch.automation import LunchPollPublisher
+from office_food_bot.features.lunch.polls import (
     LunchOfficeSelection,
     parse_lunch_office_selection,
 )
-from office_food_bot.services.user_access import ActiveUserResolver
+from office_food_bot.features.users.access import ActiveUserResolver
+from office_food_bot.messaging import BotMessenger
+from office_food_bot.result import Result, failure, success
 
 INVALID_LUNCH_OFFICE_MESSAGE = (
     "Не понял офис. Используй /lunch, /lunch rose, /lunch роза, "

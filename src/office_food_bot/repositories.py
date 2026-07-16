@@ -62,6 +62,7 @@ from office_food_bot.database.vacation_queries import (
     LIST_ACTIVE_VACATION_USER_IDS_SQL,
     UPSERT_USER_VACATION_SQL,
 )
+from office_food_bot.features.polls.options import PollOption
 from office_food_bot.models import (
     ActiveSplitwiseUser,
     KnownTelegramAccount,
@@ -79,7 +80,6 @@ from office_food_bot.models import (
     UserStatus,
     UserVacation,
 )
-from office_food_bot.poll_options import PollOption
 
 
 class TelegramAccountRepository:

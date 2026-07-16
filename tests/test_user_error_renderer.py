@@ -1,22 +1,25 @@
 from __future__ import annotations
 
 from office_food_bot.commanding.errors.models import (
-    BalanceErrorCode,
-    CoffeeErrorCode,
     CommonErrorCode,
     InputErrorCode,
-    RegistrationErrorCode,
 )
 from office_food_bot.commanding.errors.rendering import (
-    BalanceErrorRenderer,
     CallbackCommonErrorRenderer,
-    CoffeeErrorRenderer,
     CommandInputErrorRenderer,
     CommonErrorRenderer,
     InternalErrorRenderer,
-    RegistrationErrorRenderer,
 )
 from office_food_bot.commands.eta import EtaCommand
+from office_food_bot.features.balance.errors import (
+    BalanceErrorCode,
+    BalanceErrorRenderer,
+)
+from office_food_bot.features.coffee.errors import CoffeeErrorCode, CoffeeErrorRenderer
+from office_food_bot.features.registration.errors import (
+    RegistrationErrorCode,
+    RegistrationErrorRenderer,
+)
 
 
 def test_common_error_renderer_uses_configured_bot_username() -> None:

@@ -14,7 +14,7 @@ from aiogram.types import Chat, Message, User
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.messaging import TextMessagePayload
 from office_food_bot.preview import PreviewError, deliver_preview, resolve_chat_id
-from office_food_bot.previews import MESSAGE_PREVIEWS
+from office_food_bot.previews.registry import MESSAGE_PREVIEWS
 
 
 class PreviewSession(BaseSession):

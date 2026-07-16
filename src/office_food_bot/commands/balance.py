@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from office_food_bot.balance_models import BalanceReport
 from office_food_bot.commanding.contracts import (
     CommandContext,
     IdentityResolver,
@@ -13,17 +12,19 @@ from office_food_bot.commanding.definition import (
     CommandScope,
     HelpSection,
 )
-from office_food_bot.commanding.errors.models import BalanceErrorCode, CommonErrorCode
+from office_food_bot.commanding.errors.models import CommonErrorCode
 from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.commanding.validators import (
     ActiveUserValidator,
     TelegramIdentityValidator,
 )
+from office_food_bot.features.balance.errors import BalanceErrorCode
+from office_food_bot.features.balance.models import BalanceReport
+from office_food_bot.features.balance.rendering import render_balance_message
+from office_food_bot.features.balance.use_case import GetBalanceReport
+from office_food_bot.features.users.access import ActiveUserResolver
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.presenters import render_balance_message
 from office_food_bot.result import Result
-from office_food_bot.services.balances import BalanceService
-from office_food_bot.services.user_access import ActiveUserResolver
 
 
 class BalanceCommand(
@@ -46,7 +47,7 @@ class BalanceCommand(
         self,
         messenger: BotMessenger,
         common_error_renderer: ErrorRenderer[CommonErrorCode],
-        balances: BalanceService,
+        get_balance_report: GetBalanceReport,
         active_users: ActiveUserResolver,
         error_renderer: ErrorRenderer[BalanceErrorCode],
     ) -> None:
@@ -63,11 +64,11 @@ class BalanceCommand(
             render_balance_message,
             error_renderer,
         )
-        self._balances = balances
+        self._get_balance_report = get_balance_report
 
     async def execute(
         self,
         _context: CommandContext,
         _request: NoArguments,
     ) -> Result[BalanceReport, BalanceErrorCode]:
-        return await self._balances.balance()
+        return await self._get_balance_report.execute()

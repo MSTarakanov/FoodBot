@@ -46,8 +46,8 @@ from aiogram.types import (
 )
 from aiogram.types import PollOption as TelegramPollOption
 
-from office_food_bot.app import create_dispatcher, create_services
-from office_food_bot.coffee_repositories import CoffeeSessionRepository
+from office_food_bot.app import create_dependencies, create_dispatcher
+from office_food_bot.bootstrap import BotDependencies
 from office_food_bot.commanding.catalog import CommandCatalog
 from office_food_bot.commanding.definition import START_TEXT
 from office_food_bot.commanding.errors.rendering import CommonErrorRenderer
@@ -55,7 +55,16 @@ from office_food_bot.commanding.menu import setup_bot_commands
 from office_food_bot.commands.factory import build_command_runtime
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
-from office_food_bot.invitation_repositories import InvitationPreferenceRepository
+from office_food_bot.features.coffee.repository import CoffeeSessionRepository
+from office_food_bot.features.invitations.repository import InvitationPreferenceRepository
+from office_food_bot.features.lunch.polls import (
+    LUNCH_OTHER_FOOD_POLL,
+    ROSE_LUNCH_POLLS,
+    SKYLINE_LUNCH_POLLS,
+    OfficeLunchPolls,
+)
+from office_food_bot.features.polls.options import PollOption
+from office_food_bot.integrations.splitwise import SplitwiseUnavailableError
 from office_food_bot.messaging import TextMessagePayload
 from office_food_bot.models import (
     CoffeeSessionStatus,
@@ -66,8 +75,7 @@ from office_food_bot.models import (
     TelegramProfile,
     UserStatus,
 )
-from office_food_bot.poll_options import PollOption
-from office_food_bot.previews import MESSAGE_PREVIEWS
+from office_food_bot.previews.registry import MESSAGE_PREVIEWS
 from office_food_bot.repositories import (
     LunchAutoChatRepository,
     LunchPinRepository,
@@ -76,14 +84,6 @@ from office_food_bot.repositories import (
     UserRepository,
     VacationRepository,
 )
-from office_food_bot.services import BotServices
-from office_food_bot.services.lunch_polls import (
-    LUNCH_OTHER_FOOD_POLL,
-    ROSE_LUNCH_POLLS,
-    SKYLINE_LUNCH_POLLS,
-    OfficeLunchPolls,
-)
-from office_food_bot.services.splitwise import SplitwiseUnavailableError
 
 DEFAULT_ADMIN_IDS = frozenset({7})
 DEFAULT_SPLITWISE_GROUP_ID = 55
@@ -502,7 +502,7 @@ def make_test_services(
     splitwise_members: tuple[SplitwiseMember, ...] = (),
     splitwise_unavailable: bool = False,
     clock: Callable[[], datetime] | None = None,
-) -> BotServices:
+) -> BotDependencies:
     settings = Settings(
         environment=RuntimeEnvironment.DEVELOPMENT,
         telegram_bot_token="123456:test-token",
@@ -514,7 +514,7 @@ def make_test_services(
         splitwise_group_id=DEFAULT_SPLITWISE_GROUP_ID,
         production_telegram_bot_id=8490386710,
     )
-    services = create_services(
+    services = create_dependencies(
         database,
         settings,
         clock=clock
@@ -527,7 +527,7 @@ def make_test_services(
     return services
 
 
-def make_command_catalog(services: BotServices) -> CommandCatalog:
+def make_command_catalog(services: BotDependencies) -> CommandCatalog:
     return build_command_runtime(
         services,
         CommonErrorRenderer(services.telegram_bot_username),
@@ -535,7 +535,7 @@ def make_command_catalog(services: BotServices) -> CommandCatalog:
 
 
 async def create_or_reschedule_coffee(
-    services: BotServices,
+    services: BotDependencies,
     bot: Bot,
     telegram_user_id: int,
     raw_time: str,

@@ -14,8 +14,8 @@ from office_food_bot.commanding.contracts import (
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
 from office_food_bot.commanding.errors.models import CommonErrorCode
 from office_food_bot.commanding.errors.rendering import ErrorRenderer
+from office_food_bot.commanding.help import HELP_RENDERER
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.presenters.help import HELP_RENDERER
 
 
 class HelpCommand(EffectCommand[NoArguments, NoArguments]):

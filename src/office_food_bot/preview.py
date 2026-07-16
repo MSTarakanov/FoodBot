@@ -10,7 +10,7 @@ from aiogram.types import Message
 
 from office_food_bot.config import RuntimeEnvironment, Settings, load_settings
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.previews import MESSAGE_PREVIEWS
+from office_food_bot.previews.registry import MESSAGE_PREVIEWS
 from office_food_bot.runtime_guard import (
     ProductionTokenInDevelopmentError,
     ensure_safe_telegram_token_for_environment,

@@ -9,13 +9,13 @@ from office_food_bot.commanding.errors.models import (
     InputErrorCode,
 )
 from office_food_bot.commands.presence import EtaRequestParser, EtaRequestResolver
+from office_food_bot.features.presence.models import EtaRequest, PresenceKind
+from office_food_bot.features.presence.rendering import render_presence_report
+from office_food_bot.features.presence.service import PresenceService
+from office_food_bot.features.users.access import ActiveUserResolver
 from office_food_bot.models import TelegramProfile
-from office_food_bot.presence_models import EtaRequest, PresenceKind
-from office_food_bot.presenters.presence import render_presence_report
 from office_food_bot.repositories import UserRepository
 from office_food_bot.result import Result
-from office_food_bot.services.presence import PresenceService
-from office_food_bot.services.user_access import ActiveUserResolver
 
 
 def make_profile() -> TelegramProfile:

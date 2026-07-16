@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 
 from office_food_bot.commanding.errors.models import InputErrorCode
-from office_food_bot.presence_models import EtaRequest
+from office_food_bot.features.presence.models import EtaRequest
 from office_food_bot.result import Result, failure, success
 
 MAX_ETA_MINUTES = 366 * 24 * 60

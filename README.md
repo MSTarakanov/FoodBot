@@ -283,28 +283,30 @@ Maintainer note: to grant direct push access, open
 
 Command-related code is split by responsibility:
 
-- `commanding/` contains the reusable command lifecycle, catalog, access checks, and error pipeline;
+- `commanding/` contains the reusable command lifecycle, catalog, access checks, and common errors;
 - `commands/` contains concrete slash commands, one command per file;
-- `flows/` contains conversational state machines, typed drafts, step validators, and transitions;
-- `controllers/` contains callback and poll handlers that are not slash commands or flows;
-- `presenters/` turns feature models into Telegram payloads;
-- `services/` and repositories contain business rules and persistence.
+- `flows/` contains only the reusable conversational flow engine;
+- `features/<name>/` owns feature models, errors, use cases, repositories, rendering,
+  callbacks, and conversational flows;
+- `bootstrap/` constructs the application dependency graph;
+- `integrations/` and `infrastructure/` contain external API and runtime adapters.
 
 1. Add `<name>Command` in `src/office_food_bot/commands/<name>.py`. The module name must match the
    canonical slash-command name.
 2. Choose `RenderedCommand`, `EffectCommand`, or `FlowCommand` and keep the immutable
    `CommandDefinition` on the concrete class.
-3. Pass parsers, validators, services, and renderers explicitly through the constructor.
+3. Pass parsers, validators, use cases, and renderers explicitly through the constructor.
 4. Add the command instance to `src/office_food_bot/commands/factory.py`. The common dispatcher
    resolves it through `CommandCatalog`; do not register a separate slash handler in the router.
 5. Send text, choice buttons, inline buttons, and polls through `BotMessenger`,
    not directly through `message.answer`, `bot.send_message`, or `bot.send_poll`.
-6. Keep database access inside repositories and business rules inside services. Render feature
-   models in presenters instead of assembling output inside repositories.
+6. Keep feature code in `features/<name>/`: repositories own persistence, use cases and
+   feature-local services own behavior, and rendering converts typed models into Telegram output.
+   Rendering must not access repositories or services.
 7. Implement multi-step conversations as a `StartableFlow` with explicit `FlowStep` objects.
    Each step owns its parser and ordered validators, then returns `StayOnStep`, `MoveToStep`, or
    `CompleteFlow`. Keep accumulated values in a typed feature draft.
-8. Put callback and poll handlers in `controllers/` and register them in
+8. Put callback and poll controllers in the owning feature package and register them in
    `src/office_food_bot/commands/router.py`.
 9. Add or update command tests in `tests/test_commands.py`; add messenger tests
    in `tests/test_messaging.py` when introducing a new response primitive.

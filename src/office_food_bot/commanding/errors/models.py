@@ -19,19 +19,3 @@ class InputErrorCode(StrEnum):
     INVALID_CHOICE = "invalid_choice"
     OUT_OF_RANGE = "out_of_range"
     REVERSED_RANGE = "reversed_range"
-
-
-class BalanceErrorCode(StrEnum):
-    NO_SPLITWISE_USERS = "no_splitwise_users"
-    SPLITWISE_UNAVAILABLE = "splitwise_unavailable"
-
-
-class CoffeeErrorCode(StrEnum):
-    INVALID_CALLBACK = "invalid_callback"
-    SESSION_ENDED = "session_ended"
-
-
-class RegistrationErrorCode(StrEnum):
-    REQUEST_ALREADY_PENDING = "request_already_pending"
-    REQUEST_ALREADY_ACTIVE = "request_already_active"
-    REQUEST_UNAVAILABLE = "request_unavailable"

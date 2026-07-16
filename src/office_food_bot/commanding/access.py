@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import assert_never
+from typing import Protocol, assert_never
 
 from office_food_bot.commanding.definition import (
     CommandDefinition,
@@ -13,8 +13,6 @@ from office_food_bot.commanding.definition import (
 )
 from office_food_bot.commanding.errors.models import CommonErrorCode
 from office_food_bot.result import Result, failure, success
-from office_food_bot.services.debug import DebugService
-from office_food_bot.services.registration import RegistrationService
 
 PRIVATE_CHAT_TYPE = "private"
 GROUP_CHAT_TYPES = frozenset({"group", "supergroup"})
@@ -35,14 +33,25 @@ class CommandAccessResult:
         return self.denial_reason is None
 
 
+class AdminAccess(Protocol):
+    @property
+    def admin_ids(self) -> frozenset[int]: ...
+
+    def can_approve(self, telegram_user_id: int) -> bool: ...
+
+
+class DebugAccess(Protocol):
+    def is_enabled(self, telegram_user_id: int) -> bool: ...
+
+
 class CommandAccessService:
     def __init__(
         self,
-        registration: RegistrationService,
-        debug: DebugService,
+        admin_access: AdminAccess,
+        debug_access: DebugAccess,
     ) -> None:
-        self._registration = registration
-        self._debug = debug
+        self._admin_access = admin_access
+        self._debug_access = debug_access
 
     def can_run(
         self,
@@ -111,17 +120,17 @@ class CommandAccessService:
         )
 
     def admin_chat_ids_for_menu(self) -> tuple[int, ...]:
-        return tuple(sorted(self._registration.admin_ids))
+        return tuple(sorted(self._admin_access.admin_ids))
 
     def is_admin(self, telegram_user_id: int | None) -> bool:
         if telegram_user_id is None:
             return False
-        return self._registration.can_approve(telegram_user_id)
+        return self._admin_access.can_approve(telegram_user_id)
 
     def is_debug_enabled(self, telegram_user_id: int | None) -> bool:
         if telegram_user_id is None:
             return False
-        return self._debug.is_enabled(telegram_user_id)
+        return self._debug_access.is_enabled(telegram_user_id)
 
     def can_run_group_command_in_chat(
         self,

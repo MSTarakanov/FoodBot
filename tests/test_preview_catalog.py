@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 
 from office_food_bot.messaging import TextMessagePayload
-from office_food_bot.previews import MESSAGE_PREVIEWS
 from office_food_bot.previews.catalog import MessagePreviewCatalog, PreviewDefinition
+from office_food_bot.previews.registry import MESSAGE_PREVIEWS
 
 
 def test_preview_catalog_resolves_registered_definition() -> None:

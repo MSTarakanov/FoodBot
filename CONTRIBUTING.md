@@ -121,9 +121,10 @@ scripts/check
 
 ## Adding a command
 
-The command framework lives in `commanding/`; concrete slash commands live in
-`commands/`; conversational state machines live in `flows/`; callback and poll
-handlers live in `controllers/`; feature output formatting lives in `presenters/`.
+The reusable command and flow engines live in `commanding/` and `flows/`.
+Concrete slash commands live in `commands/`, while models, errors, business
+logic, rendering, callbacks, and feature flows live together in `features/<name>/`.
+Application dependency construction lives in `bootstrap/`.
 
 1. Add `<name>Command` in `src/office_food_bot/commands/<name>.py`. Keep exactly
    one concrete slash command in the file and make the module name match its
@@ -135,13 +136,15 @@ handlers live in `controllers/`; feature output formatting lives in `presenters/
    in the router.
 4. Send text, choice buttons, inline buttons, and polls through `BotMessenger`,
    not directly through `message.answer`, `bot.send_message`, or `bot.send_poll`.
-5. Keep database access inside repositories, business rules inside services, and
-   feature-model formatting inside presenters.
-6. For multi-step conversations, add a `StartableFlow` with explicit steps. Each
-   step owns its parser and ordered validators and returns an explicit transition;
-   accumulated values belong in a typed feature draft.
-7. Put callback and poll handlers in `controllers/` and
-   register them in `src/office_food_bot/commands/router.py`.
+5. Put feature models, errors, repositories, use cases, and rendering in
+   `src/office_food_bot/features/<name>/`. Rendering converts typed feature
+   models into strings or `MessagePayload`; it must not access repositories or
+   application services.
+6. For multi-step conversations, add a feature-owned `StartableFlow` with
+   explicit steps. Each step owns its parser and ordered validators and returns
+   an explicit transition; accumulated values belong in a typed feature draft.
+7. Put callback and poll controllers in the owning feature package and register
+   them in `src/office_food_bot/commands/router.py`.
 8. Add or update command tests in `tests/test_commands.py`; add messenger tests
    in `tests/test_messaging.py` when introducing a new response primitive.
 9. Run `scripts/check`.

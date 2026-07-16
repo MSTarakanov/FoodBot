@@ -20,7 +20,7 @@ from aiogram.types import (
     ReplyParameters,
 )
 
-from office_food_bot.poll_options import PollOption
+from office_food_bot.features.polls.options import PollOption
 
 
 @dataclass(frozen=True, slots=True)

@@ -14,8 +14,8 @@ from office_food_bot.commanding.validators import (
     TelegramIdentityValidator,
     require_telegram_profile,
 )
+from office_food_bot.features.registration.service import RegistrationService
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.services.registration import RegistrationService
 
 QUIT_SUCCESS_TEXT = "Вы отрегистрированы. Если захотите вернуться, отправьте /request_register."
 QUIT_NOT_FOUND_TEXT = "Я не нашел вашу регистрацию."

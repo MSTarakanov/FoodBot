@@ -16,8 +16,8 @@ from office_food_bot.commanding.definition import (
 )
 from office_food_bot.commanding.errors.models import CommonErrorCode, InputErrorCode
 from office_food_bot.commanding.errors.rendering import ErrorRenderer
-from office_food_bot.flows.registration.flow import RegistrationFlow
-from office_food_bot.flows.registration.requests import RegisterInput, RegisterRequest
+from office_food_bot.features.registration.flow.flow import RegistrationFlow
+from office_food_bot.features.registration.flow.requests import RegisterInput, RegisterRequest
 from office_food_bot.flows.runner import FlowRunner
 from office_food_bot.messaging import BotMessenger
 

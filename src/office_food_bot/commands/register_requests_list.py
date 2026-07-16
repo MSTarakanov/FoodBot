@@ -14,6 +14,7 @@ from office_food_bot.commanding.validators import (
     TelegramIdentityValidator,
     require_telegram_profile,
 )
+from office_food_bot.features.registration.service import RegistrationService
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import (
     KnownTelegramAccount,
@@ -21,7 +22,6 @@ from office_food_bot.models import (
     RegisteredUser,
     SplitwiseConnection,
 )
-from office_food_bot.services.registration import RegistrationService
 
 
 class RegisterRequestsListCommand(EffectCommand[NoArguments, NoArguments]):

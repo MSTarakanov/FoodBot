@@ -1,5 +1,5 @@
 from office_food_bot.database import Database
-from office_food_bot.invitation_repositories import InvitationPreferenceRepository
+from office_food_bot.features.invitations.repository import InvitationPreferenceRepository
 from office_food_bot.models import InvitationPreferences, TelegramProfile
 from office_food_bot.repositories import UserRepository
 

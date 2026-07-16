@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from typing import Protocol
+
 from office_food_bot.commanding.contracts import CommandContext
 from office_food_bot.commanding.errors.models import CommonErrorCode
-from office_food_bot.models import TelegramProfile
+from office_food_bot.models import RegisteredUser, TelegramProfile
 from office_food_bot.result import Result, failure, success
-from office_food_bot.services.user_access import ActiveUserResolver
 
 
 class TelegramIdentityValidator:
@@ -17,8 +18,15 @@ class TelegramIdentityValidator:
         return success(None)
 
 
+class ActiveUserAccess(Protocol):
+    def resolve(
+        self,
+        telegram_user_id: int,
+    ) -> Result[RegisteredUser, CommonErrorCode]: ...
+
+
 class ActiveUserValidator:
-    def __init__(self, users: ActiveUserResolver) -> None:
+    def __init__(self, users: ActiveUserAccess) -> None:
         self._users = users
 
     def validate(

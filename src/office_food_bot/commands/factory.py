@@ -2,13 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from office_food_bot.bootstrap import BotDependencies
 from office_food_bot.commanding.catalog import CommandCatalog
 from office_food_bot.commanding.errors.models import CommonErrorCode
-from office_food_bot.commanding.errors.rendering import (
-    BalanceErrorRenderer,
-    ErrorRenderer,
-    RegistrationErrorRenderer,
-)
+from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.commanding.validators import TelegramIdentityValidator
 from office_food_bot.commands.approve import ApproveCommand
 from office_food_bot.commands.balance import BalanceCommand
@@ -30,17 +27,18 @@ from office_food_bot.commands.request_register import RequestRegisterCommand
 from office_food_bot.commands.start import StartCommand
 from office_food_bot.commands.test import TestCommand
 from office_food_bot.commands.vacation import VacationCommand
-from office_food_bot.flows.catalog import FlowCatalog
-from office_food_bot.flows.registration.factory import build_registration_flow
-from office_food_bot.flows.registration.requests import (
+from office_food_bot.features.balance.errors import BalanceErrorRenderer
+from office_food_bot.features.coffee.rendering import CoffeeCommandRenderer
+from office_food_bot.features.registration.errors import RegistrationErrorRenderer
+from office_food_bot.features.registration.flow.factory import build_registration_flow
+from office_food_bot.features.registration.flow.requests import (
     RegisterOtherAdminValidator,
     RegisterRequestParser,
     RegisterRequestResolver,
 )
+from office_food_bot.flows.catalog import FlowCatalog
 from office_food_bot.flows.runner import FlowRunner
-from office_food_bot.presenters.coffee import CoffeeCommandRenderer
-from office_food_bot.previews import MESSAGE_PREVIEWS
-from office_food_bot.services import BotServices
+from office_food_bot.previews.registry import MESSAGE_PREVIEWS
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,14 +48,14 @@ class CommandRuntime:
 
 
 def build_command_runtime(
-    services: BotServices,
+    dependencies: BotDependencies,
     common_error_renderer: ErrorRenderer[CommonErrorCode],
 ) -> CommandRuntime:
-    messenger = services.messenger
+    messenger = dependencies.messenger
     registration_flow = build_registration_flow(
-        services.registration,
-        services.invitations,
-        services.splitwise,
+        dependencies.registration,
+        dependencies.invitations,
+        dependencies.splitwise,
     )
     flow_runner = FlowRunner(FlowCatalog((registration_flow,)), messenger)
     catalog: CommandCatalog | None = None
@@ -73,21 +71,21 @@ def build_command_runtime(
             HelpCommand(
                 messenger,
                 common_error_renderer,
-                services.command_access,
+                dependencies.command_access,
                 catalog_provider,
             ),
             HiCommand(
                 messenger,
                 common_error_renderer,
-                services.telegram_interactions,
-                services.telegram_bot_username,
+                dependencies.telegram_interactions,
+                dependencies.telegram_bot_username,
             ),
             RegisterCommand(
                 messenger,
                 common_error_renderer,
                 RegisterRequestParser(),
                 (TelegramIdentityValidator(),),
-                (RegisterOtherAdminValidator(services.registration),),
+                (RegisterOtherAdminValidator(dependencies.registration),),
                 RegisterRequestResolver(),
                 flow_runner,
                 registration_flow,
@@ -95,82 +93,82 @@ def build_command_runtime(
             RequestRegisterCommand(
                 messenger,
                 common_error_renderer,
-                services.registration,
+                dependencies.registration,
                 RegistrationErrorRenderer(),
             ),
-            QuitCommand(messenger, common_error_renderer, services.registration),
+            QuitCommand(messenger, common_error_renderer, dependencies.registration),
             CancelCommand(messenger, common_error_renderer, flow_runner),
-            ApproveCommand(messenger, common_error_renderer, services.registration),
+            ApproveCommand(messenger, common_error_renderer, dependencies.registration),
             RegisterRequestsListCommand(
                 messenger,
                 common_error_renderer,
-                services.registration,
+                dependencies.registration,
             ),
             DebugCommand(
                 messenger,
                 common_error_renderer,
-                services.debug,
-                services.command_access,
+                dependencies.debug,
+                dependencies.command_access,
                 catalog_provider,
             ),
             TestCommand(messenger, common_error_renderer, MESSAGE_PREVIEWS),
             MetaCommand(
                 messenger,
                 common_error_renderer,
-                services.presence,
-                services.active_users,
+                dependencies.presence,
+                dependencies.active_users,
             ),
             EtaCommand(
                 messenger,
                 common_error_renderer,
-                services.presence,
-                services.active_users,
+                dependencies.presence,
+                dependencies.active_users,
             ),
             BalanceCommand(
                 messenger,
                 common_error_renderer,
-                services.balances,
-                services.active_users,
+                dependencies.get_balance_report,
+                dependencies.active_users,
                 BalanceErrorRenderer(),
             ),
             VacationCommand(
                 messenger,
                 common_error_renderer,
-                services.vacation,
-                services.active_users,
+                dependencies.vacation,
+                dependencies.active_users,
             ),
             LunchCommand(
                 messenger,
                 common_error_renderer,
-                services.command_access,
-                services.invitations,
-                services.active_users,
-                services.lunch_publisher,
+                dependencies.command_access,
+                dependencies.invitations,
+                dependencies.active_users,
+                dependencies.lunch_publisher,
             ),
             CoffeeCommand(
                 messenger,
                 common_error_renderer,
-                services.coffee,
-                services.coffee_time,
-                CoffeeCommandRenderer(services.timezone_name),
-                services.invitations,
-                services.command_access,
-                services.active_users,
+                dependencies.coffee,
+                dependencies.coffee_time,
+                CoffeeCommandRenderer(dependencies.timezone_name),
+                dependencies.invitations,
+                dependencies.command_access,
+                dependencies.active_users,
             ),
             LunchAutoOnCommand(
                 messenger,
                 common_error_renderer,
-                services.lunch_auto_chats,
+                dependencies.lunch_auto_chats,
             ),
             LunchAutoOffCommand(
                 messenger,
                 common_error_renderer,
-                services.lunch_auto_chats,
+                dependencies.lunch_auto_chats,
             ),
             LunchAutoStatusCommand(
                 messenger,
                 common_error_renderer,
-                services.lunch_auto_chats,
+                dependencies.lunch_auto_chats,
             ),
         )
     )

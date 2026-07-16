@@ -23,11 +23,11 @@ from office_food_bot.commands.presence import (
     EtaRequestParser,
     EtaRequestResolver,
 )
+from office_food_bot.features.presence.models import EtaRequest, PresenceKind, PresenceReport
+from office_food_bot.features.presence.rendering import render_presence_report
+from office_food_bot.features.presence.service import PresenceService
+from office_food_bot.features.users.access import ActiveUserResolver
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.presence_models import EtaRequest, PresenceKind, PresenceReport
-from office_food_bot.presenters.presence import render_presence_report
-from office_food_bot.services.presence import PresenceService
-from office_food_bot.services.user_access import ActiveUserResolver
 
 
 class MetaCommand(RenderedCommand[EtaInput, EtaRequest, PresenceReport]):

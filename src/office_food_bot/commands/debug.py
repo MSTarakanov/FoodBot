@@ -25,9 +25,9 @@ from office_food_bot.commanding.validators import (
     TelegramIdentityValidator,
     require_telegram_profile,
 )
+from office_food_bot.features.debug.service import DebugService
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.result import Result, failure, success
-from office_food_bot.services.debug import DebugService
 
 
 class DebugInput:

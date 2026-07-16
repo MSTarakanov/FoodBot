@@ -8,15 +8,16 @@ from office_food_bot.commanding.contracts import (
     NoArgumentsParser,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
-from office_food_bot.commanding.errors.models import CommonErrorCode, RegistrationErrorCode
+from office_food_bot.commanding.errors.models import CommonErrorCode
 from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.commanding.validators import (
     TelegramIdentityValidator,
     require_telegram_profile,
 )
+from office_food_bot.features.registration.errors import RegistrationErrorCode
+from office_food_bot.features.registration.service import RegistrationService
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import TelegramProfile
-from office_food_bot.services.registration import RegistrationService
 
 REQUEST_REGISTER_REPLY_TEXT = (
     "Запрос на регистрацию отправлен админам. "
