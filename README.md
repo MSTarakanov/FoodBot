@@ -292,6 +292,9 @@ Command-related code is split by responsibility:
 - `bootstrap/` constructs the application dependency graph;
 - `integrations/` and `infrastructure/` contain external API and runtime adapters.
 
+See [`docs/command-architecture.md`](docs/command-architecture.md) for the full
+command lifecycle and walkthroughs of `/hi`, `/approve`, `/coffee`, and `/register`.
+
 1. Add `<name>Command` in `src/office_food_bot/commands/<name>.py`. The module name must match the
    canonical slash-command name.
 2. Choose `RenderedCommand`, `EffectCommand`, or `FlowCommand` and keep the immutable

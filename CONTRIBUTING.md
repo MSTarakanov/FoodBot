@@ -128,6 +128,9 @@ Cross-feature application policies live in `application/` and must not depend
 on Telegram transport, `commanding/`, or concrete features.
 Application dependency construction lives in `bootstrap/`.
 
+Read [`docs/command-architecture.md`](docs/command-architecture.md) for the full
+lifecycle and concrete `/hi`, `/approve`, `/coffee`, and `/register` examples.
+
 1. Add `<name>Command` in `src/office_food_bot/commands/<name>.py`. Keep exactly
    one concrete slash command in the file and make the module name match its
    canonical command name.
