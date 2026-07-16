@@ -56,7 +56,7 @@ from office_food_bot.commands.factory import build_command_runtime
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
 from office_food_bot.invitation_repositories import InvitationPreferenceRepository
-from office_food_bot.messaging import BotMessenger, TextMessagePayload
+from office_food_bot.messaging import TextMessagePayload
 from office_food_bot.models import (
     CoffeeSessionStatus,
     InvitationPreferences,
@@ -528,7 +528,23 @@ def make_test_services(
 
 
 def make_command_catalog(services: BotServices) -> CommandCatalog:
-    return build_command_runtime(services, BotMessenger()).catalog
+    return build_command_runtime(services).catalog
+
+
+async def create_or_reschedule_coffee(
+    services: BotServices,
+    bot: Bot,
+    telegram_user_id: int,
+    raw_time: str,
+) -> None:
+    resolution = services.coffee_time.resolve(raw_time)
+    assert resolution.scheduled_at is not None
+    await services.coffee.create_or_reschedule(
+        bot,
+        -100,
+        telegram_user_id,
+        resolution.scheduled_at,
+    )
 
 
 def make_dispatcher(
@@ -3338,7 +3354,7 @@ async def test_coffee_countdown_edits_existing_card_without_new_message(
     bot = Bot(token="123456:test-token", session=session)
     services = make_test_services(database, clock=lambda: now[0])
 
-    await services.coffee.create_or_reschedule(bot, -100, 42, "15")
+    await create_or_reschedule_coffee(services, bot, 42, "15")
     coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
     assert coffee_session is not None
     session.clear_messages()
@@ -3407,11 +3423,11 @@ async def test_concurrent_coffee_reschedules_are_serialized(tmp_path: Path) -> N
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
     services = make_test_services(database)
-    await services.coffee.create_or_reschedule(bot, -100, 42, "15")
+    await create_or_reschedule_coffee(services, bot, 42, "15")
 
     await asyncio.gather(
-        services.coffee.create_or_reschedule(bot, -100, 42, "20"),
-        services.coffee.create_or_reschedule(bot, -100, 42, "30"),
+        create_or_reschedule_coffee(services, bot, 42, "20"),
+        create_or_reschedule_coffee(services, bot, 42, "30"),
     )
 
     coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
@@ -3431,11 +3447,11 @@ async def test_failed_coffee_card_update_rolls_back_reschedule(
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
     services = make_test_services(database)
-    await services.coffee.create_or_reschedule(bot, -100, 42, "15")
+    await create_or_reschedule_coffee(services, bot, 42, "15")
     session.fail_methods("EditMessageText", "SendMessage")
 
     with pytest.raises(TelegramBadRequest):
-        await services.coffee.create_or_reschedule(bot, -100, 43, "30")
+        await create_or_reschedule_coffee(services, bot, 43, "30")
 
     coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
     assert coffee_session is not None
@@ -3603,11 +3619,7 @@ async def test_coffee_callback_rejects_unregistered_user_with_alert(
     )
 
     assert session.callback_answers[-1].show_alert is True
-    assert session.callback_answers[-1].text == (
-        "Чтобы пользоваться этой функцией, сначала зарегистрируйся.\n"
-        "В личном чате с ботом запусти /register и пройди регистрацию сам "
-        "или отправь /request_register, чтобы тебя зарегистрировал администратор."
-    )
+    assert session.callback_answers[-1].text == "Сначала зарегистрируйся: /register"
 
 
 async def test_repeated_coffee_join_is_idempotent_and_does_not_edit_card(
@@ -3661,7 +3673,7 @@ async def test_coffee_completion_unpins_card_and_calls_participants(
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
     services = make_test_services(database)
-    await services.coffee.create_or_reschedule(bot, -100, 42, "15")
+    await create_or_reschedule_coffee(services, bot, 42, "15")
     coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
     assert coffee_session is not None
     session.clear_messages()

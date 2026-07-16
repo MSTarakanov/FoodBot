@@ -12,9 +12,7 @@ from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Chat, Message, User
 
-from office_food_bot.commanding.catalog import CommandCatalog
-from office_food_bot.commanding.contracts import Command, CommandContext
-from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
+from office_food_bot.commanding.contracts import CommandContext
 from office_food_bot.commanding.invocation import ParsedCommand
 from office_food_bot.flows.catalog import FlowCatalog
 from office_food_bot.flows.contracts import (
@@ -166,19 +164,6 @@ class FixtureStep(ParsedFlowStep[FixtureStepId, FixtureDraft, str]):
         )
 
 
-class NoopCommand(Command):
-    definition = CommandDefinition(
-        "noop",
-        "noop",
-        "/noop",
-        CommandScope.PRIVATE,
-        HelpSection.SERVICE,
-    )
-
-    async def handle(self, context: CommandContext) -> None:
-        return None
-
-
 async def test_parsed_flow_step_runs_parser_validator_and_transition_in_order() -> None:
     events: list[str] = []
     context = make_flow_context(events, text="answer")
@@ -206,9 +191,9 @@ async def test_parsed_flow_step_stays_on_validation_error() -> None:
 
 async def test_flow_runner_persists_transition_then_completes_in_order() -> None:
     events: list[str] = []
-    command_context = make_command_context(events)
+    command_context, messenger = make_command_context(events)
     flow = FixtureFlow(events)
-    runner = FlowRunner(FlowCatalog((flow,)), command_context.messenger)
+    runner = FlowRunner(FlowCatalog((flow,)), messenger)
 
     await runner.start(flow, command_context, "draft")
 
@@ -231,9 +216,9 @@ async def test_flow_runner_persists_transition_then_completes_in_order() -> None
 
 async def test_flow_runner_cancel_delegates_to_active_flow() -> None:
     events: list[str] = []
-    command_context = make_command_context(events)
+    command_context, messenger = make_command_context(events)
     flow = FixtureFlow(events)
-    runner = FlowRunner(FlowCatalog((flow,)), command_context.messenger)
+    runner = FlowRunner(FlowCatalog((flow,)), messenger)
     await runner.start(flow, command_context, "draft")
     events.clear()
 
@@ -250,17 +235,20 @@ def test_flow_catalog_rejects_duplicate_ids() -> None:
         FlowCatalog((FixtureFlow(events), FixtureFlow(events)))
 
 
-def make_command_context(events: list[str]) -> CommandContext:
+def make_command_context(
+    events: list[str],
+) -> tuple[CommandContext, RecordingFlowMessenger]:
     flow_context = make_flow_context(events, text="/fixture")
-    command = NoopCommand()
-    return CommandContext(
-        message=flow_context.message,
-        bot=flow_context.bot,
-        messenger=flow_context.messenger,
-        state=flow_context.state,
-        profile=flow_context.profile,
-        invocation=ParsedCommand("fixture", None, None),
-        catalog=CommandCatalog((command,)),
+    messenger = RecordingFlowMessenger(events)
+    return (
+        CommandContext(
+            message=flow_context.message,
+            bot=flow_context.bot,
+            state=flow_context.state,
+            profile=flow_context.profile,
+            invocation=ParsedCommand("fixture", None, None),
+        ),
+        messenger,
     )
 
 

@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from office_food_bot.commanding.access import CommandAccessService
+from office_food_bot.messaging import BotMessenger
 from office_food_bot.services.balances import BalanceService
 from office_food_bot.services.business_calendar import BusinessCalendarService
-from office_food_bot.services.coffee import CoffeeService
+from office_food_bot.services.coffee import CoffeeService, CoffeeTimeResolver
 from office_food_bot.services.debug import DebugService
 from office_food_bot.services.invitations import InvitationPreferenceService
 from office_food_bot.services.job_scheduler import JobScheduler
-from office_food_bot.services.lunch import LunchService
 from office_food_bot.services.lunch_attendance import LunchAttendanceService
 from office_food_bot.services.lunch_auto import (
     LunchAutoChatService,
@@ -28,7 +28,9 @@ from office_food_bot.services.vacation import VacationService
 
 @dataclass(frozen=True)
 class BotServices:
+    messenger: BotMessenger
     telegram_bot_username: str
+    timezone_name: str
     telegram_interactions: TelegramInteractionService
     registration: RegistrationService
     debug: DebugService
@@ -36,10 +38,10 @@ class BotServices:
     active_users: ActiveUserResolver
     invitations: InvitationPreferenceService
     coffee: CoffeeService
+    coffee_time: CoffeeTimeResolver
     business_calendar: BusinessCalendarService
     presence: PresenceService
     balances: BalanceService
-    lunch: LunchService
     lunch_attendance: LunchAttendanceService
     vacation: VacationService
     lunch_auto_chats: LunchAutoChatService

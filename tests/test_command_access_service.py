@@ -8,6 +8,7 @@ from office_food_bot.commands.approve import ApproveCommand
 from office_food_bot.commands.balance import BalanceCommand
 from office_food_bot.commands.debug import DebugCommand
 from office_food_bot.commands.lunch import LunchCommand
+from office_food_bot.commands.lunch_auto_on import LunchAutoOnCommand
 from office_food_bot.commands.register import RegisterCommand
 from office_food_bot.commands.request_register import RequestRegisterCommand
 from office_food_bot.commands.test import TestCommand as PreviewCommand
@@ -42,10 +43,9 @@ def test_private_only_command_is_forbidden_in_group(database: Database) -> None:
 
 def test_group_only_command_is_forbidden_in_private(database: Database) -> None:
     result = make_access_service(database).can_run(
-        LunchCommand.definition,
+        LunchAutoOnCommand.definition,
         "private",
         42,
-        "rose",
     )
 
     assert not result.allowed
@@ -65,19 +65,17 @@ def test_group_only_command_is_allowed_for_private_admin_debug(
     debug = DebugRepository(database)
     access = make_access_service(database)
 
-    assert not access.can_run(LunchCommand.definition, "private", 7, "rose").allowed
+    assert not access.can_run(LunchAutoOnCommand.definition, "private", 7).allowed
 
     debug.set_enabled(7, True)
 
-    assert access.can_run(LunchCommand.definition, "private", 7, "rose").allowed
+    assert access.can_run(LunchAutoOnCommand.definition, "private", 7).allowed
 
 
 def test_lunch_status_and_toggles_are_allowed_in_private(database: Database) -> None:
     access = make_access_service(database)
 
     assert access.can_run(LunchCommand.definition, "private", 42).allowed
-    assert access.can_run(LunchCommand.definition, "private", 42, "on").allowed
-    assert access.can_run(LunchCommand.definition, "private", 42, "off").allowed
 
 
 def test_request_register_is_allowed_in_group_but_hidden_from_menu(

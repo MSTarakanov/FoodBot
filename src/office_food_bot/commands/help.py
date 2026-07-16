@@ -1,50 +1,21 @@
 from __future__ import annotations
 
 from aiogram.enums import ParseMode
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
 
-from office_food_bot.commanding.catalog import CommandCatalog
+from office_food_bot.commanding.access import CommandAccessService
+from office_food_bot.commanding.catalog import CommandCatalogProvider
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
-    RawArguments,
-    RawArgumentsParser,
+    NoArguments,
+    NoArgumentsParser,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
-from office_food_bot.commanding.profile import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.presenters.help import HELP_RENDERER
-from office_food_bot.services import BotServices
 
 
-async def help_command(
-    message: Message,
-    messenger: BotMessenger,
-    services: BotServices,
-    catalog: CommandCatalog,
-    state: FSMContext,
-) -> None:
-    await state.clear()
-    profile = telegram_profile_from_message(message)
-    telegram_user_id = None
-    if profile is not None:
-        telegram_user_id = profile.telegram_user_id
-
-    await messenger.reply(
-        message,
-        HELP_RENDERER.render(
-            services.command_access.visible_help_entries(
-                catalog.definitions,
-                str(message.chat.type),
-                telegram_user_id,
-            )
-        ),
-        parse_mode=ParseMode.HTML,
-    )
-
-
-class HelpCommand(EffectCommand[RawArguments]):
+class HelpCommand(EffectCommand[NoArguments]):
     definition = CommandDefinition(
         "help",
         "показать список команд",
@@ -53,19 +24,33 @@ class HelpCommand(EffectCommand[RawArguments]):
         HelpSection.SERVICE,
     )
 
-    def __init__(self, services: BotServices) -> None:
-        super().__init__(RawArgumentsParser(), (), ())
-        self._services = services
+    def __init__(
+        self,
+        messenger: BotMessenger,
+        access: CommandAccessService,
+        catalog: CommandCatalogProvider,
+    ) -> None:
+        super().__init__(messenger, NoArgumentsParser(), (), ())
+        self._access = access
+        self._catalog = catalog
 
     async def execute_effect(
         self,
         context: CommandContext,
-        request: RawArguments,
+        request: NoArguments,
     ) -> None:
-        await help_command(
+        del request
+        telegram_user_id = None
+        if context.profile is not None:
+            telegram_user_id = context.profile.telegram_user_id
+        await self._messenger.reply(
             context.message,
-            context.messenger,
-            self._services,
-            context.catalog,
-            context.state,
+            HELP_RENDERER.render(
+                self._access.visible_help_entries(
+                    self._catalog().definitions,
+                    str(context.message.chat.type),
+                    telegram_user_id,
+                )
+            ),
+            parse_mode=ParseMode.HTML,
         )

@@ -1,23 +1,40 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+from office_food_bot.commanding.access import CommandAccessService
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
-    RawArguments,
-    RawArgumentsParser,
 )
 from office_food_bot.commanding.definition import (
-    CommandArgumentPattern,
     CommandDefinition,
     CommandHelpEntry,
+    CommandInputMessage,
     CommandScope,
-    CommandScopeOverride,
     HelpSection,
 )
-from office_food_bot.commanding.profile import telegram_profile_from_message
+from office_food_bot.commanding.errors.models import (
+    CommandInputError,
+    CommonError,
+    CommonErrorCode,
+    InputErrorCode,
+)
+from office_food_bot.commanding.validators import (
+    TelegramIdentityValidator,
+    require_telegram_profile,
+)
 from office_food_bot.execution import CommandExecutionMode
-from office_food_bot.services import BotServices
-from office_food_bot.services.lunch_polls import parse_lunch_office_selection
+from office_food_bot.invitation_models import InvitationKind
+from office_food_bot.messaging import BotMessenger
+from office_food_bot.presenters.invitations import render_invitation_setting
+from office_food_bot.services.invitations import InvitationPreferenceService
+from office_food_bot.services.lunch_auto import LunchPollPublisher
+from office_food_bot.services.lunch_polls import (
+    LunchOfficeSelection,
+    parse_lunch_office_selection,
+)
+from office_food_bot.services.user_access import ActiveUserResolver
 
 INVALID_LUNCH_OFFICE_MESSAGE = (
     "Не понял офис. Используй /lunch, /lunch rose, /lunch роза, "
@@ -25,13 +42,70 @@ INVALID_LUNCH_OFFICE_MESSAGE = (
 )
 
 
-class LunchCommand(EffectCommand[RawArguments]):
+@dataclass(frozen=True, slots=True)
+class LunchRequest:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class LunchDefaultRequest(LunchRequest):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class LunchToggleRequest(LunchRequest):
+    enabled: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LunchPublishRequest(LunchRequest):
+    office_selection: LunchOfficeSelection
+
+
+class LunchRequestParser:
+    def parse(self, raw_arguments: str | None) -> LunchRequest:
+        argument = (raw_arguments or "").strip().casefold()
+        if not argument:
+            return LunchDefaultRequest()
+        if argument in {"on", "off"}:
+            return LunchToggleRequest(argument == "on")
+        office_selection = parse_lunch_office_selection(argument)
+        if office_selection is None:
+            raise CommandInputError(InputErrorCode.INVALID_CHOICE)
+        return LunchPublishRequest(office_selection)
+
+
+class LunchPublishValidator:
+    def __init__(
+        self,
+        access: CommandAccessService,
+        active_users: ActiveUserResolver,
+    ) -> None:
+        self._access = access
+        self._active_users = active_users
+
+    def validate(self, context: CommandContext, request: LunchRequest) -> None:
+        if isinstance(request, LunchToggleRequest):
+            return
+        profile = require_telegram_profile(context)
+        can_publish = self._access.can_run_group_command_in_chat(
+            str(context.message.chat.type),
+            profile.telegram_user_id,
+        )
+        if isinstance(request, LunchPublishRequest) and not can_publish:
+            raise CommonError(CommonErrorCode.GROUP_CHAT_REQUIRED)
+        if can_publish:
+            self._active_users.require(profile.telegram_user_id)
+
+
+class LunchCommand(EffectCommand[LunchRequest]):
     definition = CommandDefinition(
         "lunch",
         "создать опрос про обед",
         "/lunch [rose|роза|skyline|скайлайн]",
-        CommandScope.GROUP,
+        CommandScope.ANY,
         HelpSection.MAIN,
+        help_scope=CommandScope.GROUP,
         additional_help=(
             CommandHelpEntry(
                 "/lunch",
@@ -52,66 +126,77 @@ class LunchCommand(EffectCommand[RawArguments]):
                 CommandScope.ANY,
             ),
         ),
-        scope_overrides=(
-            CommandScopeOverride(CommandArgumentPattern.EMPTY, CommandScope.ANY),
-            CommandScopeOverride(CommandArgumentPattern.TOGGLE, CommandScope.ANY),
-        ),
         private_description="настроить приглашения на ланч",
+        input_errors=(
+            CommandInputMessage(
+                InputErrorCode.INVALID_CHOICE,
+                INVALID_LUNCH_OFFICE_MESSAGE,
+            ),
+        ),
     )
 
-    def __init__(self, services: BotServices) -> None:
-        super().__init__(RawArgumentsParser(), (), ())
-        self._services = services
+    def __init__(
+        self,
+        messenger: BotMessenger,
+        access: CommandAccessService,
+        invitations: InvitationPreferenceService,
+        active_users: ActiveUserResolver,
+        publisher: LunchPollPublisher,
+    ) -> None:
+        super().__init__(
+            messenger,
+            LunchRequestParser(),
+            (TelegramIdentityValidator(),),
+            (LunchPublishValidator(access, active_users),),
+        )
+        self._access = access
+        self._invitations = invitations
+        self._publisher = publisher
 
     async def execute_effect(
         self,
         context: CommandContext,
-        request: RawArguments,
+        request: LunchRequest,
     ) -> None:
-        await context.state.clear()
-        profile = telegram_profile_from_message(context.message)
-        if profile is None:
-            await context.messenger.reply(
-                context.message,
-                "Не вижу твой Telegram user id.",
-            )
-            return
+        profile = require_telegram_profile(context)
 
-        argument = (request.value or "").strip().casefold()
-        if argument in {"on", "off"}:
-            await context.messenger.reply(
+        if isinstance(request, LunchToggleRequest):
+            await self._messenger.reply(
                 context.message,
-                self._services.invitations.set_lunch(
-                    profile.telegram_user_id,
-                    enabled=argument == "on",
+                render_invitation_setting(
+                    self._invitations.set_enabled(
+                        profile.telegram_user_id,
+                        InvitationKind.LUNCH,
+                        request.enabled,
+                    )
                 ),
             )
             return
 
-        if not argument and not self._services.command_access.can_run_group_command_in_chat(
-            str(context.message.chat.type),
-            profile.telegram_user_id,
+        if isinstance(request, LunchDefaultRequest) and not (
+            self._access.can_run_group_command_in_chat(
+                str(context.message.chat.type),
+                profile.telegram_user_id,
+            )
         ):
-            await context.messenger.reply(
+            await self._messenger.reply(
                 context.message,
-                self._services.invitations.lunch_status_text(profile.telegram_user_id),
+                render_invitation_setting(
+                    self._invitations.status(
+                        profile.telegram_user_id,
+                        InvitationKind.LUNCH,
+                    )
+                ),
             )
             return
 
-        block_reason = self._services.lunch.poll_block_reason(profile.telegram_user_id)
-        if block_reason is not None:
-            await context.messenger.reply(context.message, block_reason)
-            return
+        office_selection = LunchOfficeSelection.AUTOMATIC
+        if isinstance(request, LunchPublishRequest):
+            office_selection = request.office_selection
+        elif not isinstance(request, LunchDefaultRequest):
+            raise RuntimeError(f"Unsupported lunch request: {type(request).__name__}")
 
-        office_selection = parse_lunch_office_selection(request.value)
-        if office_selection is None:
-            await context.messenger.reply(
-                context.message,
-                INVALID_LUNCH_OFFICE_MESSAGE,
-            )
-            return
-
-        await self._services.lunch_publisher.publish(
+        await self._publisher.publish(
             context.bot,
             context.message.chat.id,
             mode=CommandExecutionMode.MANUAL,

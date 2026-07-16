@@ -47,10 +47,9 @@ class CommandAccessService:
         definition: CommandDefinition,
         chat_type: str,
         telegram_user_id: int | None,
-        arguments: str | None = None,
     ) -> CommandAccessResult:
         denial = self._scope_denial(
-            definition.scope_for(arguments),
+            definition.scope,
             chat_type,
             telegram_user_id,
         )
@@ -67,13 +66,11 @@ class CommandAccessService:
         definition: CommandDefinition,
         chat_type: str,
         telegram_user_id: int | None,
-        arguments: str | None = None,
     ) -> None:
         denial = self.can_run(
             definition,
             chat_type,
             telegram_user_id,
-            arguments,
         ).denial_reason
         if denial is not None:
             raise CommonError(_common_error_code(denial))
@@ -144,7 +141,10 @@ class CommandAccessService:
     ) -> bool:
         if definition.admin_only and not self.is_admin(telegram_user_id):
             return False
-        scopes = {definition.scope, *(item.scope for item in definition.scope_overrides)}
+        scopes = {
+            entry.scope or definition.scope
+            for entry in self._help_entries(definition)
+        }
         return any(
             self._scope_denial(scope, chat_type, telegram_user_id) is None for scope in scopes
         )
@@ -171,7 +171,7 @@ class CommandAccessService:
             definition.usage,
             definition.description,
             definition.help_section,
-            definition.scope,
+            definition.help_scope or definition.scope,
         )
         return (primary, *definition.additional_help)
 

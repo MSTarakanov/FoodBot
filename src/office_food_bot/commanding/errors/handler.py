@@ -8,7 +8,6 @@ from aiogram.types import ErrorEvent, Message, Update
 from office_food_bot.commanding.errors.models import CommonError, CommonErrorCode
 from office_food_bot.commanding.errors.rendering import ErrorRenderContext, UserErrorRenderer
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.services import BotServices
 
 UNHANDLED_ERROR_REPLY_TEXT = "Произошла ошибка. Попробуй позже."
 
@@ -18,7 +17,7 @@ logger = logging.getLogger(__name__)
 async def unhandled_error_handler(
     event: ErrorEvent,
     messenger: BotMessenger,
-    services: BotServices,
+    bot_username: str,
     user_error_renderer: UserErrorRenderer,
 ) -> bool:
     exception = event.exception
@@ -36,7 +35,7 @@ async def unhandled_error_handler(
             message,
             user_error_renderer.render(
                 CommonError(CommonErrorCode.INTERNAL),
-                ErrorRenderContext(services.telegram_bot_username, None),
+                ErrorRenderContext(bot_username, None),
             ),
         )
     except TelegramAPIError:

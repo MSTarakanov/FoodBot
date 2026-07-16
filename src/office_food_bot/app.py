@@ -12,7 +12,6 @@ from office_food_bot.commands.factory import build_command_runtime
 from office_food_bot.commands.router import create_command_router
 from office_food_bot.config import Settings
 from office_food_bot.database import Database
-from office_food_bot.messaging import BotMessenger
 from office_food_bot.services import BotServices, build_services
 from office_food_bot.services.splitwise import SplitwiseGroupClient
 
@@ -42,20 +41,19 @@ class BotApplication:
 
 
 def create_application(services: BotServices) -> BotApplication:
-    messenger = BotMessenger()
-    command_runtime = build_command_runtime(services, messenger)
+    messenger = services.messenger
+    command_runtime = build_command_runtime(services)
     error_renderer = build_user_error_renderer()
     dispatcher = Dispatcher(
         storage=MemoryStorage(),
-        services=services,
         messenger=messenger,
+        bot_username=services.telegram_bot_username,
         user_error_renderer=error_renderer,
     )
     dispatcher.errors.register(unhandled_error_handler)
     dispatcher.include_router(
         create_command_router(
             services,
-            messenger,
             command_runtime.catalog,
             error_renderer,
             command_runtime.flow_runner,

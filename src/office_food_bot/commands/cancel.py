@@ -3,8 +3,8 @@ from __future__ import annotations
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
-    RawArguments,
-    RawArgumentsParser,
+    NoArguments,
+    NoArgumentsParser,
 )
 from office_food_bot.commanding.definition import (
     CommandDefinition,
@@ -13,9 +13,10 @@ from office_food_bot.commanding.definition import (
     HelpSection,
 )
 from office_food_bot.flows.runner import FlowRunner
+from office_food_bot.messaging import BotMessenger
 
 
-class CancelCommand(EffectCommand[RawArguments]):
+class CancelCommand(EffectCommand[NoArguments]):
     definition = CommandDefinition(
         "cancel",
         "отменить текущий сценарий",
@@ -25,13 +26,14 @@ class CancelCommand(EffectCommand[RawArguments]):
         flow_policy=CommandFlowPolicy.MANAGED_BY_COMMAND,
     )
 
-    def __init__(self, runner: FlowRunner) -> None:
-        super().__init__(RawArgumentsParser(), (), ())
+    def __init__(self, messenger: BotMessenger, runner: FlowRunner) -> None:
+        super().__init__(messenger, NoArgumentsParser(), (), ())
         self._runner = runner
 
     async def execute_effect(
         self,
         context: CommandContext,
-        request: RawArguments,
+        request: NoArguments,
     ) -> None:
+        del request
         await self._runner.cancel(context)

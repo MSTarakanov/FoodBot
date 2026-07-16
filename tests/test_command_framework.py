@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import pytest
@@ -13,12 +14,9 @@ from aiogram.types import Chat, Message, User
 
 from office_food_bot.commanding.catalog import CommandCatalog
 from office_food_bot.commanding.contracts import (
-    Command,
     CommandContext,
     EffectCommand,
     FlowCommand,
-    RawArguments,
-    RawArgumentsParser,
     RenderedCommand,
 )
 from office_food_bot.commanding.definition import (
@@ -54,13 +52,23 @@ class RecordingMessenger(BotMessenger):
         return message
 
 
+@dataclass(frozen=True, slots=True)
+class FixtureRequest:
+    value: str | None
+
+
 class RecordingParser:
     def __init__(self, events: list[str]) -> None:
         self._events = events
 
-    def parse(self, raw_arguments: str | None) -> RawArguments:
+    def parse(self, raw_arguments: str | None) -> FixtureRequest:
         self._events.append(f"parse:{raw_arguments}")
-        return RawArguments(raw_arguments)
+        return FixtureRequest(raw_arguments)
+
+
+class FixtureParser:
+    def parse(self, raw_arguments: str | None) -> FixtureRequest:
+        return FixtureRequest(raw_arguments)
 
 
 class RecordingContextValidator:
@@ -75,19 +83,20 @@ class RecordingRequestValidator:
     def __init__(self, events: list[str]) -> None:
         self._events = events
 
-    def validate(self, context: CommandContext, request: RawArguments) -> None:
+    def validate(self, context: CommandContext, request: FixtureRequest) -> None:
         self._events.append(f"request:{request.value}")
 
 
-class FixtureRenderedCommand(RenderedCommand[RawArguments, str]):
+class FixtureRenderedCommand(RenderedCommand[FixtureRequest, str]):
     definition = TEST_DEFINITION
 
-    def __init__(self, events: list[str]) -> None:
+    def __init__(self, messenger: BotMessenger, events: list[str]) -> None:
         def render(model: str) -> MessagePayload:
             events.append(f"render:{model}")
             return TextMessagePayload(model)
 
         super().__init__(
+            messenger,
             RecordingParser(events),
             (RecordingContextValidator(events),),
             (RecordingRequestValidator(events),),
@@ -95,37 +104,37 @@ class FixtureRenderedCommand(RenderedCommand[RawArguments, str]):
         )
         self._events = events
 
-    async def execute(self, context: CommandContext, request: RawArguments) -> str:
+    async def execute(self, context: CommandContext, request: FixtureRequest) -> str:
         self._events.append(f"execute:{request.value}")
         return "model"
 
 
-class FixtureEffectCommand(EffectCommand[RawArguments]):
+class FixtureEffectCommand(EffectCommand[FixtureRequest]):
     definition = TEST_DEFINITION
 
-    def __init__(self, events: list[str]) -> None:
-        super().__init__(RawArgumentsParser(), (), ())
+    def __init__(self, messenger: BotMessenger, events: list[str]) -> None:
+        super().__init__(messenger, FixtureParser(), (), ())
         self._events = events
 
     async def execute_effect(
         self,
         context: CommandContext,
-        request: RawArguments,
+        request: FixtureRequest,
     ) -> None:
         self._events.append(f"effect:{request.value}")
 
 
-class FixtureFlowCommand(FlowCommand[RawArguments]):
+class FixtureFlowCommand(FlowCommand[FixtureRequest]):
     definition = TEST_DEFINITION
 
-    def __init__(self, events: list[str]) -> None:
-        super().__init__(RawArgumentsParser(), (), ())
+    def __init__(self, messenger: BotMessenger, events: list[str]) -> None:
+        super().__init__(messenger, FixtureParser(), (), ())
         self._events = events
 
     async def start_flow(
         self,
         context: CommandContext,
-        request: RawArguments,
+        request: FixtureRequest,
     ) -> None:
         self._events.append(f"flow:{request.value}")
 
@@ -150,34 +159,36 @@ class FailingContextValidator:
         raise CommonError(CommonErrorCode.ADMIN_REQUIRED)
 
 
-class FailingFixtureCommand(RenderedCommand[RawArguments, str]):
+class FailingFixtureCommand(RenderedCommand[FixtureRequest, str]):
     definition = TEST_DEFINITION
 
-    def __init__(self, events: list[str]) -> None:
+    def __init__(self, messenger: BotMessenger, events: list[str]) -> None:
         super().__init__(
+            messenger,
             RecordingParser(events),
             (FailingContextValidator(events),),
             (RecordingRequestValidator(events),),
             lambda model: TextMessagePayload(model),
         )
 
-    async def execute(self, context: CommandContext, request: RawArguments) -> str:
+    async def execute(self, context: CommandContext, request: FixtureRequest) -> str:
         del context, request
         return "unreachable"
 
 
-class ConcurrentFixtureCommand(RenderedCommand[RawArguments, str]):
+class ConcurrentFixtureCommand(RenderedCommand[FixtureRequest, str]):
     definition = TEST_DEFINITION
 
-    def __init__(self) -> None:
+    def __init__(self, messenger: BotMessenger) -> None:
         super().__init__(
-            RawArgumentsParser(),
+            messenger,
+            FixtureParser(),
             (),
             (),
             lambda model: TextMessagePayload(model),
         )
 
-    async def execute(self, context: CommandContext, request: RawArguments) -> str:
+    async def execute(self, context: CommandContext, request: FixtureRequest) -> str:
         del context
         await asyncio.sleep(0)
         return request.value or "empty"
@@ -185,8 +196,9 @@ class ConcurrentFixtureCommand(RenderedCommand[RawArguments, str]):
 
 async def test_rendered_command_runs_pipeline_in_order() -> None:
     events: list[str] = []
-    command = FixtureRenderedCommand(events)
-    context = make_context(command, events, "minutes")
+    messenger = RecordingMessenger(events)
+    command = FixtureRenderedCommand(messenger, events)
+    context = make_context("minutes")
 
     await command.handle(context)
 
@@ -202,25 +214,25 @@ async def test_rendered_command_runs_pipeline_in_order() -> None:
 
 async def test_effect_command_does_not_send_automatic_reply() -> None:
     events: list[str] = []
-    command = FixtureEffectCommand(events)
+    command = FixtureEffectCommand(RecordingMessenger(events), events)
 
-    await command.handle(make_context(command, events, "15"))
+    await command.handle(make_context("15"))
 
     assert events == ["effect:15"]
 
 
 async def test_flow_command_delegates_to_flow_start() -> None:
     events: list[str] = []
-    command = FixtureFlowCommand(events)
+    command = FixtureFlowCommand(RecordingMessenger(events), events)
 
-    await command.handle(make_context(command, events, None))
+    await command.handle(make_context(None))
 
     assert events == ["flow:None"]
 
 
 def test_command_catalog_resolves_names_and_aliases() -> None:
     events: list[str] = []
-    command = AliasedFixtureCommand(events)
+    command = AliasedFixtureCommand(RecordingMessenger(events), events)
     catalog = CommandCatalog((command,))
 
     assert catalog.resolve("COFFEE") is command
@@ -233,66 +245,61 @@ def test_command_catalog_rejects_empty_and_duplicate_names() -> None:
         CommandCatalog(())
 
     with pytest.raises(ValueError, match="Duplicate command name or alias"):
-        CommandCatalog((FixtureRenderedCommand([]), FixtureRenderedCommand([])))
+        first_events: list[str] = []
+        second_events: list[str] = []
+        CommandCatalog(
+            (
+                FixtureRenderedCommand(RecordingMessenger(first_events), first_events),
+                FixtureRenderedCommand(RecordingMessenger(second_events), second_events),
+            )
+        )
 
 
 async def test_pipeline_stops_after_user_facing_error() -> None:
     events: list[str] = []
-    command = FailingFixtureCommand(events)
+    command = FailingFixtureCommand(RecordingMessenger(events), events)
 
     with pytest.raises(CommonError):
-        await command.handle(make_context(command, events, "minutes"))
+        await command.handle(make_context("minutes"))
 
     assert events == ["context:error"]
 
 
 async def test_single_command_instance_keeps_parallel_requests_isolated() -> None:
-    command = ConcurrentFixtureCommand()
-    first_events: list[str] = []
-    second_events: list[str] = []
-    first_context = make_context(command, first_events, "first")
-    second_context = make_context(command, second_events, "second")
+    events: list[str] = []
+    messenger = RecordingMessenger(events)
+    command = ConcurrentFixtureCommand(messenger)
+    first_context = make_context("first", chat_id=41)
+    second_context = make_context("second", chat_id=42)
 
     await asyncio.gather(
         command.handle(first_context),
         command.handle(second_context),
     )
 
-    first_messenger = first_context.messenger
-    second_messenger = second_context.messenger
-    assert isinstance(first_messenger, RecordingMessenger)
-    assert isinstance(second_messenger, RecordingMessenger)
-    assert payload_texts(first_messenger) == ["first"]
-    assert payload_texts(second_messenger) == ["second"]
+    assert sorted(payload_texts(messenger)) == ["first", "second"]
 
 
-def make_context(
-    command: Command,
-    events: list[str],
-    arguments: str | None,
-) -> CommandContext:
+def make_context(arguments: str | None, *, chat_id: int = 42) -> CommandContext:
     bot = Bot(token="123456:test-token")
     storage = MemoryStorage()
     state = FSMContext(
         storage=storage,
-        key=StorageKey(bot_id=123456, chat_id=42, user_id=42),
+        key=StorageKey(bot_id=123456, chat_id=chat_id, user_id=42),
     )
     message = Message(
         message_id=1,
         date=datetime.now(tz=UTC),
-        chat=Chat(id=42, type=ChatType.PRIVATE),
+        chat=Chat(id=chat_id, type=ChatType.PRIVATE),
         from_user=User(id=42, is_bot=False, first_name="Max"),
         text="/test",
     )
-    catalog = CommandCatalog((command,))
     return CommandContext(
         message=message,
         bot=bot,
-        messenger=RecordingMessenger(events),
         state=state,
         profile=None,
         invocation=ParsedCommand("test", arguments, None),
-        catalog=catalog,
     )
 
 

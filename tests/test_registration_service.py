@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
+
+from office_food_bot.commanding.errors.models import (
+    RegistrationError,
+    RegistrationErrorCode,
+)
 from office_food_bot.database import Database
 from office_food_bot.invitation_repositories import InvitationPreferenceRepository
 from office_food_bot.models import (
@@ -263,26 +269,26 @@ def test_approve_forbids_non_admin(database: Database, users: UserRepository) ->
     assert user.status == UserStatus.PENDING
 
 
-def test_request_registration_block_reason_depends_on_status(
+def test_request_registration_eligibility_depends_on_status(
     database: Database,
     users: UserRepository,
 ) -> None:
     service = make_service(database)
 
-    assert service.request_registration_block_reason(42) is None
+    service.ensure_registration_can_be_requested(42)
 
     service.register(make_profile(), "Максим", None)
-    assert service.request_registration_block_reason(42) == (
-        "Заявка уже ждет аппрува. Если хотите отменить регистрацию, отправьте /quit."
-    )
+    with pytest.raises(RegistrationError) as pending_error:
+        service.ensure_registration_can_be_requested(42)
+    assert pending_error.value.code == RegistrationErrorCode.REQUEST_ALREADY_PENDING
 
     service.approve(7, 42)
-    assert service.request_registration_block_reason(42) == (
-        "Вы уже зарегистрированы. Если хотите отрегистрироваться, отправьте /quit."
-    )
+    with pytest.raises(RegistrationError) as active_error:
+        service.ensure_registration_can_be_requested(42)
+    assert active_error.value.code == RegistrationErrorCode.REQUEST_ALREADY_ACTIVE
 
     assert service.quit_registration(42)
-    assert service.request_registration_block_reason(42) is None
+    service.ensure_registration_can_be_requested(42)
 
 
 def test_quit_registration_returns_false_for_unknown_or_abandoned_user(

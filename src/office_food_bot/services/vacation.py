@@ -7,18 +7,11 @@ from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from zoneinfo import ZoneInfo
 
-from office_food_bot.models import RegisteredUser, UserStatus
-from office_food_bot.repositories import UserRepository, VacationRepository
+from office_food_bot.repositories import VacationRepository
+from office_food_bot.services.user_access import ActiveUserResolver
+from office_food_bot.vacation_models import VacationReport, VacationReportKind
 
 MAX_VACATION_DAYS = 366
-VACATION_DATE_FORMAT_ERROR_TEXT = (
-    "Не понял дату. Напиши количество дней или дату: "
-    "/vacation 2, /vacation 20.07, /vacation 2026-07-20"
-)
-VACATION_USAGE_TEXT = (
-    "Уйти в отпуск или изменить дату: /vacation 2 или /vacation 20.07\n"
-    "Выйти из отпуска: /vacation 0 или /vacation off"
-)
 VACATION_OFF_ARGUMENTS = frozenset({"off"})
 _DAY_COUNT_PATTERN = re.compile(r"[+-]?\d+")
 _ISO_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -41,50 +34,52 @@ class VacationRequest:
 class VacationService:
     def __init__(
         self,
-        users: UserRepository,
+        active_users: ActiveUserResolver,
         vacations: VacationRepository,
         timezone_name: str,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
-        self._users = users
+        self._active_users = active_users
         self._vacations = vacations
         self._timezone = ZoneInfo(timezone_name)
         self._clock = clock or (lambda: datetime.now(tz=UTC))
 
-    def reply(self, telegram_user_id: int, raw_argument: str) -> str:
-        user = self._users.get_by_telegram_id(telegram_user_id)
-        if user is None:
-            return "Сначала зарегистрируйся: /register"
-        if user.status == UserStatus.PENDING:
-            return "Регистрация еще ждет аппрува."
-        if user.status != UserStatus.ACTIVE:
-            return "Регистрация сейчас неактивна."
-
-        today = self._local_today()
-        request = parse_vacation_request(raw_argument, today)
+    def execute(
+        self,
+        telegram_user_id: int,
+        request: VacationRequest,
+    ) -> VacationReport:
+        user = self._active_users.require(telegram_user_id)
+        today = self.local_today()
         if request.kind == VacationRequestKind.STATUS:
-            return self._status_text(user, today)
+            vacation = self._vacations.get(user.id)
+            if vacation is not None and vacation.until_date >= today:
+                return VacationReport(
+                    VacationReportKind.STATUS_ACTIVE,
+                    user.display_name,
+                    vacation.until_date,
+                )
+            return VacationReport(
+                VacationReportKind.STATUS_INACTIVE,
+                user.display_name,
+            )
         if request.kind == VacationRequestKind.CLEAR:
             self._vacations.clear(user.id)
-            return f"{user.display_name} больше не в отпуске."
+            return VacationReport(VacationReportKind.CLEARED, user.display_name)
         if request.kind == VacationRequestKind.INVALID:
-            return VACATION_DATE_FORMAT_ERROR_TEXT
+            raise RuntimeError("Invalid vacation request reached service")
 
         if request.until_date is None:
-            return VACATION_DATE_FORMAT_ERROR_TEXT
+            raise RuntimeError("Vacation set request has no end date")
 
         self._vacations.set_until_date(user.id, request.until_date)
-        return _active_vacation_text(user.display_name, request.until_date)
+        return VacationReport(
+            VacationReportKind.SET,
+            user.display_name,
+            request.until_date,
+        )
 
-    def _status_text(self, user: RegisteredUser, today: date) -> str:
-        vacation = self._vacations.get(user.id)
-        if vacation is not None and vacation.until_date >= today:
-            status = _active_vacation_status(user.display_name, vacation.until_date)
-        else:
-            status = f"{user.display_name} не в отпуске."
-        return f"{status}\n\n{VACATION_USAGE_TEXT}"
-
-    def _local_today(self) -> date:
+    def local_today(self) -> date:
         return self._clock().astimezone(self._timezone).date()
 
 
@@ -152,18 +147,3 @@ def _date_or_none(year: int, month: int, day: int) -> date | None:
 
 def _days_until(until_date: date, today: date) -> int:
     return (until_date - today).days
-
-
-def _format_date(day: date) -> str:
-    return day.strftime("%d.%m.%Y")
-
-
-def _active_vacation_text(display_name: str, until_date: date) -> str:
-    return (
-        f"{_active_vacation_status(display_name, until_date)} "
-        "Чтобы выйти из отпуска: /vacation 0"
-    )
-
-
-def _active_vacation_status(display_name: str, until_date: date) -> str:
-    return f"{display_name} в отпуске до {_format_date(until_date)}."

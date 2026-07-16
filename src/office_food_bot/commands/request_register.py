@@ -3,12 +3,17 @@ from __future__ import annotations
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
-    RawArguments,
-    RawArgumentsParser,
+    NoArguments,
+    NoArgumentsParser,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
+from office_food_bot.commanding.validators import (
+    TelegramIdentityValidator,
+    require_telegram_profile,
+)
+from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import TelegramProfile
-from office_food_bot.services import BotServices
+from office_food_bot.services.registration import RegistrationService
 
 REQUEST_REGISTER_REPLY_TEXT = (
     "Запрос на регистрацию отправлен админам. "
@@ -16,7 +21,7 @@ REQUEST_REGISTER_REPLY_TEXT = (
 )
 
 
-class RequestRegisterCommand(EffectCommand[RawArguments]):
+class RequestRegisterCommand(EffectCommand[NoArguments]):
     definition = CommandDefinition(
         "request_register",
         "попросить админа зарегистрировать вас",
@@ -26,35 +31,35 @@ class RequestRegisterCommand(EffectCommand[RawArguments]):
         show_in_menu=False,
     )
 
-    def __init__(self, services: BotServices) -> None:
-        super().__init__(RawArgumentsParser(), (), ())
-        self._services = services
+    def __init__(
+        self,
+        messenger: BotMessenger,
+        registration: RegistrationService,
+    ) -> None:
+        super().__init__(
+            messenger,
+            NoArgumentsParser(),
+            (TelegramIdentityValidator(),),
+            (),
+        )
+        self._registration = registration
 
     async def execute_effect(
         self,
         context: CommandContext,
-        request: RawArguments,
+        request: NoArguments,
     ) -> None:
-        profile = context.profile
-        if profile is None:
-            await context.messenger.reply(
-                context.message,
-                "Не вижу твой Telegram user id.",
-            )
-            return
+        del request
+        profile = require_telegram_profile(context)
 
-        block_reason = self._services.registration.request_registration_block_reason(
+        self._registration.ensure_registration_can_be_requested(
             profile.telegram_user_id,
         )
-        if block_reason is not None:
-            await context.messenger.reply(context.message, block_reason)
-            return
+        self._registration.request_registration(profile)
 
-        self._services.registration.request_registration(profile)
-
-        await context.messenger.reply(context.message, REQUEST_REGISTER_REPLY_TEXT)
-        for admin_id in self._services.registration.admin_ids:
-            await context.messenger.try_send(
+        await self._messenger.reply(context.message, REQUEST_REGISTER_REPLY_TEXT)
+        for admin_id in self._registration.admin_ids:
+            await self._messenger.try_send(
                 context.bot,
                 admin_id,
                 _registration_request_admin_text(profile),

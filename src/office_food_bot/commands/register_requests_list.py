@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
-
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
-    RawArguments,
-    RawArgumentsParser,
+    NoArguments,
+    NoArgumentsParser,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
-from office_food_bot.commanding.profile import telegram_profile_from_message
+from office_food_bot.commanding.errors.models import CommonError, CommonErrorCode
+from office_food_bot.commanding.validators import (
+    TelegramIdentityValidator,
+    require_telegram_profile,
+)
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import (
     KnownTelegramAccount,
@@ -18,41 +19,10 @@ from office_food_bot.models import (
     RegisteredUser,
     SplitwiseConnection,
 )
-from office_food_bot.services import BotServices
+from office_food_bot.services.registration import RegistrationService
 
 
-async def register_requests_list_command(
-    message: Message,
-    messenger: BotMessenger,
-    services: BotServices,
-    state: FSMContext,
-) -> None:
-    await state.clear()
-    profile = telegram_profile_from_message(message)
-    if profile is None:
-        await messenger.reply(message, "Не вижу твой Telegram user id.")
-        return
-
-    if not services.registration.can_approve(profile.telegram_user_id):
-        await messenger.reply(message, "Не могу: список заявок доступен только админам.")
-        return
-
-    pending_requests = services.registration.list_pending_requests(profile.telegram_user_id)
-    requested_accounts = services.registration.list_requested_telegram_accounts(
-        profile.telegram_user_id,
-    )
-    seen_accounts = services.registration.list_seen_telegram_accounts(profile.telegram_user_id)
-    if not pending_requests and not requested_accounts and not seen_accounts:
-        await messenger.reply(message, "Заявок на регистрацию нет.")
-        return
-
-    await messenger.reply(
-        message,
-        _registration_requests_text(pending_requests, requested_accounts, seen_accounts),
-    )
-
-
-class RegisterRequestsListCommand(EffectCommand[RawArguments]):
+class RegisterRequestsListCommand(EffectCommand[NoArguments]):
     definition = CommandDefinition(
         "register_requests_list",
         "показать заявки на регистрацию",
@@ -62,20 +32,45 @@ class RegisterRequestsListCommand(EffectCommand[RawArguments]):
         admin_only=True,
     )
 
-    def __init__(self, services: BotServices) -> None:
-        super().__init__(RawArgumentsParser(), (), ())
-        self._services = services
+    def __init__(
+        self,
+        messenger: BotMessenger,
+        registration: RegistrationService,
+    ) -> None:
+        super().__init__(
+            messenger,
+            NoArgumentsParser(),
+            (TelegramIdentityValidator(),),
+            (),
+        )
+        self._registration = registration
 
     async def execute_effect(
         self,
         context: CommandContext,
-        request: RawArguments,
+        request: NoArguments,
     ) -> None:
-        await register_requests_list_command(
+        del request
+        profile = require_telegram_profile(context)
+        if not self._registration.can_approve(profile.telegram_user_id):
+            raise CommonError(CommonErrorCode.ADMIN_REQUIRED)
+
+        pending_requests = self._registration.list_pending_requests(
+            profile.telegram_user_id
+        )
+        requested_accounts = self._registration.list_requested_telegram_accounts(
+            profile.telegram_user_id,
+        )
+        seen_accounts = self._registration.list_seen_telegram_accounts(
+            profile.telegram_user_id
+        )
+        await self._messenger.reply(
             context.message,
-            context.messenger,
-            self._services,
-            context.state,
+            _registration_requests_text(
+                pending_requests,
+                requested_accounts,
+                seen_accounts,
+            ),
         )
 
 

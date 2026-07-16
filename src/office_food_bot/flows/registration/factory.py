@@ -21,24 +21,30 @@ from office_food_bot.flows.registration.validation import (
     SplitwiseAnswerValidator,
     TextFlowInputParser,
 )
-from office_food_bot.services import BotServices
+from office_food_bot.services.invitations import InvitationPreferenceService
+from office_food_bot.services.registration import RegistrationService
+from office_food_bot.services.splitwise import SplitwiseService
 
 
-def build_registration_flow(services: BotServices) -> RegistrationFlow:
-    use_case = RegistrationFlowUseCase(services)
+def build_registration_flow(
+    registration: RegistrationService,
+    invitations: InvitationPreferenceService,
+    splitwise: SplitwiseService,
+) -> RegistrationFlow:
+    use_case = RegistrationFlowUseCase(registration, invitations)
     return RegistrationFlow(
-        services.registration,
+        registration,
         (
             RegistrationNameStep(
                 TextFlowInputParser(),
                 (RegistrationNameValidator(),),
-                services.registration,
+                registration,
             ),
             RegistrationSplitwiseStep(
                 TextFlowInputParser(),
                 (SplitwiseAnswerValidator(),),
-                services.registration,
-                services.splitwise,
+                registration,
+                splitwise,
                 use_case,
             ),
             RegistrationLunchPreferenceStep(

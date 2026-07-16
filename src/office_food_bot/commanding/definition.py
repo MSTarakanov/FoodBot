@@ -25,23 +25,6 @@ class HelpSection(StrEnum):
     SERVICE = "Служебные"
 
 
-class CommandArgumentPattern(StrEnum):
-    EMPTY = "empty"
-    TOGGLE = "toggle"
-
-    def matches(self, arguments: str | None) -> bool:
-        normalized = (arguments or "").strip().casefold()
-        if self == CommandArgumentPattern.EMPTY:
-            return not normalized
-        return normalized in {"on", "off"}
-
-
-@dataclass(frozen=True)
-class CommandScopeOverride:
-    pattern: CommandArgumentPattern
-    scope: CommandScope
-
-
 @dataclass(frozen=True)
 class CommandInputMessage:
     code: InputErrorCode
@@ -73,26 +56,13 @@ class CommandDefinition:
     scope: CommandScope
     help_section: HelpSection
     admin_only: bool = False
+    help_scope: CommandScope | None = None
     additional_help: tuple[CommandHelpEntry, ...] = ()
     text_aliases: tuple[str, ...] = ()
-    scope_overrides: tuple[CommandScopeOverride, ...] = ()
     show_in_menu: bool = True
     private_description: str | None = None
     flow_policy: CommandFlowPolicy = CommandFlowPolicy.RESET_BEFORE_RUN
     input_errors: tuple[CommandInputMessage, ...] = ()
-
-    def scope_for(self, arguments: str | None) -> CommandScope:
-        override = next(
-            (
-                item
-                for item in self.scope_overrides
-                if item.pattern.matches(arguments)
-            ),
-            None,
-        )
-        if override is None:
-            return self.scope
-        return override.scope
 
     def menu_description(self, chat_type: str) -> str:
         if chat_type == "private" and self.private_description is not None:

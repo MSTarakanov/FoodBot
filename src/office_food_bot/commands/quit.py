@@ -3,17 +3,22 @@ from __future__ import annotations
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
-    RawArguments,
-    RawArgumentsParser,
+    NoArguments,
+    NoArgumentsParser,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
-from office_food_bot.services import BotServices
+from office_food_bot.commanding.validators import (
+    TelegramIdentityValidator,
+    require_telegram_profile,
+)
+from office_food_bot.messaging import BotMessenger
+from office_food_bot.services.registration import RegistrationService
 
 QUIT_SUCCESS_TEXT = "Вы отрегистрированы. Если захотите вернуться, отправьте /request_register."
 QUIT_NOT_FOUND_TEXT = "Я не нашел вашу регистрацию."
 
 
-class QuitCommand(EffectCommand[RawArguments]):
+class QuitCommand(EffectCommand[NoArguments]):
     definition = CommandDefinition(
         "quit",
         "отрегистрироваться",
@@ -22,33 +27,37 @@ class QuitCommand(EffectCommand[RawArguments]):
         HelpSection.PROFILE_SETTINGS,
     )
 
-    def __init__(self, services: BotServices) -> None:
-        super().__init__(RawArgumentsParser(), (), ())
-        self._services = services
+    def __init__(
+        self,
+        messenger: BotMessenger,
+        registration: RegistrationService,
+    ) -> None:
+        super().__init__(
+            messenger,
+            NoArgumentsParser(),
+            (TelegramIdentityValidator(),),
+            (),
+        )
+        self._registration = registration
 
     async def execute_effect(
         self,
         context: CommandContext,
-        request: RawArguments,
+        request: NoArguments,
     ) -> None:
-        profile = context.profile
-        if profile is None:
-            await context.messenger.reply(
-                context.message,
-                "Не вижу твой Telegram user id.",
-            )
-            return
+        del request
+        profile = require_telegram_profile(context)
 
-        if self._services.registration.quit_registration(profile.telegram_user_id):
-            await context.messenger.reply(
+        if self._registration.quit_registration(profile.telegram_user_id):
+            await self._messenger.reply(
                 context.message,
                 QUIT_SUCCESS_TEXT,
-                reply_markup=context.messenger.remove_keyboard(),
+                reply_markup=self._messenger.remove_keyboard(),
             )
             return
 
-        await context.messenger.reply(
+        await self._messenger.reply(
             context.message,
             QUIT_NOT_FOUND_TEXT,
-            reply_markup=context.messenger.remove_keyboard(),
+            reply_markup=self._messenger.remove_keyboard(),
         )

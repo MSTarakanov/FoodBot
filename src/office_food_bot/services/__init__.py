@@ -4,7 +4,6 @@ from office_food_bot.services.container import BotServices
 from office_food_bot.services.debug import DebugService
 from office_food_bot.services.factory import build_services
 from office_food_bot.services.invitations import InvitationPreferenceService
-from office_food_bot.services.lunch import LunchService
 from office_food_bot.services.lunch_auto import (
     LunchAutoChatService,
     LunchPollPublisher,
@@ -42,7 +41,6 @@ __all__ = [
     "BusinessCalendarService",
     "BotServices",
     "DebugService",
-    "LunchService",
     "InvitationPreferenceService",
     "LunchAutoChatService",
     "LunchPinService",

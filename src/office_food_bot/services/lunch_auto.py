@@ -12,6 +12,7 @@ from aiogram.types import Message
 from office_food_bot.execution import CommandExecutionMode
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.models import LunchAutoChat, RegisteredUser
+from office_food_bot.presenters.lunch import lunch_announcement_text
 from office_food_bot.repositories import (
     LunchAutoChatRepository,
     UserRepository,
@@ -20,7 +21,6 @@ from office_food_bot.repositories import (
 from office_food_bot.services.business_calendar import BusinessCalendarService
 from office_food_bot.services.invitations import InvitationPreferenceService
 from office_food_bot.services.job_scheduler import JobScheduler
-from office_food_bot.services.lunch import lunch_announcement_text
 from office_food_bot.services.lunch_pin import LunchPinService
 from office_food_bot.services.lunch_polls import LunchOfficeSelection, LunchPollCatalog
 from office_food_bot.services.poll_tracking import PollTrackingService
@@ -44,11 +44,9 @@ class LunchAutoChatService:
     def disable(self, chat_id: int) -> LunchAutoChat | None:
         return self._chats.disable(chat_id)
 
-    def status_text(self, chat_id: int) -> str:
+    def is_enabled(self, chat_id: int) -> bool:
         chat = self._chats.get(chat_id)
-        if chat is not None and chat.enabled:
-            return "Авто-ланч включен для этого чата."
-        return "Авто-ланч выключен для этого чата."
+        return chat is not None and chat.enabled
 
     def list_enabled(self) -> tuple[LunchAutoChat, ...]:
         return self._chats.list_enabled()

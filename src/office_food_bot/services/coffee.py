@@ -4,9 +4,7 @@ import asyncio
 import logging
 import re
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
-from html import escape
 from math import ceil
 from zoneinfo import ZoneInfo
 
@@ -14,162 +12,97 @@ from aiogram import Bot
 from aiogram.enums import ParseMode
 
 from office_food_bot.coffee_callbacks import CoffeeCallbackData, CoffeeParticipantAction
-from office_food_bot.coffee_repositories import CoffeeSessionRepository
-from office_food_bot.messaging import BotMessenger, InlineChoice
-from office_food_bot.models import CoffeeSession, CoffeeSessionStatus, RegisteredUser, UserStatus
-from office_food_bot.repositories import UserRepository
-from office_food_bot.services.invitations import (
-    InvitationPreferenceService,
-    registration_required_text,
+from office_food_bot.coffee_models import (
+    CoffeeParticipationKind,
+    CoffeeParticipationReport,
+    CoffeeStatusReport,
+    CoffeeTimeResolution,
+    CoffeeTimeResolutionKind,
 )
+from office_food_bot.coffee_repositories import CoffeeSessionRepository
+from office_food_bot.commanding.errors.models import CoffeeError, CoffeeErrorCode
+from office_food_bot.messaging import BotMessenger, InlineChoice
+from office_food_bot.models import CoffeeSession, CoffeeSessionStatus, RegisteredUser
+from office_food_bot.presenters.coffee import CoffeeCardRenderer
+from office_food_bot.repositories import UserRepository
+from office_food_bot.services.invitations import InvitationPreferenceService
 from office_food_bot.services.job_scheduler import JobScheduler
 from office_food_bot.services.lunch_attendance import LunchAttendanceService
+from office_food_bot.services.user_access import ActiveUserResolver
 from office_food_bot.services.user_references import format_user_reference
 
 logger = logging.getLogger(__name__)
 
-COFFEE_TIME_USAGE = "Создать или перенести встречу: /coffee 15 или /coffee 16:30."
-COFFEE_TIME_ERROR = (
-    "Не понял время. Напиши минуты или время сегодня: /coffee 15 или /coffee 16:30."
-)
-COFFEE_TIME_RANGE_ERROR = "Время кофе должно быть минимум через минуту и до конца сегодня."
 RETRY_DELAYS = (timedelta(minutes=1), timedelta(minutes=3), timedelta(minutes=5))
 RECOVERY_GRACE = timedelta(minutes=5)
-COFFEE_COUNTDOWN_WINDOW = timedelta(minutes=60)
 
 
-@dataclass(frozen=True, slots=True)
-class CoffeeUserAccess:
-    user: RegisteredUser | None
-    denial_text: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class CoffeeParticipationResult:
-    text: str | None
-    show_alert: bool
-
-
-class CoffeeCardRenderer:
-    def __init__(self, timezone_name: str) -> None:
+class CoffeeTimeResolver:
+    def __init__(
+        self,
+        timezone_name: str,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
         self._timezone = ZoneInfo(timezone_name)
+        self._clock = clock or (lambda: datetime.now(tz=UTC))
 
-    def render(
-        self,
-        session: CoffeeSession,
-        proposer: RegisteredUser,
-        participants: Sequence[RegisteredUser],
-        now: datetime,
-    ) -> str:
-        local_time = session.scheduled_at.astimezone(self._timezone).strftime("%H:%M")
-        lines = [
-            f"☕ {escape(proposer.display_name)} предлагает кофе",
-            f"Время: <b>{local_time}</b>",
-        ]
-        if _coffee_countdown_is_visible(session.scheduled_at, now):
-            countdown = coffee_countdown_text(session.scheduled_at, now)
-            lines.append(f"Через: <b>{countdown}</b>")
-        return self._with_participants(lines, participants)
-
-    def render_completed(
-        self,
-        session: CoffeeSession,
-        proposer: RegisteredUser,
-        participants: Sequence[RegisteredUser],
-    ) -> str:
-        local_time = session.scheduled_at.astimezone(self._timezone).strftime("%H:%M")
-        lines = [
-            f"☕ {escape(proposer.display_name)} предлагает кофе",
-            f"Время: <b>{local_time}</b>",
-            "Встреча прошла",
-        ]
-        return self._with_participants(lines, participants)
-
-    def _with_participants(
-        self,
-        lines: list[str],
-        participants: Sequence[RegisteredUser],
-    ) -> str:
-        lines.extend(("", f"Идут ({len(participants)}):"))
-        if participants:
-            lines.extend(f"• {escape(user.display_name)}" for user in participants)
-        else:
-            lines.append("Пока никто")
-        return "\n".join(lines)
+    def resolve(self, raw_value: str) -> CoffeeTimeResolution:
+        now = self._clock()
+        scheduled_at = parse_coffee_time(raw_value, now, self._timezone)
+        if scheduled_at is None:
+            return CoffeeTimeResolution(CoffeeTimeResolutionKind.INVALID_FORMAT)
+        if not _is_allowed_time(scheduled_at, now, self._timezone):
+            return CoffeeTimeResolution(CoffeeTimeResolutionKind.OUT_OF_RANGE)
+        return CoffeeTimeResolution(CoffeeTimeResolutionKind.VALID, scheduled_at)
 
 
 class CoffeeService:
     def __init__(
         self,
         users: UserRepository,
+        active_users: ActiveUserResolver,
         preferences: InvitationPreferenceService,
         sessions: CoffeeSessionRepository,
         attendance: LunchAttendanceService,
         messenger: BotMessenger,
         scheduler: JobScheduler,
+        renderer: CoffeeCardRenderer,
         timezone_name: str,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._users = users
+        self._active_users = active_users
         self._preferences = preferences
         self._sessions = sessions
         self._attendance = attendance
         self._messenger = messenger
         self._scheduler = scheduler
         self._timezone = ZoneInfo(timezone_name)
-        self._renderer = CoffeeCardRenderer(timezone_name)
+        self._renderer = renderer
         self._clock = clock or (lambda: datetime.now(tz=UTC))
         self._chat_locks: dict[int, asyncio.Lock] = {}
 
-    def status_text(self, telegram_user_id: int, chat_id: int) -> str:
-        access = self._active_user(telegram_user_id)
-        if access.user is None:
-            return access.denial_text or "Регистрация сейчас неактивна."
-        user = access.user
-        invitations = (
-            "включены"
-            if self._preferences.for_user(user.id).coffee_enabled
-            else "выключены"
-        )
+    def status(self, telegram_user_id: int, chat_id: int) -> CoffeeStatusReport:
+        user = self._active_users.require(telegram_user_id)
+        invitations_enabled = self._preferences.for_user(user.id).coffee_enabled
         session = self._sessions.get_open_for_chat(chat_id)
-        lines = [
-            f"Приглашения на кофе: {invitations}.",
-            "",
-            COFFEE_TIME_USAGE,
-            "",
-        ]
         if session is None:
-            lines.append("Текущей встречи нет.")
-            return "\n".join(lines)
+            return CoffeeStatusReport(invitations_enabled, None, ())
         participants = self._sessions.list_participants(session.id)
-        local_time = session.scheduled_at.astimezone(self._timezone).strftime("%H:%M")
-        names = ", ".join(participant.display_name for participant in participants)
-        lines.append(f"Текущая встреча: {local_time}")
-        lines.append(f"Идут: {names or 'пока никто'}")
-        return "\n".join(lines)
-
-    def set_invitations(self, telegram_user_id: int, enabled: bool) -> str:
-        access = self._active_user(telegram_user_id)
-        if access.user is None:
-            return access.denial_text or "Регистрация сейчас неактивна."
-        return self._preferences.set_coffee(telegram_user_id, enabled)
+        return CoffeeStatusReport(
+            invitations_enabled,
+            session.scheduled_at,
+            tuple(participant.display_name for participant in participants),
+        )
 
     async def create_or_reschedule(
         self,
         bot: Bot,
         chat_id: int,
         telegram_user_id: int,
-        raw_time: str,
-    ) -> str | None:
-        access = self._active_user(telegram_user_id)
-        if access.user is None:
-            return access.denial_text or "Регистрация сейчас неактивна."
-        user = access.user
-        scheduled_at = parse_coffee_time(raw_time, self._clock(), self._timezone)
-        if scheduled_at is None:
-            return COFFEE_TIME_ERROR
-        if not _is_allowed_time(scheduled_at, self._clock(), self._timezone):
-            return COFFEE_TIME_RANGE_ERROR
+        scheduled_at: datetime,
+    ) -> None:
+        user = self._active_users.require(telegram_user_id)
 
         async with self._lock(chat_id):
             session = self._sessions.get_open_for_chat(chat_id)
@@ -217,28 +150,20 @@ class CoffeeService:
                 and previous_session.scheduled_at != session.scheduled_at
             ):
                 await self._send_reschedule_notification(bot, user, session)
-        return None
-
     async def update_participation(
         self,
         bot: Bot,
         telegram_user_id: int,
         callback: CoffeeCallbackData,
-    ) -> CoffeeParticipationResult:
-        access = self._active_user(telegram_user_id)
-        if access.user is None:
-            return CoffeeParticipationResult(
-                access.denial_text or "Регистрация сейчас неактивна.",
-                True,
-            )
-        user = access.user
+    ) -> CoffeeParticipationReport:
+        user = self._active_users.require(telegram_user_id)
         session = self._sessions.get(callback.session_id)
         if session is None or session.status != CoffeeSessionStatus.ACTIVE:
-            return CoffeeParticipationResult("Эта встреча уже завершена.", True)
+            raise CoffeeError(CoffeeErrorCode.SESSION_ENDED)
         async with self._lock(session.chat_id):
             current = self._sessions.get(callback.session_id)
             if current is None or current.status != CoffeeSessionStatus.ACTIVE:
-                return CoffeeParticipationResult("Эта встреча уже завершена.", True)
+                raise CoffeeError(CoffeeErrorCode.SESSION_ENDED)
             participant_ids = {
                 participant.id
                 for participant in self._sessions.list_participants(current.id)
@@ -246,14 +171,14 @@ class CoffeeService:
             was_participant = user.id in participant_ids
             if callback.action == CoffeeParticipantAction.JOIN:
                 if was_participant:
-                    return CoffeeParticipationResult(None, False)
+                    return CoffeeParticipationReport(CoffeeParticipationKind.UNCHANGED)
                 self._sessions.join(current.id, user.id)
-                reply = "Ты идешь на кофе."
+                result_kind = CoffeeParticipationKind.JOINED
             else:
                 if not was_participant:
-                    return CoffeeParticipationResult(None, False)
+                    return CoffeeParticipationReport(CoffeeParticipationKind.UNCHANGED)
                 self._sessions.leave(current.id, user.id)
-                reply = "Ты больше не идешь на кофе."
+                result_kind = CoffeeParticipationKind.LEFT
             try:
                 updated = await self._update_card(bot, current)
                 await self._replace_pin(bot, current, updated)
@@ -263,7 +188,7 @@ class CoffeeService:
                 else:
                     self._sessions.leave(current.id, user.id)
                 raise
-            return CoffeeParticipationResult(reply, False)
+            return CoffeeParticipationReport(result_kind)
 
     async def restore_jobs(self, bot: Bot) -> None:
         now = self._clock()
@@ -568,16 +493,6 @@ class CoffeeService:
 
         self._scheduler.add_date(_coffee_job_id(session_id), run, run_at)
 
-    def _active_user(self, telegram_user_id: int) -> CoffeeUserAccess:
-        user = self._users.get_by_telegram_id(telegram_user_id)
-        if user is None:
-            return CoffeeUserAccess(None, registration_required_text())
-        if user.status == UserStatus.PENDING:
-            return CoffeeUserAccess(None, "Регистрация еще ждет аппрува.")
-        if user.status != UserStatus.ACTIVE:
-            return CoffeeUserAccess(None, "Регистрация сейчас неактивна.")
-        return CoffeeUserAccess(user, None)
-
     def _lock(self, chat_id: int) -> asyncio.Lock:
         return self._chat_locks.setdefault(chat_id, asyncio.Lock())
 
@@ -605,14 +520,6 @@ def parse_coffee_time(
     return datetime.combine(local_now.date(), parsed_time, tzinfo=timezone).astimezone(UTC)
 
 
-def coffee_countdown_text(scheduled_at: datetime, now: datetime) -> str:
-    remaining_seconds = (scheduled_at - now).total_seconds()
-    if remaining_seconds <= 0:
-        return "сейчас"
-    minutes = ceil(remaining_seconds / 60)
-    return f"{minutes} {_minute_word(minutes)}"
-
-
 def next_coffee_countdown_update(
     scheduled_at: datetime,
     now: datetime,
@@ -620,27 +527,10 @@ def next_coffee_countdown_update(
     remaining_seconds = (scheduled_at - now).total_seconds()
     if remaining_seconds <= 60:
         return None
-    if remaining_seconds >= COFFEE_COUNTDOWN_WINDOW.total_seconds():
+    if remaining_seconds >= timedelta(minutes=60).total_seconds():
         return scheduled_at - timedelta(minutes=59)
     displayed_minutes = ceil(remaining_seconds / 60)
     return scheduled_at - timedelta(minutes=displayed_minutes - 1)
-
-
-def _coffee_countdown_is_visible(scheduled_at: datetime, now: datetime) -> bool:
-    remaining = scheduled_at - now
-    return timedelta() < remaining < COFFEE_COUNTDOWN_WINDOW
-
-
-def _minute_word(minutes: int) -> str:
-    last_two_digits = minutes % 100
-    if 11 <= last_two_digits <= 14:
-        return "минут"
-    last_digit = minutes % 10
-    if last_digit == 1:
-        return "минуту"
-    if 2 <= last_digit <= 4:
-        return "минуты"
-    return "минут"
 
 
 def _is_allowed_time(

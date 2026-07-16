@@ -176,7 +176,7 @@ class FlowRunner:
         return FlowContext(
             message=context.message,
             bot=context.bot,
-            messenger=context.messenger,
+            messenger=self._messenger,
             state=context.state,
             profile=context.profile,
         )

@@ -8,6 +8,7 @@ from office_food_bot.commanding.access import CommandAccessService
 from office_food_bot.database import Database
 from office_food_bot.invitation_repositories import InvitationPreferenceRepository
 from office_food_bot.messaging import BotMessenger
+from office_food_bot.presenters.coffee import CoffeeCardRenderer
 from office_food_bot.repositories import (
     DebugRepository,
     LunchAutoChatRepository,
@@ -20,12 +21,11 @@ from office_food_bot.repositories import (
 )
 from office_food_bot.services.balances import BalanceService
 from office_food_bot.services.business_calendar import BusinessCalendarService
-from office_food_bot.services.coffee import CoffeeService
+from office_food_bot.services.coffee import CoffeeService, CoffeeTimeResolver
 from office_food_bot.services.container import BotServices
 from office_food_bot.services.debug import DebugService
 from office_food_bot.services.invitations import InvitationPreferenceService
 from office_food_bot.services.job_scheduler import JobScheduler
-from office_food_bot.services.lunch import LunchService
 from office_food_bot.services.lunch_attendance import LunchAttendanceService
 from office_food_bot.services.lunch_auto import (
     LunchAutoChatService,
@@ -81,7 +81,8 @@ def build_services(
         registration_requests,
         admin_ids,
     )
-    invitations = InvitationPreferenceService(users, invitation_preferences)
+    active_users = ActiveUserResolver(users)
+    invitations = InvitationPreferenceService(active_users, invitation_preferences)
     debug = DebugService(debug_settings)
     business_calendar = BusinessCalendarService()
     poll_tracking = PollTrackingService(
@@ -105,31 +106,36 @@ def build_services(
     )
     job_scheduler = JobScheduler(timezone_name)
     lunch_attendance = LunchAttendanceService(poll_repository)
+    coffee_time = CoffeeTimeResolver(timezone_name, clock)
     coffee = CoffeeService(
         users,
+        active_users,
         invitations,
         coffee_sessions,
         lunch_attendance,
         messenger,
         job_scheduler,
+        CoffeeCardRenderer(timezone_name),
         timezone_name,
         clock,
     )
     return BotServices(
+        messenger=messenger,
         telegram_bot_username=telegram_bot_username,
+        timezone_name=timezone_name,
         telegram_interactions=TelegramInteractionService(telegram_accounts),
         registration=registration,
         debug=debug,
         command_access=CommandAccessService(registration, debug),
-        active_users=ActiveUserResolver(users),
+        active_users=active_users,
         invitations=invitations,
         coffee=coffee,
+        coffee_time=coffee_time,
         business_calendar=business_calendar,
-        presence=PresenceService(users, timezone_name, clock),
+        presence=PresenceService(active_users, timezone_name, clock),
         balances=BalanceService(users, splitwise),
-        lunch=LunchService(users),
         lunch_attendance=lunch_attendance,
-        vacation=VacationService(users, vacations, timezone_name, clock),
+        vacation=VacationService(active_users, vacations, timezone_name, clock),
         lunch_auto_chats=lunch_auto_chats,
         lunch_pins=lunch_pins,
         lunch_publisher=lunch_publisher,

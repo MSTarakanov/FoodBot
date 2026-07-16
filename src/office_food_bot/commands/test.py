@@ -1,16 +1,27 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
-    RawArguments,
-    RawArgumentsParser,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
-from office_food_bot.previews import MESSAGE_PREVIEWS
+from office_food_bot.messaging import BotMessenger
+from office_food_bot.previews.catalog import MessagePreviewCatalog
 
 
-class TestCommand(EffectCommand[RawArguments]):
+@dataclass(frozen=True, slots=True)
+class PreviewRequest:
+    case_name: str
+
+
+class PreviewRequestParser:
+    def parse(self, raw_arguments: str | None) -> PreviewRequest:
+        return PreviewRequest((raw_arguments or "").strip().casefold())
+
+
+class TestCommand(EffectCommand[PreviewRequest]):
     definition = CommandDefinition(
         "test",
         "отправить тестовое сообщение",
@@ -21,21 +32,25 @@ class TestCommand(EffectCommand[RawArguments]):
         show_in_menu=False,
     )
 
-    def __init__(self) -> None:
-        super().__init__(RawArgumentsParser(), (), ())
+    def __init__(
+        self,
+        messenger: BotMessenger,
+        previews: MessagePreviewCatalog,
+    ) -> None:
+        super().__init__(messenger, PreviewRequestParser(), (), ())
+        self._previews = previews
 
     async def execute_effect(
         self,
         context: CommandContext,
-        request: RawArguments,
+        request: PreviewRequest,
     ) -> None:
-        await context.state.clear()
-        payload = MESSAGE_PREVIEWS.render(request.value or "")
+        payload = self._previews.render(request.case_name)
         if payload is None:
-            await context.messenger.reply(
+            await self._messenger.reply(
                 context.message,
-                MESSAGE_PREVIEWS.help_text(),
+                self._previews.help_text(),
             )
             return
 
-        await context.messenger.reply_payload(context.message, payload)
+        await self._messenger.reply_payload(context.message, payload)

@@ -2,43 +2,20 @@ from __future__ import annotations
 
 import logging
 
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
-
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
-    RawArguments,
-    RawArgumentsParser,
+    NoArguments,
+    NoArgumentsParser,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
-from office_food_bot.commanding.profile import telegram_profile_from_message
 from office_food_bot.messaging import BotMessenger
-from office_food_bot.services import BotServices
+from office_food_bot.services.telegram_interactions import TelegramInteractionService
 
 logger = logging.getLogger(__name__)
 
 
-async def hi_command(
-    message: Message,
-    messenger: BotMessenger,
-    services: BotServices,
-    state: FSMContext,
-) -> None:
-    await state.clear()
-    profile = telegram_profile_from_message(message)
-    if profile is not None:
-        services.telegram_interactions.remember(profile)
-    logger.warning(
-        "/hi handled by @%s: chat_id=%s, telegram_user_id=%s",
-        services.telegram_bot_username,
-        message.chat.id,
-        message.from_user.id if message.from_user is not None else None,
-    )
-    await messenger.reply(message, "Привет! Я на месте.")
-
-
-class HiCommand(EffectCommand[RawArguments]):
+class HiCommand(EffectCommand[NoArguments]):
     definition = CommandDefinition(
         "hi",
         "проверить, что бот на месте",
@@ -47,18 +24,32 @@ class HiCommand(EffectCommand[RawArguments]):
         HelpSection.SERVICE,
     )
 
-    def __init__(self, services: BotServices) -> None:
-        super().__init__(RawArgumentsParser(), (), ())
-        self._services = services
+    def __init__(
+        self,
+        messenger: BotMessenger,
+        interactions: TelegramInteractionService,
+        bot_username: str,
+    ) -> None:
+        super().__init__(messenger, NoArgumentsParser(), (), ())
+        self._interactions = interactions
+        self._bot_username = bot_username
 
     async def execute_effect(
         self,
         context: CommandContext,
-        request: RawArguments,
+        request: NoArguments,
     ) -> None:
-        await hi_command(
-            context.message,
-            context.messenger,
-            self._services,
-            context.state,
+        del request
+        if context.profile is not None:
+            self._interactions.remember(context.profile)
+        logger.warning(
+            "/hi handled by @%s: chat_id=%s, telegram_user_id=%s",
+            self._bot_username,
+            context.message.chat.id,
+            (
+                context.message.from_user.id
+                if context.message.from_user is not None
+                else None
+            ),
         )
+        await self._messenger.reply(context.message, "Привет! Я на месте.")

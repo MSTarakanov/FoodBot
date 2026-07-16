@@ -1,17 +1,62 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+from office_food_bot.commanding.access import CommandAccessService
+from office_food_bot.commanding.catalog import CommandCatalogProvider
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
-    RawArguments,
-    RawArgumentsParser,
 )
-from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
+from office_food_bot.commanding.definition import (
+    CommandDefinition,
+    CommandInputMessage,
+    CommandScope,
+    HelpSection,
+)
+from office_food_bot.commanding.errors.models import (
+    CommandInputError,
+    CommonError,
+    CommonErrorCode,
+    InputErrorCode,
+)
 from office_food_bot.commanding.menu import setup_private_admin_commands
-from office_food_bot.services import BotServices
+from office_food_bot.commanding.validators import (
+    TelegramIdentityValidator,
+    require_telegram_profile,
+)
+from office_food_bot.messaging import BotMessenger
+from office_food_bot.services.debug import DebugService
 
 DEBUG_ON_VALUES = frozenset({"1", "on", "true", "вкл"})
 DEBUG_OFF_VALUES = frozenset({"0", "off", "false", "выкл"})
+
+
+@dataclass(frozen=True, slots=True)
+class DebugRequest:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class DebugStatusRequest(DebugRequest):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class DebugToggleRequest(DebugRequest):
+    enabled: bool
+
+
+class DebugRequestParser:
+    def parse(self, raw_arguments: str | None) -> DebugRequest:
+        normalized = (raw_arguments or "").strip().casefold()
+        if not normalized:
+            return DebugStatusRequest()
+        if normalized in DEBUG_ON_VALUES:
+            return DebugToggleRequest(True)
+        if normalized in DEBUG_OFF_VALUES:
+            return DebugToggleRequest(False)
+        raise CommandInputError(InputErrorCode.INVALID_CHOICE)
 
 
 def _debug_status_text(enabled: bool) -> str:
@@ -20,7 +65,7 @@ def _debug_status_text(enabled: bool) -> str:
     return "Debug: выключен."
 
 
-class DebugCommand(EffectCommand[RawArguments]):
+class DebugCommand(EffectCommand[DebugRequest]):
     definition = CommandDefinition(
         "debug",
         "включить или выключить debug режим",
@@ -28,54 +73,57 @@ class DebugCommand(EffectCommand[RawArguments]):
         CommandScope.PRIVATE,
         HelpSection.ADMINISTRATION,
         admin_only=True,
+        input_errors=(
+            CommandInputMessage(
+                InputErrorCode.INVALID_CHOICE,
+                "Напиши /debug 1 или /debug 0",
+            ),
+        ),
     )
 
-    def __init__(self, services: BotServices) -> None:
-        super().__init__(RawArgumentsParser(), (), ())
-        self._services = services
+    def __init__(
+        self,
+        messenger: BotMessenger,
+        debug: DebugService,
+        access: CommandAccessService,
+        catalog: CommandCatalogProvider,
+    ) -> None:
+        super().__init__(
+            messenger,
+            DebugRequestParser(),
+            (TelegramIdentityValidator(),),
+            (),
+        )
+        self._debug = debug
+        self._access = access
+        self._catalog = catalog
 
     async def execute_effect(
         self,
         context: CommandContext,
-        request: RawArguments,
+        request: DebugRequest,
     ) -> None:
-        profile = context.profile
-        if profile is None:
-            await context.messenger.reply(
+        profile = require_telegram_profile(context)
+        if not self._access.is_admin(profile.telegram_user_id):
+            raise CommonError(CommonErrorCode.ADMIN_REQUIRED)
+
+        if isinstance(request, DebugStatusRequest):
+            await self._messenger.reply(
                 context.message,
-                "Не вижу твой Telegram user id.",
+                _debug_status_text(self._debug.is_enabled(profile.telegram_user_id)),
             )
             return
 
-        raw_argument = (request.value or "").strip().casefold()
-        if not raw_argument:
-            await context.messenger.reply(
-                context.message,
-                _debug_status_text(
-                    self._services.debug.is_enabled(profile.telegram_user_id)
-                ),
-            )
-            return
-
-        if raw_argument in DEBUG_ON_VALUES:
-            self._services.debug.set_enabled(profile.telegram_user_id, True)
-            await self._update_menu(context, profile.telegram_user_id)
-            await context.messenger.reply(
-                context.message,
-                "Debug включен. В личке доступны все команды.",
-            )
-            return
-
-        if raw_argument in DEBUG_OFF_VALUES:
-            self._services.debug.set_enabled(profile.telegram_user_id, False)
-            await self._update_menu(context, profile.telegram_user_id)
-            await context.messenger.reply(context.message, "Debug выключен.")
-            return
-
-        await context.messenger.reply(
-            context.message,
-            "Напиши /debug 1 или /debug 0",
+        if not isinstance(request, DebugToggleRequest):
+            raise RuntimeError(f"Unsupported debug request: {type(request).__name__}")
+        self._debug.set_enabled(profile.telegram_user_id, request.enabled)
+        await self._update_menu(context, profile.telegram_user_id)
+        reply = (
+            "Debug включен. В личке доступны все команды."
+            if request.enabled
+            else "Debug выключен."
         )
+        await self._messenger.reply(context.message, reply)
 
     async def _update_menu(
         self,
@@ -84,7 +132,7 @@ class DebugCommand(EffectCommand[RawArguments]):
     ) -> None:
         await setup_private_admin_commands(
             context.bot,
-            self._services.command_access,
-            context.catalog,
+            self._access,
+            self._catalog(),
             telegram_user_id,
         )

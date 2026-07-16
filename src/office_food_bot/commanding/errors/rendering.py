@@ -7,12 +7,16 @@ from office_food_bot.commanding.definition import CommandDefinition
 from office_food_bot.commanding.errors.models import (
     BalanceError,
     BalanceErrorCode,
+    CoffeeError,
+    CoffeeErrorCode,
     CommandInputError,
     CommonError,
     CommonErrorCode,
     CommonUserError,
     ExternalDependency,
     InfrastructureUnavailableError,
+    RegistrationError,
+    RegistrationErrorCode,
     UserFacingError,
 )
 
@@ -102,11 +106,46 @@ def render_balance_error(error: UserFacingError, context: ErrorRenderContext) ->
     raise ValueError(f"Unsupported balance error code: {error.code}")
 
 
+def render_coffee_error(error: UserFacingError, context: ErrorRenderContext) -> str:
+    del context
+    if not isinstance(error, CoffeeError):
+        raise TypeError(f"Unsupported coffee error: {type(error).__name__}")
+    if error.code == CoffeeErrorCode.INVALID_CALLBACK:
+        return "Не понял действие."
+    if error.code == CoffeeErrorCode.SESSION_ENDED:
+        return "Эта встреча уже завершена."
+    raise ValueError(f"Unsupported coffee error code: {error.code}")
+
+
+def render_registration_error(error: UserFacingError, context: ErrorRenderContext) -> str:
+    del context
+    if not isinstance(error, RegistrationError):
+        raise TypeError(f"Unsupported registration error: {type(error).__name__}")
+    if error.code == RegistrationErrorCode.REQUEST_ALREADY_PENDING:
+        return (
+            "Заявка уже ждет аппрува. "
+            "Если хотите отменить регистрацию, отправьте /quit."
+        )
+    if error.code == RegistrationErrorCode.REQUEST_ALREADY_ACTIVE:
+        return (
+            "Вы уже зарегистрированы. "
+            "Если хотите отрегистрироваться, отправьте /quit."
+        )
+    if error.code == RegistrationErrorCode.REQUEST_UNAVAILABLE:
+        return (
+            "Регистрация сейчас недоступна. "
+            "Если хотите отрегистрироваться, отправьте /quit."
+        )
+    raise ValueError(f"Unsupported registration error code: {error.code}")
+
+
 def build_user_error_renderer() -> UserErrorRenderer:
     common_renderer = CommonErrorRenderer()
     return UserErrorRenderer(
         (
             ErrorRendererRegistration(CommonUserError, common_renderer),
             ErrorRendererRegistration(BalanceError, render_balance_error),
+            ErrorRendererRegistration(CoffeeError, render_coffee_error),
+            ErrorRendererRegistration(RegistrationError, render_registration_error),
         )
     )

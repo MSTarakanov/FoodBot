@@ -28,12 +28,13 @@ from office_food_bot.models import (
     RegistrationKind,
     SplitwiseMember,
 )
-from office_food_bot.services import BotServices
+from office_food_bot.services.invitations import InvitationPreferenceService
+from office_food_bot.services.registration import RegistrationService
 
 
 @dataclass(frozen=True, slots=True)
 class RegistrationAdminNotification(FlowPostAction):
-    services: BotServices
+    admin_ids: frozenset[int]
     registered_user: RegisteredUser
     title: str
     splitwise_member: SplitwiseMember | None
@@ -45,7 +46,7 @@ class RegistrationAdminNotification(FlowPostAction):
             self.registered_user,
             self.splitwise_member,
         )
-        for admin_id in self.services.registration.admin_ids:
+        for admin_id in self.admin_ids:
             await context.messenger.try_send(
                 context.bot,
                 admin_id,
@@ -60,8 +61,13 @@ class RegistrationAdminNotification(FlowPostAction):
 
 
 class RegistrationFlowUseCase:
-    def __init__(self, services: BotServices) -> None:
-        self._services = services
+    def __init__(
+        self,
+        registration: RegistrationService,
+        invitations: InvitationPreferenceService,
+    ) -> None:
+        self._registration = registration
+        self._invitations = invitations
 
     async def complete(
         self,
@@ -72,14 +78,14 @@ class RegistrationFlowUseCase:
         display_name = draft.require_display_name()
         splitwise_member = draft.splitwise_member
         preferences = _preferences_from_draft(draft)
-        result = self._services.registration.register(
+        result = self._registration.register(
             profile,
             display_name,
             splitwise_member,
         )
 
         if preferences is not None and result.kind == RegistrationKind.CREATED:
-            self._services.invitations.save_initial(result.user.id, preferences)
+            self._invitations.save_initial(result.user.id, preferences)
 
         if result.kind == RegistrationKind.CREATED:
             return CompleteFlow(
@@ -91,7 +97,7 @@ class RegistrationFlowUseCase:
                     )
                 ),
                 RegistrationAdminNotification(
-                    self._services,
+                    self._registration.admin_ids,
                     result.user,
                     "Новая регистрация:",
                     splitwise_member,
@@ -109,7 +115,7 @@ class RegistrationFlowUseCase:
                     )
                 ),
                 RegistrationAdminNotification(
-                    self._services,
+                    self._registration.admin_ids,
                     result.user,
                     "Обновленная регистрация:",
                     splitwise_member,
@@ -123,7 +129,7 @@ class RegistrationFlowUseCase:
                 splitwise=None,
             )
             requested_details = registration_details_from_input(
-                self._services.registration,
+                self._registration,
                 profile,
                 display_name,
                 splitwise_member,
@@ -131,7 +137,7 @@ class RegistrationFlowUseCase:
             if not registration_details_changed(previous_details, requested_details):
                 return CompleteFlow(unchanged_registration_view())
 
-            requested_display_name = self._services.registration.display_name_from_input(
+            requested_display_name = self._registration.display_name_from_input(
                 profile,
                 display_name,
             )
@@ -175,7 +181,7 @@ class RegistrationFlowUseCase:
         profile = draft.target_for_current_message(context.profile)
         display_name = draft.require_display_name()
         splitwise_member = draft.splitwise_member
-        user = self._services.registration.re_register(
+        user = self._registration.re_register(
             profile,
             display_name,
             splitwise_member,
@@ -188,7 +194,7 @@ class RegistrationFlowUseCase:
                 )
             ),
             RegistrationAdminNotification(
-                self._services,
+                self._registration.admin_ids,
                 user,
                 "Перерегистрация:",
                 splitwise_member,

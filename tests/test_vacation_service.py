@@ -3,11 +3,21 @@ from __future__ import annotations
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+import pytest
+
+from office_food_bot.commanding.errors.models import (
+    CommandInputError,
+    CommonError,
+    CommonErrorCode,
+    InputErrorCode,
+)
+from office_food_bot.commands.vacation import VacationRequestParser
 from office_food_bot.database import Database
 from office_food_bot.models import TelegramProfile, UserStatus
+from office_food_bot.presenters.vacation import render_vacation_report
 from office_food_bot.repositories import UserRepository, VacationRepository
+from office_food_bot.services.user_access import ActiveUserResolver
 from office_food_bot.services.vacation import (
-    VACATION_DATE_FORMAT_ERROR_TEXT,
     VacationRequestKind,
     VacationService,
     parse_vacation_request,
@@ -31,11 +41,19 @@ def make_vacation_service(
     vacations: VacationRepository,
 ) -> VacationService:
     return VacationService(
-        users,
+        ActiveUserResolver(users),
         vacations,
         "Europe/Belgrade",
         clock=lambda: datetime(2026, 7, 6, 12, 0, tzinfo=ZoneInfo("Europe/Belgrade")),
     )
+
+
+def vacation_text(
+    service: VacationService,
+    raw_argument: str,
+) -> str:
+    request = VacationRequestParser(service).parse(raw_argument)
+    return render_vacation_report(service.execute(42, request)).text
 
 
 def test_vacation_requires_registration(
@@ -44,7 +62,10 @@ def test_vacation_requires_registration(
 ) -> None:
     service = make_vacation_service(users, VacationRepository(database))
 
-    assert service.reply(42, "1") == "Сначала зарегистрируйся: /register"
+    with pytest.raises(CommonError) as error:
+        vacation_text(service, "1")
+
+    assert error.value.code == CommonErrorCode.REGISTRATION_REQUIRED
 
 
 def test_vacation_requires_active_user(
@@ -54,7 +75,10 @@ def test_vacation_requires_active_user(
     users.create_pending_user(make_profile(), "Максим")
     service = make_vacation_service(users, VacationRepository(database))
 
-    assert service.reply(42, "1") == "Регистрация еще ждет аппрува."
+    with pytest.raises(CommonError) as error:
+        vacation_text(service, "1")
+
+    assert error.value.code == CommonErrorCode.REGISTRATION_PENDING
 
     users.approve_by_telegram_id(42)
     with database.connection:
@@ -63,7 +87,10 @@ def test_vacation_requires_active_user(
             (UserStatus.DISABLED.value, "Максим"),
         )
 
-    assert service.reply(42, "1") == "Регистрация сейчас неактивна."
+    with pytest.raises(CommonError) as error:
+        vacation_text(service, "1")
+
+    assert error.value.code == CommonErrorCode.REGISTRATION_INACTIVE
 
 
 def test_vacation_status_text_for_inactive_vacation(
@@ -74,7 +101,7 @@ def test_vacation_status_text_for_inactive_vacation(
     users.approve_by_telegram_id(42)
     service = make_vacation_service(users, VacationRepository(database))
 
-    assert service.reply(42, "") == (
+    assert vacation_text(service, "") == (
         "Максим не в отпуске.\n\n"
         "Уйти в отпуск или изменить дату: /vacation 2 или /vacation 20.07\n"
         "Выйти из отпуска: /vacation 0 или /vacation off"
@@ -90,7 +117,7 @@ def test_vacation_day_count_one_sets_until_today(
     vacations = VacationRepository(database)
     service = make_vacation_service(users, vacations)
 
-    assert service.reply(42, "1") == (
+    assert vacation_text(service, "1") == (
         "Максим в отпуске до 06.07.2026. Чтобы выйти из отпуска: /vacation 0"
     )
     vacation = vacations.get(user.id)
@@ -109,7 +136,7 @@ def test_vacation_zero_clears_vacation(
     vacations.set_until_date(user.id, date(2026, 7, 20))
     service = make_vacation_service(users, vacations)
 
-    assert service.reply(42, "0") == "Максим больше не в отпуске."
+    assert vacation_text(service, "0") == "Максим больше не в отпуске."
     assert vacations.get(user.id) is None
 
 
@@ -123,7 +150,7 @@ def test_vacation_status_ignores_expired_vacation(
     vacations.set_until_date(user.id, date(2026, 7, 5))
     service = make_vacation_service(users, vacations)
 
-    assert service.reply(42, "") == (
+    assert vacation_text(service, "") == (
         "Максим не в отпуске.\n\n"
         "Уйти в отпуск или изменить дату: /vacation 2 или /vacation 20.07\n"
         "Выйти из отпуска: /vacation 0 или /vacation off"
@@ -138,10 +165,11 @@ def test_vacation_rejects_invalid_arguments(
     users.approve_by_telegram_id(42)
     service = make_vacation_service(users, VacationRepository(database))
 
-    assert service.reply(42, "wat") == VACATION_DATE_FORMAT_ERROR_TEXT
-    assert service.reply(42, "-1") == VACATION_DATE_FORMAT_ERROR_TEXT
-    assert service.reply(42, "367") == VACATION_DATE_FORMAT_ERROR_TEXT
-    assert service.reply(42, "2026-07-05") == VACATION_DATE_FORMAT_ERROR_TEXT
+    parser = VacationRequestParser(service)
+    for raw_argument in ("wat", "-1", "367", "2026-07-05"):
+        with pytest.raises(CommandInputError) as error:
+            parser.parse(raw_argument)
+        assert error.value.code == InputErrorCode.INVALID_FORMAT
 
 
 def test_parse_vacation_request_supports_day_counts_and_dates() -> None:

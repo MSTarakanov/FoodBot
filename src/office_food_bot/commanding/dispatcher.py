@@ -11,7 +11,6 @@ from office_food_bot.commanding.definition import CommandFlowPolicy
 from office_food_bot.commanding.invocation import is_for_another_bot, parse_command
 from office_food_bot.commanding.profile import telegram_profile_from_message
 from office_food_bot.flows.runner import FlowRunner
-from office_food_bot.messaging import BotMessenger
 
 
 class CommandDispatcher:
@@ -19,13 +18,11 @@ class CommandDispatcher:
         self,
         catalog: CommandCatalog,
         access: CommandAccessService,
-        messenger: BotMessenger,
         bot_username: str,
         flow_runner: FlowRunner,
     ) -> None:
         self._catalog = catalog
         self._access = access
-        self._messenger = messenger
         self._bot_username = bot_username
         self._flow_runner = flow_runner
 
@@ -53,16 +50,13 @@ class CommandDispatcher:
             command.definition,
             str(message.chat.type),
             telegram_user_id,
-            invocation.arguments,
         )
         await command.handle(
             CommandContext(
                 message=message,
                 bot=bot,
-                messenger=self._messenger,
                 state=state,
                 profile=profile,
                 invocation=invocation,
-                catalog=self._catalog,
             )
         )

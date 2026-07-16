@@ -60,3 +60,26 @@ class BalanceError(UserFacingError):
     def __init__(self, code: BalanceErrorCode) -> None:
         super().__init__(code.value)
         self.code = code
+
+
+class CoffeeErrorCode(StrEnum):
+    INVALID_CALLBACK = "invalid_callback"
+    SESSION_ENDED = "session_ended"
+
+
+class CoffeeError(UserFacingError):
+    def __init__(self, code: CoffeeErrorCode) -> None:
+        super().__init__(code.value)
+        self.code = code
+
+
+class RegistrationErrorCode(StrEnum):
+    REQUEST_ALREADY_PENDING = "request_already_pending"
+    REQUEST_ALREADY_ACTIVE = "request_already_active"
+    REQUEST_UNAVAILABLE = "request_unavailable"
+
+
+class RegistrationError(UserFacingError):
+    def __init__(self, code: RegistrationErrorCode) -> None:
+        super().__init__(code.value)
+        self.code = code

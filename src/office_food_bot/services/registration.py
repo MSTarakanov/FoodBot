@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from office_food_bot.commanding.errors.models import (
+    RegistrationError,
+    RegistrationErrorCode,
+)
 from office_food_bot.models import (
     ApprovalKind,
     KnownTelegramAccount,
@@ -155,24 +159,15 @@ class RegistrationService:
             last_name=user.last_name,
         )
 
-    def request_registration_block_reason(self, telegram_user_id: int) -> str | None:
+    def ensure_registration_can_be_requested(self, telegram_user_id: int) -> None:
         user = self._users.get_by_telegram_id(telegram_user_id)
         if user is None or user.status == UserStatus.ABANDONED:
-            return None
+            return
         if user.status == UserStatus.PENDING:
-            return (
-                "Заявка уже ждет аппрува. "
-                "Если хотите отменить регистрацию, отправьте /quit."
-            )
+            raise RegistrationError(RegistrationErrorCode.REQUEST_ALREADY_PENDING)
         if user.status == UserStatus.ACTIVE:
-            return (
-                "Вы уже зарегистрированы. "
-                "Если хотите отрегистрироваться, отправьте /quit."
-            )
-        return (
-            "Регистрация сейчас недоступна. "
-            "Если хотите отрегистрироваться, отправьте /quit."
-        )
+            raise RegistrationError(RegistrationErrorCode.REQUEST_ALREADY_ACTIVE)
+        raise RegistrationError(RegistrationErrorCode.REQUEST_UNAVAILABLE)
 
     def should_ask_initial_preferences(self, telegram_user_id: int) -> bool:
         user = self._users.get_by_telegram_id(telegram_user_id)

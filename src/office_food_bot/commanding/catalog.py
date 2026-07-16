@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from office_food_bot.commanding.contracts import Command
 from office_food_bot.commanding.definition import CommandDefinition
@@ -37,3 +37,6 @@ class CommandCatalog:
 
     def resolve(self, raw_name: str) -> Command | None:
         return self._commands_by_name.get(raw_name.casefold())
+
+
+type CommandCatalogProvider = Callable[[], CommandCatalog]
