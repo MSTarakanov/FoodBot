@@ -3,6 +3,7 @@ from __future__ import annotations
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
+    IdentityResolver,
     NoArguments,
     NoArgumentsParser,
 )
@@ -23,7 +24,7 @@ REQUEST_REGISTER_REPLY_TEXT = (
 )
 
 
-class RequestRegisterCommand(EffectCommand[NoArguments]):
+class RequestRegisterCommand(EffectCommand[NoArguments, NoArguments]):
     definition = CommandDefinition(
         "request_register",
         "попросить админа зарегистрировать вас",
@@ -46,6 +47,7 @@ class RequestRegisterCommand(EffectCommand[NoArguments]):
             NoArgumentsParser(),
             (TelegramIdentityValidator(),),
             (),
+            IdentityResolver(),
         )
         self._registration = registration
         self._error_renderer = error_renderer
@@ -53,9 +55,8 @@ class RequestRegisterCommand(EffectCommand[NoArguments]):
     async def execute_effect(
         self,
         context: CommandContext,
-        request: NoArguments,
+        _request: NoArguments,
     ) -> None:
-        del request
         profile = require_telegram_profile(context)
 
         await self._registration.registration_request_eligibility(

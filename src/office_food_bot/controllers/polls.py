@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import assert_never
+
 from aiogram import Bot
 from aiogram.types import PollAnswer
 
@@ -26,10 +28,13 @@ class PollAnswerController:
             tuple(poll_answer.option_ids),
         )
         for action_request in action_requests:
-            if action_request.action == PollAction.LUNCH_OTHER_FOOD_POLL:
-                await self._lunch_publisher.send_poll(
-                    bot,
-                    action_request.chat_id,
-                    LUNCH_OTHER_FOOD_POLL,
-                    action_request.context_date,
-                )
+            match action_request.action:
+                case PollAction.LUNCH_OTHER_FOOD_POLL:
+                    await self._lunch_publisher.send_poll(
+                        bot,
+                        action_request.chat_id,
+                        LUNCH_OTHER_FOOD_POLL,
+                        action_request.context_date,
+                    )
+                case _:
+                    assert_never(action_request.action)

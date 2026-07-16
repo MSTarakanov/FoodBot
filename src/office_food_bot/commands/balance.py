@@ -3,6 +3,7 @@ from __future__ import annotations
 from office_food_bot.balance_models import BalanceReport
 from office_food_bot.commanding.contracts import (
     CommandContext,
+    IdentityResolver,
     NoArguments,
     NoArgumentsParser,
     ResultRenderedCommand,
@@ -26,7 +27,12 @@ from office_food_bot.services.user_access import ActiveUserResolver
 
 
 class BalanceCommand(
-    ResultRenderedCommand[NoArguments, BalanceReport, BalanceErrorCode]
+    ResultRenderedCommand[
+        NoArguments,
+        NoArguments,
+        BalanceReport,
+        BalanceErrorCode,
+    ]
 ):
     definition = CommandDefinition(
         "balance",
@@ -48,8 +54,12 @@ class BalanceCommand(
             messenger,
             common_error_renderer,
             NoArgumentsParser(),
-            (TelegramIdentityValidator(),),
-            (ActiveUserValidator(active_users),),
+            (
+                TelegramIdentityValidator(),
+                ActiveUserValidator(active_users),
+            ),
+            (),
+            IdentityResolver(),
             render_balance_message,
             error_renderer,
         )
@@ -57,8 +67,7 @@ class BalanceCommand(
 
     async def execute(
         self,
-        context: CommandContext,
-        request: NoArguments,
+        _context: CommandContext,
+        _request: NoArguments,
     ) -> Result[BalanceReport, BalanceErrorCode]:
-        del context, request
         return await self._balances.balance()

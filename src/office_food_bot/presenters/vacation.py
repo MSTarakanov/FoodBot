@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import assert_never
 
 from office_food_bot.messaging import TextMessagePayload
 from office_food_bot.vacation_models import VacationReport, VacationReportKind
@@ -12,16 +13,17 @@ VACATION_USAGE_TEXT = (
 
 
 def render_vacation_report(report: VacationReport) -> TextMessagePayload:
-    if report.kind == VacationReportKind.STATUS_ACTIVE:
-        text = f"{_active_status(report)}\n\n{VACATION_USAGE_TEXT}"
-    elif report.kind == VacationReportKind.STATUS_INACTIVE:
-        text = f"{report.display_name} не в отпуске.\n\n{VACATION_USAGE_TEXT}"
-    elif report.kind == VacationReportKind.CLEARED:
-        text = f"{report.display_name} больше не в отпуске."
-    elif report.kind == VacationReportKind.SET:
-        text = f"{_active_status(report)} Чтобы выйти из отпуска: /vacation 0"
-    else:
-        raise RuntimeError(f"Unsupported vacation report: {report.kind.value}")
+    match report.kind:
+        case VacationReportKind.STATUS_ACTIVE:
+            text = f"{_active_status(report)}\n\n{VACATION_USAGE_TEXT}"
+        case VacationReportKind.STATUS_INACTIVE:
+            text = f"{report.display_name} не в отпуске.\n\n{VACATION_USAGE_TEXT}"
+        case VacationReportKind.CLEARED:
+            text = f"{report.display_name} больше не в отпуске."
+        case VacationReportKind.SET:
+            text = f"{_active_status(report)} Чтобы выйти из отпуска: /vacation 0"
+        case _:
+            assert_never(report.kind)
     return TextMessagePayload(text)
 
 

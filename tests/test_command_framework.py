@@ -17,10 +17,12 @@ from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
     FlowCommand,
+    IdentityResolver,
     RenderedCommand,
 )
 from office_food_bot.commanding.definition import (
     CommandDefinition,
+    CommandInputMessage,
     CommandScope,
     HelpSection,
 )
@@ -36,6 +38,9 @@ TEST_DEFINITION = CommandDefinition(
     "/test",
     CommandScope.ANY,
     HelpSection.SERVICE,
+    input_errors=(
+        CommandInputMessage(InputErrorCode.INVALID_FORMAT, "invalid format"),
+    ),
 )
 
 
@@ -66,17 +71,29 @@ class RecordingParser:
     def parse(
         self,
         raw_arguments: str | None,
-    ) -> Result[FixtureRequest, InputErrorCode]:
+    ) -> FixtureRequest:
         self._events.append(f"parse:{raw_arguments}")
-        return success(FixtureRequest(raw_arguments))
+        return FixtureRequest(raw_arguments)
 
 
 class FixtureParser:
     def parse(
         self,
         raw_arguments: str | None,
+    ) -> FixtureRequest:
+        return FixtureRequest(raw_arguments)
+
+
+class RecordingResolver:
+    def __init__(self, events: list[str]) -> None:
+        self._events = events
+
+    def resolve(
+        self,
+        value: FixtureRequest,
     ) -> Result[FixtureRequest, InputErrorCode]:
-        return success(FixtureRequest(raw_arguments))
+        self._events.append(f"resolve:{value.value}")
+        return success(value)
 
 
 class RecordingContextValidator:
@@ -104,7 +121,9 @@ class RecordingRequestValidator:
         return success(None)
 
 
-class FixtureRenderedCommand(RenderedCommand[FixtureRequest, str]):
+class FixtureRenderedCommand(
+    RenderedCommand[FixtureRequest, FixtureRequest, str]
+):
     definition = TEST_DEFINITION
 
     def __init__(self, messenger: BotMessenger, events: list[str]) -> None:
@@ -118,6 +137,7 @@ class FixtureRenderedCommand(RenderedCommand[FixtureRequest, str]):
             RecordingParser(events),
             (RecordingContextValidator(events),),
             (RecordingRequestValidator(events),),
+            RecordingResolver(events),
             render,
         )
         self._events = events
@@ -127,7 +147,7 @@ class FixtureRenderedCommand(RenderedCommand[FixtureRequest, str]):
         return "model"
 
 
-class FixtureEffectCommand(EffectCommand[FixtureRequest]):
+class FixtureEffectCommand(EffectCommand[FixtureRequest, FixtureRequest]):
     definition = TEST_DEFINITION
 
     def __init__(self, messenger: BotMessenger, events: list[str]) -> None:
@@ -137,6 +157,7 @@ class FixtureEffectCommand(EffectCommand[FixtureRequest]):
             FixtureParser(),
             (),
             (),
+            IdentityResolver(),
         )
         self._events = events
 
@@ -148,7 +169,7 @@ class FixtureEffectCommand(EffectCommand[FixtureRequest]):
         self._events.append(f"effect:{request.value}")
 
 
-class FixtureFlowCommand(FlowCommand[FixtureRequest]):
+class FixtureFlowCommand(FlowCommand[FixtureRequest, FixtureRequest]):
     definition = TEST_DEFINITION
 
     def __init__(self, messenger: BotMessenger, events: list[str]) -> None:
@@ -158,6 +179,7 @@ class FixtureFlowCommand(FlowCommand[FixtureRequest]):
             FixtureParser(),
             (),
             (),
+            IdentityResolver(),
         )
         self._events = events
 
@@ -192,7 +214,34 @@ class FailingContextValidator:
         return failure(CommonErrorCode.ADMIN_REQUIRED)
 
 
-class FailingFixtureCommand(RenderedCommand[FixtureRequest, str]):
+class FailingRequestValidator:
+    def __init__(self, events: list[str]) -> None:
+        self._events = events
+
+    def validate(
+        self,
+        context: CommandContext,
+        request: FixtureRequest,
+    ) -> Result[None, CommonErrorCode]:
+        self._events.append(f"request:error:{request.value}")
+        return failure(CommonErrorCode.GROUP_CHAT_REQUIRED)
+
+
+class FailingResolver:
+    def __init__(self, events: list[str]) -> None:
+        self._events = events
+
+    def resolve(
+        self,
+        value: FixtureRequest,
+    ) -> Result[FixtureRequest, InputErrorCode]:
+        self._events.append(f"resolve:error:{value.value}")
+        return failure(InputErrorCode.INVALID_FORMAT)
+
+
+class FailingFixtureCommand(
+    RenderedCommand[FixtureRequest, FixtureRequest, str]
+):
     definition = TEST_DEFINITION
 
     def __init__(self, messenger: BotMessenger, events: list[str]) -> None:
@@ -202,6 +251,7 @@ class FailingFixtureCommand(RenderedCommand[FixtureRequest, str]):
             RecordingParser(events),
             (FailingContextValidator(events),),
             (RecordingRequestValidator(events),),
+            RecordingResolver(events),
             lambda model: TextMessagePayload(model),
         )
 
@@ -210,7 +260,51 @@ class FailingFixtureCommand(RenderedCommand[FixtureRequest, str]):
         return "unreachable"
 
 
-class ConcurrentFixtureCommand(RenderedCommand[FixtureRequest, str]):
+class FailingRequestFixtureCommand(
+    RenderedCommand[FixtureRequest, FixtureRequest, str]
+):
+    definition = TEST_DEFINITION
+
+    def __init__(self, messenger: BotMessenger, events: list[str]) -> None:
+        super().__init__(
+            messenger,
+            CommonErrorRenderer("foodbot_dev"),
+            RecordingParser(events),
+            (RecordingContextValidator(events),),
+            (FailingRequestValidator(events),),
+            RecordingResolver(events),
+            lambda model: TextMessagePayload(model),
+        )
+
+    async def execute(self, context: CommandContext, request: FixtureRequest) -> str:
+        del context, request
+        return "unreachable"
+
+
+class FailingResolverFixtureCommand(
+    RenderedCommand[FixtureRequest, FixtureRequest, str]
+):
+    definition = TEST_DEFINITION
+
+    def __init__(self, messenger: BotMessenger, events: list[str]) -> None:
+        super().__init__(
+            messenger,
+            CommonErrorRenderer("foodbot_dev"),
+            RecordingParser(events),
+            (RecordingContextValidator(events),),
+            (RecordingRequestValidator(events),),
+            FailingResolver(events),
+            lambda model: TextMessagePayload(model),
+        )
+
+    async def execute(self, context: CommandContext, request: FixtureRequest) -> str:
+        del context, request
+        return "unreachable"
+
+
+class ConcurrentFixtureCommand(
+    RenderedCommand[FixtureRequest, FixtureRequest, str]
+):
     definition = TEST_DEFINITION
 
     def __init__(self, messenger: BotMessenger) -> None:
@@ -220,6 +314,7 @@ class ConcurrentFixtureCommand(RenderedCommand[FixtureRequest, str]):
             FixtureParser(),
             (),
             (),
+            IdentityResolver(),
             lambda model: TextMessagePayload(model),
         )
 
@@ -241,6 +336,7 @@ async def test_rendered_command_runs_pipeline_in_order() -> None:
         "context:test",
         "parse:minutes",
         "request:minutes",
+        "resolve:minutes",
         "execute:minutes",
         "render:model",
         "reply",
@@ -299,6 +395,41 @@ async def test_pipeline_stops_after_user_facing_error() -> None:
 
     assert events == ["context:error", "reply"]
     assert payload_texts(messenger) == ["Команда доступна только админам."]
+
+
+async def test_variant_access_runs_before_semantic_resolution() -> None:
+    events: list[str] = []
+    messenger = RecordingMessenger(events)
+    command = FailingRequestFixtureCommand(messenger, events)
+
+    await command.handle(make_context("bad-value"))
+
+    assert events == [
+        "context:test",
+        "parse:bad-value",
+        "request:error:bad-value",
+        "reply",
+    ]
+    assert payload_texts(messenger) == [
+        "Команда доступна только в групповом чате."
+    ]
+
+
+async def test_semantic_resolution_runs_after_access_and_stops_execution() -> None:
+    events: list[str] = []
+    messenger = RecordingMessenger(events)
+    command = FailingResolverFixtureCommand(messenger, events)
+
+    await command.handle(make_context("bad-value"))
+
+    assert events == [
+        "context:test",
+        "parse:bad-value",
+        "request:bad-value",
+        "resolve:error:bad-value",
+        "reply",
+    ]
+    assert payload_texts(messenger) == ["invalid format"]
 
 
 async def test_single_command_instance_keeps_parallel_requests_isolated() -> None:

@@ -15,7 +15,7 @@ from office_food_bot.flows.registration.use_case import RegistrationFlowUseCase
 from office_food_bot.flows.registration.validation import (
     RegistrationStepErrorCode,
     TextFlowInput,
-    yes_no_value,
+    confirmation_value,
 )
 
 
@@ -48,5 +48,5 @@ class RegistrationCoffeePreferenceStep(RegistrationStep[TextFlowInput]):
             raise RuntimeError("Registration flow has no lunch preference")
         return await self._use_case.complete(
             context,
-            replace(draft, coffee_invitations_enabled=yes_no_value(value)),
+            replace(draft, coffee_invitations_enabled=confirmation_value(value)),
         )

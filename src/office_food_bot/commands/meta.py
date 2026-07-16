@@ -17,7 +17,12 @@ from office_food_bot.commanding.validators import (
     TelegramIdentityValidator,
     require_telegram_profile,
 )
-from office_food_bot.commands.presence import MAX_ETA_MINUTES, EtaRequestParser
+from office_food_bot.commands.presence import (
+    MAX_ETA_MINUTES,
+    EtaInput,
+    EtaRequestParser,
+    EtaRequestResolver,
+)
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.presence_models import EtaRequest, PresenceKind, PresenceReport
 from office_food_bot.presenters.presence import render_presence_report
@@ -25,7 +30,7 @@ from office_food_bot.services.presence import PresenceService
 from office_food_bot.services.user_access import ActiveUserResolver
 
 
-class MetaCommand(RenderedCommand[EtaRequest, PresenceReport]):
+class MetaCommand(RenderedCommand[EtaInput, EtaRequest, PresenceReport]):
     definition = CommandDefinition(
         "meta",
         "сообщить, через сколько минут или в каком диапазоне придешь",
@@ -64,8 +69,12 @@ class MetaCommand(RenderedCommand[EtaRequest, PresenceReport]):
             messenger,
             common_error_renderer,
             EtaRequestParser(),
-            (TelegramIdentityValidator(),),
-            (ActiveUserValidator(active_users),),
+            (
+                TelegramIdentityValidator(),
+                ActiveUserValidator(active_users),
+            ),
+            (),
+            EtaRequestResolver(),
             render_presence_report,
         )
         self._presence = presence

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import assert_never
 
+from office_food_bot.boolean_input import parse_toggle
 from office_food_bot.coffee_models import CoffeeTimeResolutionKind
 from office_food_bot.commanding.access import CommandAccessService
 from office_food_bot.commanding.contracts import (
@@ -41,7 +43,25 @@ COFFEE_TIME_ERROR = (
 COFFEE_TIME_RANGE_ERROR = "Время кофе должно быть минимум через минуту и до конца сегодня."
 
 
+class CoffeeInput:
+    pass
+
+
 @dataclass(frozen=True, slots=True)
+class CoffeeStatusInput(CoffeeInput):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class CoffeeToggleInput(CoffeeInput):
+    enabled: bool
+
+
+@dataclass(frozen=True, slots=True)
+class CoffeeScheduleInput(CoffeeInput):
+    raw_time: str
+
+
 class CoffeeRequest:
     pass
 
@@ -62,27 +82,50 @@ class CoffeeScheduleRequest(CoffeeRequest):
 
 
 class CoffeeRequestParser:
-    def __init__(self, coffee_time: CoffeeTimeResolver) -> None:
-        self._coffee_time = coffee_time
-
     def parse(
         self,
         raw_arguments: str | None,
-    ) -> Result[CoffeeRequest, InputErrorCode]:
+    ) -> CoffeeInput:
         argument = (raw_arguments or "").strip()
         if not argument:
-            return success(CoffeeStatusRequest())
-        normalized = argument.casefold()
-        if normalized in {"on", "off"}:
-            return success(CoffeeToggleRequest(normalized == "on"))
-        resolution = self._coffee_time.resolve(argument)
-        if resolution.kind == CoffeeTimeResolutionKind.INVALID_FORMAT:
-            return failure(InputErrorCode.INVALID_FORMAT)
-        if resolution.kind == CoffeeTimeResolutionKind.OUT_OF_RANGE:
-            return failure(InputErrorCode.OUT_OF_RANGE)
-        if resolution.scheduled_at is None:
-            raise RuntimeError("Valid coffee schedule has no timestamp")
-        return success(CoffeeScheduleRequest(resolution.scheduled_at))
+            return CoffeeStatusInput()
+        enabled = parse_toggle(argument)
+        if enabled is not None:
+            return CoffeeToggleInput(enabled)
+        return CoffeeScheduleInput(argument)
+
+
+class CoffeeRequestResolver:
+    def __init__(self, coffee_time: CoffeeTimeResolver) -> None:
+        self._coffee_time = coffee_time
+
+    def resolve(
+        self,
+        value: CoffeeInput,
+    ) -> Result[CoffeeRequest, InputErrorCode]:
+        match value:
+            case CoffeeStatusInput():
+                return success(CoffeeStatusRequest())
+            case CoffeeToggleInput():
+                return success(CoffeeToggleRequest(value.enabled))
+            case CoffeeScheduleInput():
+                resolution = self._coffee_time.resolve(value.raw_time)
+                match resolution.kind:
+                    case CoffeeTimeResolutionKind.INVALID_FORMAT:
+                        return failure(InputErrorCode.INVALID_FORMAT)
+                    case CoffeeTimeResolutionKind.OUT_OF_RANGE:
+                        return failure(InputErrorCode.OUT_OF_RANGE)
+                    case CoffeeTimeResolutionKind.VALID:
+                        if resolution.scheduled_at is None:
+                            raise RuntimeError(
+                                "Valid coffee schedule has no timestamp"
+                            )
+                        return success(
+                            CoffeeScheduleRequest(resolution.scheduled_at)
+                        )
+                assert_never(resolution.kind)
+            case _:
+                raise RuntimeError(f"Unsupported coffee input: {type(value).__name__}")
 
 
 class CoffeeScheduleScopeValidator:
@@ -92,12 +135,12 @@ class CoffeeScheduleScopeValidator:
     def validate(
         self,
         context: CommandContext,
-        request: CoffeeRequest,
+        request: CoffeeInput,
     ) -> Result[None, CommonErrorCode]:
         match request:
-            case CoffeeStatusRequest() | CoffeeToggleRequest():
+            case CoffeeStatusInput() | CoffeeToggleInput():
                 return success(None)
-            case CoffeeScheduleRequest():
+            case CoffeeScheduleInput():
                 profile = require_telegram_profile(context)
                 if not self._access.can_run_group_command_in_chat(
                     str(context.message.chat.type),
@@ -111,7 +154,7 @@ class CoffeeScheduleScopeValidator:
                 )
 
 
-class CoffeeCommand(EffectCommand[CoffeeRequest]):
+class CoffeeCommand(EffectCommand[CoffeeInput, CoffeeRequest]):
     definition = CommandDefinition(
         "coffee",
         "позвать на кофе",
@@ -161,12 +204,13 @@ class CoffeeCommand(EffectCommand[CoffeeRequest]):
         super().__init__(
             messenger,
             common_error_renderer,
-            CoffeeRequestParser(coffee_time),
-            (TelegramIdentityValidator(),),
+            CoffeeRequestParser(),
             (
-                CoffeeScheduleScopeValidator(access),
+                TelegramIdentityValidator(),
                 ActiveUserValidator(active_users),
             ),
+            (CoffeeScheduleScopeValidator(access),),
+            CoffeeRequestResolver(coffee_time),
         )
         self._coffee = coffee
         self._renderer = renderer

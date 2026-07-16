@@ -13,7 +13,7 @@ from office_food_bot.flows.registration.use_case import RegistrationFlowUseCase
 from office_food_bot.flows.registration.validation import (
     RegistrationStepErrorCode,
     TextFlowInput,
-    yes_no_value,
+    confirmation_value,
 )
 
 
@@ -45,5 +45,5 @@ class RegistrationConfirmationStep(RegistrationStep[TextFlowInput]):
         return await self._use_case.confirm_reregistration(
             context,
             draft,
-            confirmed=yes_no_value(value),
+            confirmed=confirmation_value(value),
         )

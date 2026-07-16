@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from office_food_bot.commanding.errors.models import InputErrorCode
 from office_food_bot.presence_models import EtaRequest
@@ -11,12 +12,25 @@ _SINGLE_ETA_REQUEST_PATTERN = re.compile(r"\s*-?\d+\s*")
 _ETA_REQUEST_PATTERN = re.compile(r"\s*(\d+)(?:\s*-\s*(\d+))?\s*")
 
 
+@dataclass(frozen=True, slots=True)
+class EtaInput:
+    raw_minutes: str
+
+
 class EtaRequestParser:
     def parse(
         self,
         raw_arguments: str | None,
+    ) -> EtaInput:
+        return EtaInput(raw_arguments or "")
+
+
+class EtaRequestResolver:
+    def resolve(
+        self,
+        value: EtaInput,
     ) -> Result[EtaRequest, InputErrorCode]:
-        raw_minutes = raw_arguments or ""
+        raw_minutes = value.raw_minutes
         if not raw_minutes.strip():
             return failure(InputErrorCode.MISSING)
 

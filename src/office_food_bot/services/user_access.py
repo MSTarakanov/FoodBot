@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import assert_never
+
 from office_food_bot.commanding.errors.models import CommonErrorCode
 from office_food_bot.models import RegisteredUser, UserStatus
 from office_food_bot.repositories import UserRepository
@@ -17,11 +19,14 @@ class ActiveUserResolver:
         user = self._users.get_by_telegram_id(telegram_user_id)
         if user is None:
             return failure(CommonErrorCode.REGISTRATION_REQUIRED)
-        if user.status == UserStatus.PENDING:
-            return failure(CommonErrorCode.REGISTRATION_PENDING)
-        if user.status != UserStatus.ACTIVE:
-            return failure(CommonErrorCode.REGISTRATION_INACTIVE)
-        return success(user)
+        match user.status:
+            case UserStatus.PENDING:
+                return failure(CommonErrorCode.REGISTRATION_PENDING)
+            case UserStatus.REJECTED | UserStatus.DISABLED | UserStatus.ABANDONED:
+                return failure(CommonErrorCode.REGISTRATION_INACTIVE)
+            case UserStatus.ACTIVE:
+                return success(user)
+        assert_never(user.status)
 
     def require_validated(self, telegram_user_id: int) -> RegisteredUser:
         return self.resolve(telegram_user_id).fold(

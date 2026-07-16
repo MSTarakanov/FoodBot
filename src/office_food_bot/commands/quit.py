@@ -3,6 +3,7 @@ from __future__ import annotations
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
+    IdentityResolver,
     NoArguments,
     NoArgumentsParser,
 )
@@ -20,7 +21,7 @@ QUIT_SUCCESS_TEXT = "Вы отрегистрированы. Если захот�
 QUIT_NOT_FOUND_TEXT = "Я не нашел вашу регистрацию."
 
 
-class QuitCommand(EffectCommand[NoArguments]):
+class QuitCommand(EffectCommand[NoArguments, NoArguments]):
     definition = CommandDefinition(
         "quit",
         "отрегистрироваться",
@@ -41,15 +42,15 @@ class QuitCommand(EffectCommand[NoArguments]):
             NoArgumentsParser(),
             (TelegramIdentityValidator(),),
             (),
+            IdentityResolver(),
         )
         self._registration = registration
 
     async def execute_effect(
         self,
         context: CommandContext,
-        request: NoArguments,
+        _request: NoArguments,
     ) -> None:
-        del request
         profile = require_telegram_profile(context)
 
         if self._registration.quit_registration(profile.telegram_user_id):

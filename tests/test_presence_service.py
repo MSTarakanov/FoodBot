@@ -8,7 +8,7 @@ import pytest
 from office_food_bot.commanding.errors.models import (
     InputErrorCode,
 )
-from office_food_bot.commands.presence import EtaRequestParser
+from office_food_bot.commands.presence import EtaRequestParser, EtaRequestResolver
 from office_food_bot.models import TelegramProfile
 from office_food_bot.presence_models import EtaRequest, PresenceKind
 from office_food_bot.presenters.presence import render_presence_report
@@ -52,14 +52,16 @@ def presence_text(
 
 
 def parsed_eta(raw_minutes: str) -> EtaRequest:
-    return EtaRequestParser().parse(raw_minutes).fold(
+    return EtaRequestResolver().resolve(EtaRequestParser().parse(raw_minutes)).fold(
         lambda request: request,
         lambda code: pytest.fail(f"Unexpected ETA parse error: {code}"),
     )
 
 
 def eta_parse_error(raw_minutes: str) -> InputErrorCode:
-    result: Result[EtaRequest, InputErrorCode] = EtaRequestParser().parse(raw_minutes)
+    result: Result[EtaRequest, InputErrorCode] = EtaRequestResolver().resolve(
+        EtaRequestParser().parse(raw_minutes)
+    )
     return result.fold(
         lambda request: pytest.fail(f"Unexpected ETA request: {request}"),
         lambda code: code,

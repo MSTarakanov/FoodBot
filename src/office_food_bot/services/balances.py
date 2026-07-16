@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Protocol
+from typing import Protocol, assert_never
 
 from office_food_bot.balance_models import BalanceEntry, BalanceReport
 from office_food_bot.commanding.errors.models import BalanceErrorCode
@@ -31,8 +31,13 @@ class BalanceService:
             return failure(BalanceErrorCode.NO_SPLITWISE_USERS)
 
         splitwise_result = await self._splitwise.group_members()
-        if splitwise_result.kind == SplitwiseGroupKind.UNAVAILABLE:
-            return failure(BalanceErrorCode.SPLITWISE_UNAVAILABLE)
+        match splitwise_result.kind:
+            case SplitwiseGroupKind.UNAVAILABLE:
+                return failure(BalanceErrorCode.SPLITWISE_UNAVAILABLE)
+            case SplitwiseGroupKind.AVAILABLE:
+                pass
+            case _:
+                assert_never(splitwise_result.kind)
 
         members_by_id = {member.splitwise_user_id: member for member in splitwise_result.members}
         entries = tuple(

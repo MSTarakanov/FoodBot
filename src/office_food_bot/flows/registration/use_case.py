@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import assert_never
 
 from office_food_bot.flows.contracts import (
     ClosingFlowView,
@@ -84,89 +85,92 @@ class RegistrationFlowUseCase:
             splitwise_member,
         )
 
-        if preferences is not None and result.kind == RegistrationKind.CREATED:
-            self._invitations.save_initial(result.user.id, preferences)
-
-        if result.kind == RegistrationKind.CREATED:
-            return CompleteFlow(
-                ClosingFlowView(
-                    registration_reply_text(
-                        "Заявка на регистрацию отправлена. Жду аппрув.",
+        match result.kind:
+            case RegistrationKind.CREATED:
+                if preferences is not None:
+                    self._invitations.save_initial(result.user.id, preferences)
+                return CompleteFlow(
+                    ClosingFlowView(
+                        registration_reply_text(
+                            "Заявка на регистрацию отправлена. Жду аппрув.",
+                            splitwise_member,
+                            preferences,
+                        )
+                    ),
+                    RegistrationAdminNotification(
+                        self._registration.admin_ids,
+                        result.user,
+                        "Новая регистрация:",
                         splitwise_member,
+                        None,
                         preferences,
-                    )
-                ),
-                RegistrationAdminNotification(
-                    self._registration.admin_ids,
-                    result.user,
-                    "Новая регистрация:",
-                    splitwise_member,
-                    None,
-                    preferences,
-                ),
-            )
-
-        if result.kind == RegistrationKind.UPDATED_PENDING:
-            return CompleteFlow(
-                ClosingFlowView(
-                    registration_reply_text(
-                        "Заявка обновлена. Жду аппрув.",
+                    ),
+                )
+            case RegistrationKind.UPDATED_PENDING:
+                return CompleteFlow(
+                    ClosingFlowView(
+                        registration_reply_text(
+                            "Заявка обновлена. Жду аппрув.",
+                            splitwise_member,
+                        )
+                    ),
+                    RegistrationAdminNotification(
+                        self._registration.admin_ids,
+                        result.user,
+                        "Обновленная регистрация:",
                         splitwise_member,
-                    )
-                ),
-                RegistrationAdminNotification(
-                    self._registration.admin_ids,
-                    result.user,
-                    "Обновленная регистрация:",
+                        result.previous_details,
+                    ),
+                )
+            case RegistrationKind.ALREADY_ACTIVE:
+                previous_details = result.previous_details or RegistrationDetails(
+                    display_name=result.user.display_name,
+                    splitwise=None,
+                )
+                requested_details = registration_details_from_input(
+                    self._registration,
+                    profile,
+                    display_name,
                     splitwise_member,
-                    result.previous_details,
-                ),
-            )
-
-        if result.kind == RegistrationKind.ALREADY_ACTIVE:
-            previous_details = result.previous_details or RegistrationDetails(
-                display_name=result.user.display_name,
-                splitwise=None,
-            )
-            requested_details = registration_details_from_input(
-                self._registration,
-                profile,
-                display_name,
-                splitwise_member,
-            )
-            if not registration_details_changed(previous_details, requested_details):
-                return CompleteFlow(unchanged_registration_view())
-
-            requested_display_name = self._registration.display_name_from_input(
-                profile,
-                display_name,
-            )
-            return MoveToStep(
-                RegistrationStepId.REREGISTRATION_CONFIRMATION,
-                replace(
-                    draft,
-                    target=profile,
-                    requested_display_name=requested_display_name,
-                    previous_details=previous_details,
-                ),
-                reregistration_confirmation_view(
-                    result.user,
-                    requested_display_name,
-                    splitwise_member,
+                )
+                if not registration_details_changed(
                     previous_details,
-                ),
-            )
+                    requested_details,
+                ):
+                    return CompleteFlow(unchanged_registration_view())
 
-        if result.kind == RegistrationKind.ALREADY_PENDING:
-            return CompleteFlow(
-                ClosingFlowView(f"Заявка уже ждет аппрува, {result.user.display_name}")
-            )
-
-        return CompleteFlow(
-            ClosingFlowView(
-                f"Регистрация сейчас недоступна, {result.user.display_name}"
-            )
-        )
+                requested_display_name = self._registration.display_name_from_input(
+                    profile,
+                    display_name,
+                )
+                return MoveToStep(
+                    RegistrationStepId.REREGISTRATION_CONFIRMATION,
+                    replace(
+                        draft,
+                        target=profile,
+                        requested_display_name=requested_display_name,
+                        previous_details=previous_details,
+                    ),
+                    reregistration_confirmation_view(
+                        result.user,
+                        requested_display_name,
+                        splitwise_member,
+                        previous_details,
+                    ),
+                )
+            case RegistrationKind.ALREADY_PENDING:
+                return CompleteFlow(
+                    ClosingFlowView(
+                        f"Заявка уже ждет аппрува, {result.user.display_name}"
+                    )
+                )
+            case RegistrationKind.BLOCKED:
+                return CompleteFlow(
+                    ClosingFlowView(
+                        f"Регистрация сейчас недоступна, {result.user.display_name}"
+                    )
+                )
+        assert_never(result.kind)
 
     async def confirm_reregistration(
         self,

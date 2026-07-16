@@ -16,7 +16,7 @@ from office_food_bot.flows.registration.steps.base import RegistrationStep
 from office_food_bot.flows.registration.validation import (
     RegistrationStepErrorCode,
     TextFlowInput,
-    yes_no_value,
+    confirmation_value,
 )
 
 
@@ -45,6 +45,6 @@ class RegistrationLunchPreferenceStep(RegistrationStep[TextFlowInput]):
     ) -> FlowTransition:
         return MoveToStep(
             RegistrationStepId.COFFEE_PREFERENCE,
-            replace(draft, lunch_invitations_enabled=yes_no_value(value)),
+            replace(draft, lunch_invitations_enabled=confirmation_value(value)),
             coffee_preference_view(),
         )

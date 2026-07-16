@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import assert_never
+
 from office_food_bot.invitation_models import InvitationKind, InvitationSettingReport
 from office_food_bot.invitation_repositories import InvitationPreferenceRepository
 from office_food_bot.models import InvitationPreferences
@@ -28,11 +30,13 @@ class InvitationPreferenceService:
     ) -> InvitationSettingReport:
         user = self._active_users.require_validated(telegram_user_id)
         preferences = self._preferences.get(user.id)
-        enabled = (
-            preferences.lunch_enabled
-            if kind == InvitationKind.LUNCH
-            else preferences.coffee_enabled
-        )
+        match kind:
+            case InvitationKind.LUNCH:
+                enabled = preferences.lunch_enabled
+            case InvitationKind.COFFEE:
+                enabled = preferences.coffee_enabled
+            case _:
+                assert_never(kind)
         return InvitationSettingReport(kind, enabled, updated=False)
 
     def set_enabled(
@@ -42,8 +46,11 @@ class InvitationPreferenceService:
         enabled: bool,
     ) -> InvitationSettingReport:
         user = self._active_users.require_validated(telegram_user_id)
-        if kind == InvitationKind.LUNCH:
-            self._preferences.set_lunch_enabled(user.id, enabled)
-        else:
-            self._preferences.set_coffee_enabled(user.id, enabled)
+        match kind:
+            case InvitationKind.LUNCH:
+                self._preferences.set_lunch_enabled(user.id, enabled)
+            case InvitationKind.COFFEE:
+                self._preferences.set_coffee_enabled(user.id, enabled)
+            case _:
+                assert_never(kind)
         return InvitationSettingReport(kind, enabled, updated=True)

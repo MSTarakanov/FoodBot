@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import assert_never
+
 from aiogram import Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
@@ -48,8 +50,13 @@ class CommandDispatcher:
         command = self._catalog.resolve(invocation.name)
         if command is None:
             return
-        if command.definition.flow_policy == CommandFlowPolicy.RESET_BEFORE_RUN:
-            await self._flow_runner.abort(message, bot, state)
+        match command.definition.flow_policy:
+            case CommandFlowPolicy.RESET_BEFORE_RUN:
+                await self._flow_runner.abort(message, bot, state)
+            case CommandFlowPolicy.MANAGED_BY_COMMAND:
+                pass
+            case _:
+                assert_never(command.definition.flow_policy)
 
         profile = telegram_profile_from_message(message)
         telegram_user_id = None if profile is None else profile.telegram_user_id

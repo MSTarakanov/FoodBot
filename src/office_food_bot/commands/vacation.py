@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import assert_never
+
 from office_food_bot.commanding.contracts import (
     CommandContext,
     RenderedCommand,
@@ -36,24 +39,47 @@ VACATION_DATE_FORMAT_ERROR_TEXT = (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class VacationInput:
+    raw_value: str
+
+
 class VacationRequestParser:
-    def __init__(self, vacation: VacationService) -> None:
-        self._vacation = vacation
 
     def parse(
         self,
         raw_arguments: str | None,
+    ) -> VacationInput:
+        return VacationInput(raw_arguments or "")
+
+
+class VacationRequestResolver:
+    def __init__(self, vacation: VacationService) -> None:
+        self._vacation = vacation
+
+    def resolve(
+        self,
+        value: VacationInput,
     ) -> Result[VacationRequest, InputErrorCode]:
         request = parse_vacation_request(
-            raw_arguments or "",
+            value.raw_value,
             self._vacation.local_today(),
         )
-        if request.kind == VacationRequestKind.INVALID:
-            return failure(InputErrorCode.INVALID_FORMAT)
-        return success(request)
+        match request.kind:
+            case VacationRequestKind.INVALID:
+                return failure(InputErrorCode.INVALID_FORMAT)
+            case (
+                VacationRequestKind.STATUS
+                | VacationRequestKind.CLEAR
+                | VacationRequestKind.SET
+            ):
+                return success(request)
+        assert_never(request.kind)
 
 
-class VacationCommand(RenderedCommand[VacationRequest, VacationReport]):
+class VacationCommand(
+    RenderedCommand[VacationInput, VacationRequest, VacationReport]
+):
     definition = CommandDefinition(
         "vacation",
         "показать статус отпуска",
@@ -90,9 +116,13 @@ class VacationCommand(RenderedCommand[VacationRequest, VacationReport]):
         super().__init__(
             messenger,
             common_error_renderer,
-            VacationRequestParser(vacation),
-            (TelegramIdentityValidator(),),
-            (ActiveUserValidator(active_users),),
+            VacationRequestParser(),
+            (
+                TelegramIdentityValidator(),
+                ActiveUserValidator(active_users),
+            ),
+            (),
+            VacationRequestResolver(vacation),
             render_vacation_report,
         )
         self._vacation = vacation

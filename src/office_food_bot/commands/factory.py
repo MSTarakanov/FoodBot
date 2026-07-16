@@ -35,6 +35,7 @@ from office_food_bot.flows.registration.factory import build_registration_flow
 from office_food_bot.flows.registration.requests import (
     RegisterOtherAdminValidator,
     RegisterRequestParser,
+    RegisterRequestResolver,
 )
 from office_food_bot.flows.runner import FlowRunner
 from office_food_bot.presenters.coffee import CoffeeCommandRenderer
@@ -87,6 +88,7 @@ def build_command_runtime(
                 RegisterRequestParser(),
                 (TelegramIdentityValidator(),),
                 (RegisterOtherAdminValidator(services.registration),),
+                RegisterRequestResolver(),
                 flow_runner,
                 registration_flow,
             ),

@@ -1127,7 +1127,7 @@ async def test_register_creates_pending_user_and_notifies_admin(tmp_path: Path) 
     assert pending_registrations[0].splitwise.email == "max@example.com"
 
 
-async def test_register_rejects_non_numeric_argument(tmp_path: Path) -> None:
+async def test_register_checks_other_user_access_before_id_format(tmp_path: Path) -> None:
     database = make_database(tmp_path)
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
@@ -1135,10 +1135,25 @@ async def test_register_rejects_non_numeric_argument(tmp_path: Path) -> None:
 
     await dispatcher.feed_update(bot, make_update("/register Максим"))
 
+    assert sent_texts(session) == ["Команда доступна только админам."]
+    assert UserRepository(database).get_by_telegram_id(42) is None
+
+
+async def test_register_rejects_non_numeric_argument_for_admin(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/register Максим", user_id=7, first_name="Admin"),
+    )
+
     assert sent_texts(session) == [
         "Telegram ID должен быть числом: /register 123456789"
     ]
-    assert UserRepository(database).get_by_telegram_id(42) is None
+    assert UserRepository(database).get_by_telegram_id(7) is None
 
 
 async def test_request_register_notifies_admin_with_register_command(tmp_path: Path) -> None:
@@ -2122,6 +2137,7 @@ async def test_eta_requires_minutes_argument(tmp_path: Path) -> None:
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
+    activate_user(database, 42, "Максим", "misha")
     await dispatcher.feed_update(bot, make_update("/eta", chat_type="group"))
 
     assert sent_texts(session) == [
@@ -2186,6 +2202,7 @@ async def test_meta_requires_minutes_argument(tmp_path: Path) -> None:
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
+    activate_user(database, 42, "Максим", "misha")
     await dispatcher.feed_update(bot, make_update("/meta", chat_type="group"))
 
     assert sent_texts(session) == [
@@ -3159,6 +3176,54 @@ async def test_coffee_without_arguments_shows_status_usage_and_meeting(
         "Приглашения на кофе: включены.\n\n"
         "Создать или перенести встречу: /coffee 15 или /coffee 16:30.\n\n"
         "Текущей встречи нет."
+    ]
+
+
+async def test_coffee_checks_registration_before_schedule_format(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/coffee not-a-time", chat_type="group"),
+    )
+
+    assert sent_texts(session) == ["Сначала зарегистрируйся: /register"]
+
+
+async def test_coffee_checks_schedule_scope_before_time_format(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/coffee not-a-time"))
+
+    assert sent_texts(session) == ["Команда доступна только в групповом чате."]
+
+
+async def test_coffee_validates_time_after_access(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/coffee not-a-time", chat_type="group"),
+    )
+
+    assert sent_texts(session) == [
+        "Не понял время. Напиши минуты или время сегодня: "
+        "/coffee 15 или /coffee 16:30."
     ]
 
 

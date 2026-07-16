@@ -5,14 +5,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
+from typing import assert_never
 from zoneinfo import ZoneInfo
 
+from office_food_bot.boolean_input import parse_toggle
 from office_food_bot.repositories import VacationRepository
 from office_food_bot.services.user_access import ActiveUserResolver
 from office_food_bot.vacation_models import VacationReport, VacationReportKind
 
 MAX_VACATION_DAYS = 366
-VACATION_OFF_ARGUMENTS = frozenset({"off"})
 _DAY_COUNT_PATTERN = re.compile(r"[+-]?\d+")
 _ISO_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
 _SHORT_DATE_PATTERN = re.compile(r"(\d{1,2})([./])(\d{1,2})(?:\2(\d{4}))?")
@@ -51,33 +52,34 @@ class VacationService:
     ) -> VacationReport:
         user = self._active_users.require_validated(telegram_user_id)
         today = self.local_today()
-        if request.kind == VacationRequestKind.STATUS:
-            vacation = self._vacations.get(user.id)
-            if vacation is not None and vacation.until_date >= today:
+        match request.kind:
+            case VacationRequestKind.STATUS:
+                vacation = self._vacations.get(user.id)
+                if vacation is not None and vacation.until_date >= today:
+                    return VacationReport(
+                        VacationReportKind.STATUS_ACTIVE,
+                        user.display_name,
+                        vacation.until_date,
+                    )
                 return VacationReport(
-                    VacationReportKind.STATUS_ACTIVE,
+                    VacationReportKind.STATUS_INACTIVE,
                     user.display_name,
-                    vacation.until_date,
                 )
-            return VacationReport(
-                VacationReportKind.STATUS_INACTIVE,
-                user.display_name,
-            )
-        if request.kind == VacationRequestKind.CLEAR:
-            self._vacations.clear(user.id)
-            return VacationReport(VacationReportKind.CLEARED, user.display_name)
-        if request.kind == VacationRequestKind.INVALID:
-            raise RuntimeError("Invalid vacation request reached service")
-
-        if request.until_date is None:
-            raise RuntimeError("Vacation set request has no end date")
-
-        self._vacations.set_until_date(user.id, request.until_date)
-        return VacationReport(
-            VacationReportKind.SET,
-            user.display_name,
-            request.until_date,
-        )
+            case VacationRequestKind.CLEAR:
+                self._vacations.clear(user.id)
+                return VacationReport(VacationReportKind.CLEARED, user.display_name)
+            case VacationRequestKind.SET:
+                if request.until_date is None:
+                    raise RuntimeError("Vacation set request has no end date")
+                self._vacations.set_until_date(user.id, request.until_date)
+                return VacationReport(
+                    VacationReportKind.SET,
+                    user.display_name,
+                    request.until_date,
+                )
+            case VacationRequestKind.INVALID:
+                raise RuntimeError("Invalid vacation request reached service")
+        assert_never(request.kind)
 
     def local_today(self) -> date:
         return self._clock().astimezone(self._timezone).date()
@@ -87,7 +89,7 @@ def parse_vacation_request(raw_argument: str, today: date) -> VacationRequest:
     argument = raw_argument.strip()
     if not argument:
         return VacationRequest(VacationRequestKind.STATUS)
-    if argument.casefold() in VACATION_OFF_ARGUMENTS:
+    if parse_toggle(argument) is False:
         return VacationRequest(VacationRequestKind.CLEAR)
     if _DAY_COUNT_PATTERN.fullmatch(argument):
         return _parse_day_count(argument, today)

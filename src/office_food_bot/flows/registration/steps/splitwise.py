@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import assert_never
 
 from office_food_bot.flows.contracts import (
     FlowContext,
@@ -63,11 +64,17 @@ class RegistrationSplitwiseStep(RegistrationStep[TextFlowInput]):
             return await self._continue(context, draft, None)
 
         result = await self._splitwise.find_member_by_email(required_text(value))
-        if result.kind == SplitwiseLookupKind.FOUND and result.member is not None:
-            return await self._continue(context, draft, result.member)
-        if result.kind == SplitwiseLookupKind.NOT_FOUND:
-            return StayOnStep(splitwise_not_found_view())
-        return StayOnStep(splitwise_unavailable_view())
+        match result.kind:
+            case SplitwiseLookupKind.FOUND:
+                if result.member is None:
+                    raise RuntimeError("Found Splitwise result has no member")
+                return await self._continue(context, draft, result.member)
+            case SplitwiseLookupKind.NOT_FOUND:
+                return StayOnStep(splitwise_not_found_view())
+            case SplitwiseLookupKind.UNAVAILABLE:
+                return StayOnStep(splitwise_unavailable_view())
+            case _:
+                assert_never(result.kind)
 
     async def _continue(
         self,

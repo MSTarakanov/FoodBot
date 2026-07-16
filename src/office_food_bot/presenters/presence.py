@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from typing import assert_never
 
 from office_food_bot.messaging import TextMessagePayload
 from office_food_bot.models import RegisteredUser
@@ -31,7 +32,7 @@ class PresenceReplySpec:
 
 
 def render_presence_report(report: PresenceReport) -> TextMessagePayload:
-    spec = _REPLY_SPECS[report.kind]
+    spec = _reply_spec(report.kind)
     if report.end is None:
         text = _format_single_eta_reply(
             report.user,
@@ -114,13 +115,16 @@ def _delivery_eta_subject(_user: RegisteredUser) -> str:
     return "Ожидаемое время прибытия доставки"
 
 
-_REPLY_SPECS = {
-    PresenceKind.META: PresenceReplySpec(
-        single_today_prefix=_meta_single_today_prefix,
-        subject=_meta_subject,
-    ),
-    PresenceKind.DELIVERY_ETA: PresenceReplySpec(
-        single_today_prefix=_delivery_eta_single_today_prefix,
-        subject=_delivery_eta_subject,
-    ),
-}
+def _reply_spec(kind: PresenceKind) -> PresenceReplySpec:
+    match kind:
+        case PresenceKind.META:
+            return PresenceReplySpec(
+                single_today_prefix=_meta_single_today_prefix,
+                subject=_meta_subject,
+            )
+        case PresenceKind.DELIVERY_ETA:
+            return PresenceReplySpec(
+                single_today_prefix=_delivery_eta_single_today_prefix,
+                subject=_delivery_eta_subject,
+            )
+    assert_never(kind)

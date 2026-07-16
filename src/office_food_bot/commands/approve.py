@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import assert_never
 
 from office_food_bot.commanding.contracts import (
     CommandContext,
@@ -28,6 +29,11 @@ from office_food_bot.services.registration import RegistrationService
 
 
 @dataclass(frozen=True, slots=True)
+class ApproveInput:
+    raw_telegram_user_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class ApproveRequest:
     telegram_user_id: int
 
@@ -36,8 +42,16 @@ class ApproveRequestParser:
     def parse(
         self,
         raw_arguments: str | None,
+    ) -> ApproveInput:
+        return ApproveInput((raw_arguments or "").strip())
+
+
+class ApproveRequestResolver:
+    def resolve(
+        self,
+        value: ApproveInput,
     ) -> Result[ApproveRequest, InputErrorCode]:
-        normalized = (raw_arguments or "").strip()
+        normalized = value.raw_telegram_user_id
         if not normalized:
             return failure(InputErrorCode.MISSING)
         if not normalized.isdecimal():
@@ -48,7 +62,7 @@ class ApproveRequestParser:
         return success(ApproveRequest(telegram_user_id))
 
 
-class ApproveCommand(EffectCommand[ApproveRequest]):
+class ApproveCommand(EffectCommand[ApproveInput, ApproveRequest]):
     definition = CommandDefinition(
         "approve",
         "подтвердить регистрацию",
@@ -80,6 +94,7 @@ class ApproveCommand(EffectCommand[ApproveRequest]):
             ApproveRequestParser(),
             (TelegramIdentityValidator(),),
             (),
+            ApproveRequestResolver(),
         )
         self._registration = registration
 
@@ -97,20 +112,25 @@ class ApproveCommand(EffectCommand[ApproveRequest]):
             approver.telegram_user_id,
             request.telegram_user_id,
         )
-        if result.kind == ApprovalKind.FORBIDDEN:
-            await self._reply_common_error(context, CommonErrorCode.ADMIN_REQUIRED)
-            return
-
-        if result.kind == ApprovalKind.NOT_FOUND:
-            await self._messenger.reply(
-                context.message,
-                f"Не нашел заявку для Telegram ID {request.telegram_user_id}.",
-            )
-            return
-
-        approved_user = result.user
-        if approved_user is None:
-            raise RuntimeError("Approved user is unexpectedly missing")
+        match result.kind:
+            case ApprovalKind.FORBIDDEN:
+                await self._reply_common_error(
+                    context,
+                    CommonErrorCode.ADMIN_REQUIRED,
+                )
+                return
+            case ApprovalKind.NOT_FOUND:
+                await self._messenger.reply(
+                    context.message,
+                    f"Не нашел заявку для Telegram ID {request.telegram_user_id}.",
+                )
+                return
+            case ApprovalKind.APPROVED:
+                approved_user = result.user
+                if approved_user is None:
+                    raise RuntimeError("Approved user is unexpectedly missing")
+            case _:
+                assert_never(result.kind)
 
         await self._messenger.reply(
             context.message,

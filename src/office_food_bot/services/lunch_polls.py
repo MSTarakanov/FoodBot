@@ -4,6 +4,7 @@ import calendar
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
+from typing import assert_never
 
 from office_food_bot.models import PollKind
 from office_food_bot.poll_options import PollOption
@@ -129,9 +130,13 @@ class LunchPollCatalog:
         selection: LunchOfficeSelection,
         lunch_date: date,
     ) -> OfficeLunchPolls:
-        resolved_selection = selection
-        if selection == LunchOfficeSelection.AUTOMATIC:
-            resolved_selection = self._selection_for_date(lunch_date)
+        match selection:
+            case LunchOfficeSelection.AUTOMATIC:
+                resolved_selection = self._selection_for_date(lunch_date)
+            case LunchOfficeSelection.ROSE | LunchOfficeSelection.SKYLINE:
+                resolved_selection = selection
+            case _:
+                assert_never(selection)
         return _OFFICE_LUNCH_POLLS[resolved_selection]
 
     def _selection_for_date(self, lunch_date: date) -> LunchOfficeSelection:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import assert_never
 
 from office_food_bot.commanding.errors.models import RegistrationErrorCode
 from office_food_bot.models import (
@@ -162,13 +163,18 @@ class RegistrationService:
         telegram_user_id: int,
     ) -> Result[None, RegistrationErrorCode]:
         user = self._users.get_by_telegram_id(telegram_user_id)
-        if user is None or user.status == UserStatus.ABANDONED:
+        if user is None:
             return success(None)
-        if user.status == UserStatus.PENDING:
-            return failure(RegistrationErrorCode.REQUEST_ALREADY_PENDING)
-        if user.status == UserStatus.ACTIVE:
-            return failure(RegistrationErrorCode.REQUEST_ALREADY_ACTIVE)
-        return failure(RegistrationErrorCode.REQUEST_UNAVAILABLE)
+        match user.status:
+            case UserStatus.ABANDONED:
+                return success(None)
+            case UserStatus.PENDING:
+                return failure(RegistrationErrorCode.REQUEST_ALREADY_PENDING)
+            case UserStatus.ACTIVE:
+                return failure(RegistrationErrorCode.REQUEST_ALREADY_ACTIVE)
+            case UserStatus.REJECTED | UserStatus.DISABLED:
+                return failure(RegistrationErrorCode.REQUEST_UNAVAILABLE)
+        assert_never(user.status)
 
     def should_ask_initial_preferences(self, telegram_user_id: int) -> bool:
         user = self._users.get_by_telegram_id(telegram_user_id)
@@ -244,11 +250,14 @@ def _telegram_profile_from_known_account(
 
 
 def _registration_kind_for(user: RegisteredUser) -> RegistrationKind:
-    if user.status == UserStatus.ACTIVE:
-        return RegistrationKind.ALREADY_ACTIVE
-    if user.status == UserStatus.PENDING:
-        return RegistrationKind.ALREADY_PENDING
-    return RegistrationKind.BLOCKED
+    match user.status:
+        case UserStatus.ACTIVE:
+            return RegistrationKind.ALREADY_ACTIVE
+        case UserStatus.PENDING:
+            return RegistrationKind.ALREADY_PENDING
+        case UserStatus.REJECTED | UserStatus.DISABLED | UserStatus.ABANDONED:
+            return RegistrationKind.BLOCKED
+    assert_never(user.status)
 
 
 def _clean_display_name(profile: TelegramProfile, raw_display_name: str) -> str:

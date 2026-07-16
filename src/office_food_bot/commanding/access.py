@@ -158,13 +158,21 @@ class CommandAccessService:
         chat_type: str,
         telegram_user_id: int | None,
     ) -> CommandAccessDenialReason | None:
-        if scope == CommandScope.PRIVATE and chat_type != PRIVATE_CHAT_TYPE:
-            return CommandAccessDenialReason.PRIVATE_ONLY
-        if scope == CommandScope.GROUP and not self.can_run_group_command_in_chat(
-            chat_type, telegram_user_id
-        ):
-            return CommandAccessDenialReason.GROUP_ONLY
-        return None
+        match scope:
+            case CommandScope.ANY:
+                return None
+            case CommandScope.PRIVATE:
+                if chat_type != PRIVATE_CHAT_TYPE:
+                    return CommandAccessDenialReason.PRIVATE_ONLY
+                return None
+            case CommandScope.GROUP:
+                if not self.can_run_group_command_in_chat(
+                    chat_type,
+                    telegram_user_id,
+                ):
+                    return CommandAccessDenialReason.GROUP_ONLY
+                return None
+        assert_never(scope)
 
     def _help_entries(
         self,

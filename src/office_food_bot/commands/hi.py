@@ -5,6 +5,7 @@ import logging
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
+    IdentityResolver,
     NoArguments,
     NoArgumentsParser,
 )
@@ -17,7 +18,7 @@ from office_food_bot.services.telegram_interactions import TelegramInteractionSe
 logger = logging.getLogger(__name__)
 
 
-class HiCommand(EffectCommand[NoArguments]):
+class HiCommand(EffectCommand[NoArguments, NoArguments]):
     definition = CommandDefinition(
         "hi",
         "проверить, что бот на месте",
@@ -33,16 +34,22 @@ class HiCommand(EffectCommand[NoArguments]):
         interactions: TelegramInteractionService,
         bot_username: str,
     ) -> None:
-        super().__init__(messenger, common_error_renderer, NoArgumentsParser(), (), ())
+        super().__init__(
+            messenger,
+            common_error_renderer,
+            NoArgumentsParser(),
+            (),
+            (),
+            IdentityResolver(),
+        )
         self._interactions = interactions
         self._bot_username = bot_username
 
     async def execute_effect(
         self,
         context: CommandContext,
-        request: NoArguments,
+        _request: NoArguments,
     ) -> None:
-        del request
         if context.profile is not None:
             self._interactions.remember(context.profile)
         logger.warning(

@@ -8,7 +8,10 @@ import pytest
 from office_food_bot.commanding.errors.models import (
     InputErrorCode,
 )
-from office_food_bot.commands.vacation import VacationRequestParser
+from office_food_bot.commands.vacation import (
+    VacationRequestParser,
+    VacationRequestResolver,
+)
 from office_food_bot.database import Database
 from office_food_bot.models import TelegramProfile
 from office_food_bot.presenters.vacation import render_vacation_report
@@ -59,7 +62,9 @@ def parsed_vacation_request(
     service: VacationService,
     raw_argument: str,
 ) -> VacationRequest:
-    return VacationRequestParser(service).parse(raw_argument).fold(
+    return VacationRequestResolver(service).resolve(
+        VacationRequestParser().parse(raw_argument)
+    ).fold(
         lambda request: request,
         lambda code: pytest.fail(f"Unexpected vacation parse error: {code}"),
     )
@@ -69,8 +74,10 @@ def vacation_parse_error(
     service: VacationService,
     raw_argument: str,
 ) -> InputErrorCode:
-    result: Result[VacationRequest, InputErrorCode] = VacationRequestParser(service).parse(
-        raw_argument
+    result: Result[VacationRequest, InputErrorCode] = VacationRequestResolver(
+        service
+    ).resolve(
+        VacationRequestParser().parse(raw_argument)
     )
     return result.fold(
         lambda request: pytest.fail(f"Unexpected vacation request: {request}"),

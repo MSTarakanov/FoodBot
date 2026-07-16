@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from office_food_bot.boolean_input import parse_toggle
 from office_food_bot.commanding.access import CommandAccessService
 from office_food_bot.commanding.contracts import (
     CommandContext,
@@ -43,7 +44,25 @@ INVALID_LUNCH_OFFICE_MESSAGE = (
 )
 
 
+class LunchInput:
+    pass
+
+
 @dataclass(frozen=True, slots=True)
+class LunchDefaultInput(LunchInput):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class LunchToggleInput(LunchInput):
+    enabled: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LunchPublishInput(LunchInput):
+    raw_office: str
+
+
 class LunchRequest:
     pass
 
@@ -67,16 +86,33 @@ class LunchRequestParser:
     def parse(
         self,
         raw_arguments: str | None,
-    ) -> Result[LunchRequest, InputErrorCode]:
-        argument = (raw_arguments or "").strip().casefold()
+    ) -> LunchInput:
+        argument = (raw_arguments or "").strip()
         if not argument:
-            return success(LunchDefaultRequest())
-        if argument in {"on", "off"}:
-            return success(LunchToggleRequest(argument == "on"))
-        office_selection = parse_lunch_office_selection(argument)
-        if office_selection is None:
-            return failure(InputErrorCode.INVALID_CHOICE)
-        return success(LunchPublishRequest(office_selection))
+            return LunchDefaultInput()
+        enabled = parse_toggle(argument)
+        if enabled is not None:
+            return LunchToggleInput(enabled)
+        return LunchPublishInput(argument)
+
+
+class LunchRequestResolver:
+    def resolve(
+        self,
+        value: LunchInput,
+    ) -> Result[LunchRequest, InputErrorCode]:
+        match value:
+            case LunchDefaultInput():
+                return success(LunchDefaultRequest())
+            case LunchToggleInput():
+                return success(LunchToggleRequest(value.enabled))
+            case LunchPublishInput():
+                office_selection = parse_lunch_office_selection(value.raw_office)
+                if office_selection is None:
+                    return failure(InputErrorCode.INVALID_CHOICE)
+                return success(LunchPublishRequest(office_selection))
+            case _:
+                raise RuntimeError(f"Unsupported lunch input: {type(value).__name__}")
 
 
 class LunchPublishValidator:
@@ -89,14 +125,14 @@ class LunchPublishValidator:
     def validate(
         self,
         context: CommandContext,
-        request: LunchRequest,
+        request: LunchInput,
     ) -> Result[None, CommonErrorCode]:
         match request:
-            case LunchToggleRequest():
+            case LunchToggleInput():
                 return success(None)
-            case LunchDefaultRequest():
+            case LunchDefaultInput():
                 return success(None)
-            case LunchPublishRequest():
+            case LunchPublishInput():
                 profile = require_telegram_profile(context)
                 if not self._access.can_run_group_command_in_chat(
                     str(context.message.chat.type),
@@ -110,7 +146,7 @@ class LunchPublishValidator:
                 )
 
 
-class LunchCommand(EffectCommand[LunchRequest]):
+class LunchCommand(EffectCommand[LunchInput, LunchRequest]):
     definition = CommandDefinition(
         "lunch",
         "создать опрос про обед",
@@ -160,11 +196,12 @@ class LunchCommand(EffectCommand[LunchRequest]):
             messenger,
             common_error_renderer,
             LunchRequestParser(),
-            (TelegramIdentityValidator(),),
             (
-                LunchPublishValidator(access),
+                TelegramIdentityValidator(),
                 ActiveUserValidator(active_users),
             ),
+            (LunchPublishValidator(access),),
+            LunchRequestResolver(),
         )
         self._access = access
         self._invitations = invitations

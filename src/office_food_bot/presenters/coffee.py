@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 from html import escape
 from math import ceil
+from typing import assert_never
 from zoneinfo import ZoneInfo
 
 from office_food_bot.coffee_models import (
@@ -87,13 +88,14 @@ class CoffeeCommandRenderer:
         return "\n".join(lines)
 
     def participation(self, report: CoffeeParticipationReport) -> str | None:
-        if report.kind == CoffeeParticipationKind.JOINED:
-            return "Ты идешь на кофе."
-        if report.kind == CoffeeParticipationKind.LEFT:
-            return "Ты больше не идешь на кофе."
-        if report.kind == CoffeeParticipationKind.UNCHANGED:
-            return None
-        raise ValueError(f"Unsupported coffee participation: {report.kind}")
+        match report.kind:
+            case CoffeeParticipationKind.JOINED:
+                return "Ты идешь на кофе."
+            case CoffeeParticipationKind.LEFT:
+                return "Ты больше не идешь на кофе."
+            case CoffeeParticipationKind.UNCHANGED:
+                return None
+        assert_never(report.kind)
 
 
 def coffee_countdown_text(scheduled_at: datetime, now: datetime) -> str:

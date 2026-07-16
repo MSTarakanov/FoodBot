@@ -11,7 +11,20 @@ from office_food_bot.result import Result, failure, success
 from office_food_bot.services.registration import RegistrationService
 
 
+class RegisterInput:
+    pass
+
+
 @dataclass(frozen=True, slots=True)
+class RegisterSelfInput(RegisterInput):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class RegisterOtherInput(RegisterInput):
+    raw_telegram_user_id: str
+
+
 class RegisterRequest:
     pass
 
@@ -30,15 +43,31 @@ class RegisterRequestParser:
     def parse(
         self,
         raw_arguments: str | None,
-    ) -> Result[RegisterRequest, InputErrorCode]:
+    ) -> RegisterInput:
         normalized = (raw_arguments or "").strip()
         if not normalized:
-            return success(RegisterSelfRequest())
-        if normalized.isdecimal():
-            telegram_user_id = int(normalized)
-            if telegram_user_id > 0:
-                return success(RegisterOtherRequest(telegram_user_id))
-        return failure(InputErrorCode.INVALID_FORMAT)
+            return RegisterSelfInput()
+        return RegisterOtherInput(normalized)
+
+
+class RegisterRequestResolver:
+    def resolve(
+        self,
+        value: RegisterInput,
+    ) -> Result[RegisterRequest, InputErrorCode]:
+        match value:
+            case RegisterSelfInput():
+                return success(RegisterSelfRequest())
+            case RegisterOtherInput():
+                if value.raw_telegram_user_id.isdecimal():
+                    telegram_user_id = int(value.raw_telegram_user_id)
+                    if telegram_user_id > 0:
+                        return success(RegisterOtherRequest(telegram_user_id))
+                return failure(InputErrorCode.INVALID_FORMAT)
+            case _:
+                raise RuntimeError(
+                    f"Unsupported registration input: {type(value).__name__}"
+                )
 
 
 class RegisterOtherAdminValidator:
@@ -48,12 +77,12 @@ class RegisterOtherAdminValidator:
     def validate(
         self,
         context: CommandContext,
-        request: RegisterRequest,
+        request: RegisterInput,
     ) -> Result[None, CommonErrorCode]:
         match request:
-            case RegisterSelfRequest():
+            case RegisterSelfInput():
                 return success(None)
-            case RegisterOtherRequest():
+            case RegisterOtherInput():
                 profile = context.profile
                 if profile is None:
                     return failure(CommonErrorCode.MISSING_TELEGRAM_IDENTITY)

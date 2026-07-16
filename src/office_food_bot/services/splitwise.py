@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, assert_never
 
 import httpx
 
@@ -95,8 +95,13 @@ class SplitwiseService:
             return SplitwiseLookupResult(SplitwiseLookupKind.UNAVAILABLE)
 
         result = await self.group_members()
-        if result.kind == SplitwiseGroupKind.UNAVAILABLE:
-            return SplitwiseLookupResult(SplitwiseLookupKind.UNAVAILABLE)
+        match result.kind:
+            case SplitwiseGroupKind.UNAVAILABLE:
+                return SplitwiseLookupResult(SplitwiseLookupKind.UNAVAILABLE)
+            case SplitwiseGroupKind.AVAILABLE:
+                pass
+            case _:
+                assert_never(result.kind)
 
         for member in result.members:
             if normalize_email(member.email) == email:

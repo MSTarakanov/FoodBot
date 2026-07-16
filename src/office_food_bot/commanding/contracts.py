@@ -29,10 +29,17 @@ class CommandContext:
     invocation: ParsedCommand
 
 
-class Parser[RequestT](Protocol):
+class Parser[InputT](Protocol):
     def parse(
         self,
         raw_arguments: str | None,
+    ) -> InputT: ...
+
+
+class Resolver[InputT, RequestT](Protocol):
+    def resolve(
+        self,
+        value: InputT,
     ) -> Result[RequestT, InputErrorCode]: ...
 
 
@@ -61,16 +68,17 @@ class Command(Protocol):
     async def handle(self, context: CommandContext) -> None: ...
 
 
-class ParsedRequestCommand[RequestT](ABC):
+class ParsedRequestCommand[InputT, RequestT](ABC):
     definition: CommandDefinition
 
     def __init__(
         self,
         messenger: BotMessenger,
         common_error_renderer: ErrorRenderer[CommonErrorCode],
-        parser: Parser[RequestT],
+        parser: Parser[InputT],
         context_validators: tuple[ContextValidator, ...],
-        validators: tuple[Validator[RequestT], ...],
+        validators: tuple[Validator[InputT], ...],
+        resolver: Resolver[InputT, RequestT],
     ) -> None:
         self._messenger = messenger
         self._common_error_renderer = common_error_renderer
@@ -78,6 +86,7 @@ class ParsedRequestCommand[RequestT](ABC):
         self._parser = parser
         self._context_validators = context_validators
         self._validators = validators
+        self._resolver = resolver
 
     @final
     async def handle(self, context: CommandContext) -> None:
@@ -91,19 +100,22 @@ class ParsedRequestCommand[RequestT](ABC):
             context,
             self._context_validators,
         ).map_error(self._common_error_renderer.render)
-        parsed_request = context_validation.and_then(
-            lambda _: self._parser.parse(
-                context.invocation.arguments
-            ).map_error(self._input_error_renderer.render)
+        parsed_input = context_validation.map(
+            lambda _: self._parser.parse(context.invocation.arguments)
         )
-        return parsed_request.and_then(
-            lambda request: _validate_request(
+        validated_input = parsed_input.and_then(
+            lambda value: _validate_request(
                 context,
-                request,
+                value,
                 self._validators,
             )
             .map_error(self._common_error_renderer.render)
-            .map(lambda _: request)
+            .map(lambda _: value)
+        )
+        return validated_input.and_then(
+            lambda value: self._resolver.resolve(value).map_error(
+                self._input_error_renderer.render
+            )
         )
 
     async def _reply_error(self, context: CommandContext, text: str) -> None:
@@ -127,14 +139,18 @@ class ParsedRequestCommand[RequestT](ABC):
     ) -> None: ...
 
 
-class RenderedCommand[RequestT, ModelT](ParsedRequestCommand[RequestT], ABC):
+class RenderedCommand[InputT, RequestT, ModelT](
+    ParsedRequestCommand[InputT, RequestT],
+    ABC,
+):
     def __init__(
         self,
         messenger: BotMessenger,
         common_error_renderer: ErrorRenderer[CommonErrorCode],
-        parser: Parser[RequestT],
+        parser: Parser[InputT],
         context_validators: tuple[ContextValidator, ...],
-        validators: tuple[Validator[RequestT], ...],
+        validators: tuple[Validator[InputT], ...],
+        resolver: Resolver[InputT, RequestT],
         renderer: Renderer[ModelT],
     ) -> None:
         super().__init__(
@@ -143,6 +159,7 @@ class RenderedCommand[RequestT, ModelT](ParsedRequestCommand[RequestT], ABC):
             parser,
             context_validators,
             validators,
+            resolver,
         )
         self._renderer = renderer
 
@@ -162,17 +179,18 @@ class RenderedCommand[RequestT, ModelT](ParsedRequestCommand[RequestT], ABC):
     async def execute(self, context: CommandContext, request: RequestT) -> ModelT: ...
 
 
-class ResultRenderedCommand[RequestT, ModelT, ErrorT](
-    ParsedRequestCommand[RequestT],
+class ResultRenderedCommand[InputT, RequestT, ModelT, ErrorT](
+    ParsedRequestCommand[InputT, RequestT],
     ABC,
 ):
     def __init__(
         self,
         messenger: BotMessenger,
         common_error_renderer: ErrorRenderer[CommonErrorCode],
-        parser: Parser[RequestT],
+        parser: Parser[InputT],
         context_validators: tuple[ContextValidator, ...],
-        validators: tuple[Validator[RequestT], ...],
+        validators: tuple[Validator[InputT], ...],
+        resolver: Resolver[InputT, RequestT],
         renderer: Renderer[ModelT],
         error_renderer: ErrorRenderer[ErrorT],
     ) -> None:
@@ -182,6 +200,7 @@ class ResultRenderedCommand[RequestT, ModelT, ErrorT](
             parser,
             context_validators,
             validators,
+            resolver,
         )
         self._renderer = renderer
         self._error_renderer = error_renderer
@@ -207,7 +226,7 @@ class ResultRenderedCommand[RequestT, ModelT, ErrorT](
     ) -> Result[ModelT, ErrorT]: ...
 
 
-class EffectCommand[RequestT](ParsedRequestCommand[RequestT], ABC):
+class EffectCommand[InputT, RequestT](ParsedRequestCommand[InputT, RequestT], ABC):
     @final
     async def _handle_validated(
         self,
@@ -220,7 +239,7 @@ class EffectCommand[RequestT](ParsedRequestCommand[RequestT], ABC):
     async def execute_effect(self, context: CommandContext, request: RequestT) -> None: ...
 
 
-class FlowCommand[RequestT](ParsedRequestCommand[RequestT], ABC):
+class FlowCommand[InputT, RequestT](ParsedRequestCommand[InputT, RequestT], ABC):
     @final
     async def _handle_validated(
         self,
@@ -242,8 +261,16 @@ class NoArgumentsParser:
     def parse(
         self,
         raw_arguments: str | None,
-    ) -> Result[NoArguments, InputErrorCode]:
-        return success(NoArguments())
+    ) -> NoArguments:
+        return NoArguments()
+
+
+class IdentityResolver[RequestT]:
+    def resolve(
+        self,
+        value: RequestT,
+    ) -> Result[RequestT, InputErrorCode]:
+        return success(value)
 
 
 def _validate_context(

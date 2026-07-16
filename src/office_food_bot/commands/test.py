@@ -5,13 +5,13 @@ from dataclasses import dataclass
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
+    IdentityResolver,
 )
 from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
-from office_food_bot.commanding.errors.models import CommonErrorCode, InputErrorCode
+from office_food_bot.commanding.errors.models import CommonErrorCode
 from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.previews.catalog import MessagePreviewCatalog
-from office_food_bot.result import Result, success
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,11 +23,11 @@ class PreviewRequestParser:
     def parse(
         self,
         raw_arguments: str | None,
-    ) -> Result[PreviewRequest, InputErrorCode]:
-        return success(PreviewRequest((raw_arguments or "").strip().casefold()))
+    ) -> PreviewRequest:
+        return PreviewRequest((raw_arguments or "").strip().casefold())
 
 
-class TestCommand(EffectCommand[PreviewRequest]):
+class TestCommand(EffectCommand[PreviewRequest, PreviewRequest]):
     definition = CommandDefinition(
         "test",
         "отправить тестовое сообщение",
@@ -50,6 +50,7 @@ class TestCommand(EffectCommand[PreviewRequest]):
             PreviewRequestParser(),
             (),
             (),
+            IdentityResolver(),
         )
         self._previews = previews
 

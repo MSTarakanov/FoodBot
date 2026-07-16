@@ -3,6 +3,7 @@ from __future__ import annotations
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
+    IdentityResolver,
     NoArguments,
     NoArgumentsParser,
 )
@@ -13,7 +14,7 @@ from office_food_bot.messaging import BotMessenger
 from office_food_bot.services.lunch_auto import LunchAutoChatService
 
 
-class LunchAutoStatusCommand(EffectCommand[NoArguments]):
+class LunchAutoStatusCommand(EffectCommand[NoArguments, NoArguments]):
     definition = CommandDefinition(
         "lunch_auto_status",
         "показать статус авто-ланча",
@@ -29,15 +30,21 @@ class LunchAutoStatusCommand(EffectCommand[NoArguments]):
         common_error_renderer: ErrorRenderer[CommonErrorCode],
         lunch_auto_chats: LunchAutoChatService,
     ) -> None:
-        super().__init__(messenger, common_error_renderer, NoArgumentsParser(), (), ())
+        super().__init__(
+            messenger,
+            common_error_renderer,
+            NoArgumentsParser(),
+            (),
+            (),
+            IdentityResolver(),
+        )
         self._lunch_auto_chats = lunch_auto_chats
 
     async def execute_effect(
         self,
         context: CommandContext,
-        request: NoArguments,
+        _request: NoArguments,
     ) -> None:
-        del request
         await self._messenger.reply(
             context.message,
             (

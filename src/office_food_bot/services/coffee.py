@@ -6,6 +6,7 @@ import re
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, time, timedelta
 from math import ceil
+from typing import assert_never
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot
@@ -163,20 +164,27 @@ class CoffeeService:
                 for participant in self._sessions.list_participants(current.id)
             }
             was_participant = user.id in participant_ids
-            if callback.action == CoffeeParticipantAction.JOIN:
-                if was_participant:
-                    return success(
-                        CoffeeParticipationReport(CoffeeParticipationKind.UNCHANGED)
-                    )
-                self._sessions.join(current.id, user.id)
-                result_kind = CoffeeParticipationKind.JOINED
-            else:
-                if not was_participant:
-                    return success(
-                        CoffeeParticipationReport(CoffeeParticipationKind.UNCHANGED)
-                    )
-                self._sessions.leave(current.id, user.id)
-                result_kind = CoffeeParticipationKind.LEFT
+            match callback.action:
+                case CoffeeParticipantAction.JOIN:
+                    if was_participant:
+                        return success(
+                            CoffeeParticipationReport(
+                                CoffeeParticipationKind.UNCHANGED
+                            )
+                        )
+                    self._sessions.join(current.id, user.id)
+                    result_kind = CoffeeParticipationKind.JOINED
+                case CoffeeParticipantAction.LEAVE:
+                    if not was_participant:
+                        return success(
+                            CoffeeParticipationReport(
+                                CoffeeParticipationKind.UNCHANGED
+                            )
+                        )
+                    self._sessions.leave(current.id, user.id)
+                    result_kind = CoffeeParticipationKind.LEFT
+                case _:
+                    assert_never(callback.action)
             try:
                 updated = await self._update_card(bot, current)
                 await self._replace_pin(bot, current, updated)

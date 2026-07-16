@@ -7,6 +7,7 @@ from office_food_bot.commanding.catalog import CommandCatalogProvider
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
+    IdentityResolver,
     NoArguments,
     NoArgumentsParser,
 )
@@ -17,7 +18,7 @@ from office_food_bot.messaging import BotMessenger
 from office_food_bot.presenters.help import HELP_RENDERER
 
 
-class HelpCommand(EffectCommand[NoArguments]):
+class HelpCommand(EffectCommand[NoArguments, NoArguments]):
     definition = CommandDefinition(
         "help",
         "показать список команд",
@@ -33,16 +34,22 @@ class HelpCommand(EffectCommand[NoArguments]):
         access: CommandAccessService,
         catalog: CommandCatalogProvider,
     ) -> None:
-        super().__init__(messenger, common_error_renderer, NoArgumentsParser(), (), ())
+        super().__init__(
+            messenger,
+            common_error_renderer,
+            NoArgumentsParser(),
+            (),
+            (),
+            IdentityResolver(),
+        )
         self._access = access
         self._catalog = catalog
 
     async def execute_effect(
         self,
         context: CommandContext,
-        request: NoArguments,
+        _request: NoArguments,
     ) -> None:
-        del request
         telegram_user_id = None
         if context.profile is not None:
             telegram_user_id = context.profile.telegram_user_id

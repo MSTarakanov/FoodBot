@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 from enum import StrEnum
+from typing import assert_never
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot
@@ -83,10 +84,18 @@ class LunchPollPublisher:
         mode: CommandExecutionMode,
         office_selection: LunchOfficeSelection,
     ) -> LunchPublishKind:
+        match mode:
+            case CommandExecutionMode.MANUAL:
+                is_automatic = False
+            case CommandExecutionMode.AUTOMATIC:
+                is_automatic = True
+            case _:
+                assert_never(mode)
+
         today = self._clock().astimezone(self._timezone).date()
         polls = self._poll_catalog.select(office_selection, today)
         active_users = self._active_users_available_for_lunch()
-        if not active_users and mode == CommandExecutionMode.AUTOMATIC:
+        if not active_users and is_automatic:
             return LunchPublishKind.SKIPPED_NO_INVITEES
 
         await self._messenger.send(
@@ -100,7 +109,7 @@ class LunchPollPublisher:
             polls.lunch,
             today,
         )
-        if mode == CommandExecutionMode.AUTOMATIC:
+        if is_automatic:
             await self._lunch_pins.replace_pin(
                 bot,
                 chat_id,

@@ -5,6 +5,7 @@ from office_food_bot.commanding.contracts import (
     ContextValidator,
     FlowCommand,
     Parser,
+    Resolver,
     Validator,
 )
 from office_food_bot.commanding.definition import (
@@ -16,12 +17,12 @@ from office_food_bot.commanding.definition import (
 from office_food_bot.commanding.errors.models import CommonErrorCode, InputErrorCode
 from office_food_bot.commanding.errors.rendering import ErrorRenderer
 from office_food_bot.flows.registration.flow import RegistrationFlow
-from office_food_bot.flows.registration.requests import RegisterRequest
+from office_food_bot.flows.registration.requests import RegisterInput, RegisterRequest
 from office_food_bot.flows.runner import FlowRunner
 from office_food_bot.messaging import BotMessenger
 
 
-class RegisterCommand(FlowCommand[RegisterRequest]):
+class RegisterCommand(FlowCommand[RegisterInput, RegisterRequest]):
     definition = CommandDefinition(
         "register",
         "пройти регистрацию",
@@ -40,9 +41,10 @@ class RegisterCommand(FlowCommand[RegisterRequest]):
         self,
         messenger: BotMessenger,
         common_error_renderer: ErrorRenderer[CommonErrorCode],
-        parser: Parser[RegisterRequest],
+        parser: Parser[RegisterInput],
         context_validators: tuple[ContextValidator, ...],
-        validators: tuple[Validator[RegisterRequest], ...],
+        validators: tuple[Validator[RegisterInput], ...],
+        resolver: Resolver[RegisterInput, RegisterRequest],
         runner: FlowRunner,
         flow: RegistrationFlow,
     ) -> None:
@@ -52,6 +54,7 @@ class RegisterCommand(FlowCommand[RegisterRequest]):
             parser,
             context_validators,
             validators,
+            resolver,
         )
         self._runner = runner
         self._flow = flow

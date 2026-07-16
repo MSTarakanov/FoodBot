@@ -5,13 +5,12 @@ from enum import StrEnum
 
 from aiogram.types import Message
 
+from office_food_bot.boolean_input import parse_confirmation
 from office_food_bot.flows.contracts import FlowContext
 from office_food_bot.flows.registration.draft import RegistrationDraft
 from office_food_bot.result import Result, failure, success
 
 SPLITWISE_SKIP_ANSWERS = frozenset({"пропустить", "skip"})
-YES_ANSWERS = frozenset({"да", "yes", "y"})
-NO_ANSWERS = frozenset({"нет", "no", "n"})
 
 
 class RegistrationStepErrorCode(StrEnum):
@@ -66,7 +65,7 @@ class LunchPreferenceValidator:
         draft: RegistrationDraft,
         value: TextFlowInput,
     ) -> Result[None, RegistrationStepErrorCode]:
-        return _validate_yes_no(
+        return _validate_confirmation(
             value,
             RegistrationStepErrorCode.LUNCH_CHOICE_REQUIRED,
         )
@@ -79,7 +78,7 @@ class CoffeePreferenceValidator:
         draft: RegistrationDraft,
         value: TextFlowInput,
     ) -> Result[None, RegistrationStepErrorCode]:
-        return _validate_yes_no(
+        return _validate_confirmation(
             value,
             RegistrationStepErrorCode.COFFEE_CHOICE_REQUIRED,
         )
@@ -92,7 +91,7 @@ class ReregistrationDecisionValidator:
         draft: RegistrationDraft,
         value: TextFlowInput,
     ) -> Result[None, RegistrationStepErrorCode]:
-        return _validate_yes_no(
+        return _validate_confirmation(
             value,
             RegistrationStepErrorCode.REREGISTRATION_CHOICE_REQUIRED,
         )
@@ -102,13 +101,11 @@ def is_splitwise_skip(value: TextFlowInput) -> bool:
     return _normalized(value) in SPLITWISE_SKIP_ANSWERS
 
 
-def yes_no_value(value: TextFlowInput) -> bool:
-    normalized = _normalized(value)
-    if normalized in YES_ANSWERS:
-        return True
-    if normalized in NO_ANSWERS:
-        return False
-    raise RuntimeError("Yes/no input was not validated")
+def confirmation_value(value: TextFlowInput) -> bool:
+    confirmed = parse_confirmation(value.text or "")
+    if confirmed is None:
+        raise RuntimeError("Confirmation input was not validated")
+    return confirmed
 
 
 def required_text(value: TextFlowInput) -> str:
@@ -117,12 +114,11 @@ def required_text(value: TextFlowInput) -> str:
     return value.text
 
 
-def _validate_yes_no(
+def _validate_confirmation(
     value: TextFlowInput,
     error_code: RegistrationStepErrorCode,
 ) -> Result[None, RegistrationStepErrorCode]:
-    normalized = _normalized(value)
-    if normalized not in YES_ANSWERS and normalized not in NO_ANSWERS:
+    if parse_confirmation(value.text or "") is None:
         return failure(error_code)
     return success(None)
 

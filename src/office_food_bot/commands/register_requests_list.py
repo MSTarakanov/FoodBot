@@ -3,6 +3,7 @@ from __future__ import annotations
 from office_food_bot.commanding.contracts import (
     CommandContext,
     EffectCommand,
+    IdentityResolver,
     NoArguments,
     NoArgumentsParser,
 )
@@ -23,7 +24,7 @@ from office_food_bot.models import (
 from office_food_bot.services.registration import RegistrationService
 
 
-class RegisterRequestsListCommand(EffectCommand[NoArguments]):
+class RegisterRequestsListCommand(EffectCommand[NoArguments, NoArguments]):
     definition = CommandDefinition(
         "register_requests_list",
         "показать заявки на регистрацию",
@@ -45,15 +46,15 @@ class RegisterRequestsListCommand(EffectCommand[NoArguments]):
             NoArgumentsParser(),
             (TelegramIdentityValidator(),),
             (),
+            IdentityResolver(),
         )
         self._registration = registration
 
     async def execute_effect(
         self,
         context: CommandContext,
-        request: NoArguments,
+        _request: NoArguments,
     ) -> None:
-        del request
         profile = require_telegram_profile(context)
         if not self._registration.can_approve(profile.telegram_user_id):
             await self._reply_common_error(context, CommonErrorCode.ADMIN_REQUIRED)

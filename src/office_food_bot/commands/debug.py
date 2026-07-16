@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from office_food_bot.boolean_input import parse_toggle
 from office_food_bot.commanding.access import CommandAccessService
 from office_food_bot.commanding.catalog import CommandCatalogProvider
 from office_food_bot.commanding.contracts import (
@@ -28,11 +29,21 @@ from office_food_bot.messaging import BotMessenger
 from office_food_bot.result import Result, failure, success
 from office_food_bot.services.debug import DebugService
 
-DEBUG_ON_VALUES = frozenset({"1", "on", "true", "вкл"})
-DEBUG_OFF_VALUES = frozenset({"0", "off", "false", "выкл"})
+
+class DebugInput:
+    pass
 
 
 @dataclass(frozen=True, slots=True)
+class DebugStatusInput(DebugInput):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class DebugToggleInput(DebugInput):
+    raw_value: str
+
+
 class DebugRequest:
     pass
 
@@ -51,15 +62,28 @@ class DebugRequestParser:
     def parse(
         self,
         raw_arguments: str | None,
-    ) -> Result[DebugRequest, InputErrorCode]:
+    ) -> DebugInput:
         normalized = (raw_arguments or "").strip().casefold()
         if not normalized:
-            return success(DebugStatusRequest())
-        if normalized in DEBUG_ON_VALUES:
-            return success(DebugToggleRequest(True))
-        if normalized in DEBUG_OFF_VALUES:
-            return success(DebugToggleRequest(False))
-        return failure(InputErrorCode.INVALID_CHOICE)
+            return DebugStatusInput()
+        return DebugToggleInput(normalized)
+
+
+class DebugRequestResolver:
+    def resolve(
+        self,
+        value: DebugInput,
+    ) -> Result[DebugRequest, InputErrorCode]:
+        match value:
+            case DebugStatusInput():
+                return success(DebugStatusRequest())
+            case DebugToggleInput():
+                enabled = parse_toggle(value.raw_value, allow_numeric=True)
+                if enabled is None:
+                    return failure(InputErrorCode.INVALID_CHOICE)
+                return success(DebugToggleRequest(enabled))
+            case _:
+                raise RuntimeError(f"Unsupported debug input: {type(value).__name__}")
 
 
 def _debug_status_text(enabled: bool) -> str:
@@ -68,7 +92,7 @@ def _debug_status_text(enabled: bool) -> str:
     return "Debug: выключен."
 
 
-class DebugCommand(EffectCommand[DebugRequest]):
+class DebugCommand(EffectCommand[DebugInput, DebugRequest]):
     definition = CommandDefinition(
         "debug",
         "включить или выключить debug режим",
@@ -98,6 +122,7 @@ class DebugCommand(EffectCommand[DebugRequest]):
             DebugRequestParser(),
             (TelegramIdentityValidator(),),
             (),
+            DebugRequestResolver(),
         )
         self._debug = debug
         self._access = access

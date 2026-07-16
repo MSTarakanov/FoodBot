@@ -21,12 +21,10 @@ class ActiveUserValidator:
     def __init__(self, users: ActiveUserResolver) -> None:
         self._users = users
 
-    def validate[RequestT](
+    def validate(
         self,
         context: CommandContext,
-        request: RequestT,
     ) -> Result[None, CommonErrorCode]:
-        del request
         profile = require_telegram_profile(context)
         return self._users.resolve(profile.telegram_user_id).map(lambda _: None)
 
