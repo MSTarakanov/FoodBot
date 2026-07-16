@@ -58,14 +58,18 @@ class BotMessenger:
         message: Message,
         payload: MessagePayload,
     ) -> Message:
-        if not isinstance(payload, TextMessagePayload):
-            raise TypeError(f"Unsupported message payload: {type(payload).__name__}")
-        return await self.reply(
-            message,
-            payload.text,
-            parse_mode=payload.parse_mode,
-            link_preview_options=payload.link_preview_options,
-        )
+        match payload:
+            case TextMessagePayload():
+                return await self.reply(
+                    message,
+                    payload.text,
+                    parse_mode=payload.parse_mode,
+                    link_preview_options=payload.link_preview_options,
+                )
+            case _:
+                raise TypeError(
+                    f"Unsupported message payload: {type(payload).__name__}"
+                )
 
     async def send_payload(
         self,
@@ -73,15 +77,19 @@ class BotMessenger:
         chat_id: int,
         payload: MessagePayload,
     ) -> Message:
-        if not isinstance(payload, TextMessagePayload):
-            raise TypeError(f"Unsupported message payload: {type(payload).__name__}")
-        return await self.send(
-            bot,
-            chat_id,
-            payload.text,
-            parse_mode=payload.parse_mode,
-            link_preview_options=payload.link_preview_options,
-        )
+        match payload:
+            case TextMessagePayload():
+                return await self.send(
+                    bot,
+                    chat_id,
+                    payload.text,
+                    parse_mode=payload.parse_mode,
+                    link_preview_options=payload.link_preview_options,
+                )
+            case _:
+                raise TypeError(
+                    f"Unsupported message payload: {type(payload).__name__}"
+                )
 
     async def reply(
         self,
@@ -141,9 +149,11 @@ class BotMessenger:
                     reply_markup=reply_markup,
                     parse_mode=parse_mode,
                 )
-                if isinstance(edited, Message):
-                    return LiveMessageReference(edited.message_id)
-                return LiveMessageReference(message_id)
+                match edited:
+                    case Message():
+                        return LiveMessageReference(edited.message_id)
+                    case _:
+                        return LiveMessageReference(message_id)
             except TelegramBadRequest as error:
                 if "message is not modified" in str(error).casefold():
                     return LiveMessageReference(message_id)

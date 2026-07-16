@@ -94,15 +94,21 @@ class CoffeeScheduleScopeValidator:
         context: CommandContext,
         request: CoffeeRequest,
     ) -> Result[None, CommonErrorCode]:
-        if not isinstance(request, CoffeeScheduleRequest):
-            return success(None)
-        profile = require_telegram_profile(context)
-        if not self._access.can_run_group_command_in_chat(
-            str(context.message.chat.type),
-            profile.telegram_user_id,
-        ):
-            return failure(CommonErrorCode.GROUP_CHAT_REQUIRED)
-        return success(None)
+        match request:
+            case CoffeeStatusRequest() | CoffeeToggleRequest():
+                return success(None)
+            case CoffeeScheduleRequest():
+                profile = require_telegram_profile(context)
+                if not self._access.can_run_group_command_in_chat(
+                    str(context.message.chat.type),
+                    profile.telegram_user_id,
+                ):
+                    return failure(CommonErrorCode.GROUP_CHAT_REQUIRED)
+                return success(None)
+            case _:
+                raise RuntimeError(
+                    f"Unsupported coffee request: {type(request).__name__}"
+                )
 
 
 class CoffeeCommand(EffectCommand[CoffeeRequest]):
@@ -173,38 +179,38 @@ class CoffeeCommand(EffectCommand[CoffeeRequest]):
         request: CoffeeRequest,
     ) -> None:
         profile = require_telegram_profile(context)
-        if isinstance(request, CoffeeStatusRequest):
-            user = self._active_users.require_validated(profile.telegram_user_id)
-            await self._messenger.reply(
-                context.message,
-                self._renderer.status(
-                    self._coffee.status(
-                        user,
-                        context.message.chat.id,
-                    )
-                ),
-            )
-            return
-
-        if isinstance(request, CoffeeToggleRequest):
-            await self._messenger.reply(
-                context.message,
-                render_invitation_setting(
-                    self._invitations.set_enabled(
-                        profile.telegram_user_id,
-                        InvitationKind.COFFEE,
-                        request.enabled,
-                    )
-                ),
-            )
-            return
-
-        if not isinstance(request, CoffeeScheduleRequest):
-            raise RuntimeError(f"Unsupported coffee request: {type(request).__name__}")
-        user = self._active_users.require_validated(profile.telegram_user_id)
-        await self._coffee.create_or_reschedule(
-            context.bot,
-            context.message.chat.id,
-            user,
-            request.scheduled_at,
-        )
+        match request:
+            case CoffeeStatusRequest():
+                user = self._active_users.require_validated(profile.telegram_user_id)
+                await self._messenger.reply(
+                    context.message,
+                    self._renderer.status(
+                        self._coffee.status(
+                            user,
+                            context.message.chat.id,
+                        )
+                    ),
+                )
+            case CoffeeToggleRequest():
+                await self._messenger.reply(
+                    context.message,
+                    render_invitation_setting(
+                        self._invitations.set_enabled(
+                            profile.telegram_user_id,
+                            InvitationKind.COFFEE,
+                            request.enabled,
+                        )
+                    ),
+                )
+            case CoffeeScheduleRequest():
+                user = self._active_users.require_validated(profile.telegram_user_id)
+                await self._coffee.create_or_reschedule(
+                    context.bot,
+                    context.message.chat.id,
+                    user,
+                    request.scheduled_at,
+                )
+            case _:
+                raise RuntimeError(
+                    f"Unsupported coffee request: {type(request).__name__}"
+                )

@@ -121,61 +121,70 @@ def normalize_email(raw_email: str) -> str:
 
 
 def _members_from_group_payload[Payload](payload: Payload) -> tuple[SplitwiseMember, ...]:
-    if not isinstance(payload, dict):
-        msg = "Splitwise group payload must be an object"
-        raise ValueError(msg)
+    match payload:
+        case dict() as group_payload:
+            group = group_payload["group"]
+        case _:
+            msg = "Splitwise group payload must be an object"
+            raise ValueError(msg)
 
-    group = payload["group"]
-    if not isinstance(group, dict):
-        msg = "Splitwise group must be an object"
-        raise ValueError(msg)
+    match group:
+        case dict() as group_data:
+            members = group_data["members"]
+        case _:
+            msg = "Splitwise group must be an object"
+            raise ValueError(msg)
 
-    members = group["members"]
-    if not isinstance(members, list):
-        msg = "Splitwise group members must be a list"
-        raise ValueError(msg)
-
-    return tuple(_member_from_payload(member) for member in members)
+    match members:
+        case list() as member_payloads:
+            return tuple(_member_from_payload(member) for member in member_payloads)
+        case _:
+            msg = "Splitwise group members must be a list"
+            raise ValueError(msg)
 
 
 def _member_from_payload[Payload](payload: Payload) -> SplitwiseMember:
-    if not isinstance(payload, dict):
-        msg = "Splitwise member must be an object"
-        raise ValueError(msg)
-
-    return SplitwiseMember(
-        splitwise_user_id=int(payload["id"]),
-        first_name=str(payload.get("first_name") or ""),
-        last_name=_optional_str(payload.get("last_name")),
-        email=str(payload["email"]),
-        balance=_balances_from_payload(payload.get("balance", [])),
-    )
+    match payload:
+        case dict() as member:
+            return SplitwiseMember(
+                splitwise_user_id=int(member["id"]),
+                first_name=str(member.get("first_name") or ""),
+                last_name=_optional_str(member.get("last_name")),
+                email=str(member["email"]),
+                balance=_balances_from_payload(member.get("balance", [])),
+            )
+        case _:
+            msg = "Splitwise member must be an object"
+            raise ValueError(msg)
 
 
 def _balances_from_payload[Payload](payload: Payload) -> tuple[SplitwiseBalance, ...]:
     if payload is None:
         return ()
-    if not isinstance(payload, list):
-        msg = "Splitwise member balance must be a list"
-        raise ValueError(msg)
-    return tuple(_balance_from_payload(balance) for balance in payload)
+    match payload:
+        case list() as balances:
+            return tuple(_balance_from_payload(balance) for balance in balances)
+        case _:
+            msg = "Splitwise member balance must be a list"
+            raise ValueError(msg)
 
 
 def _balance_from_payload[Payload](payload: Payload) -> SplitwiseBalance:
-    if not isinstance(payload, dict):
-        msg = "Splitwise balance must be an object"
-        raise ValueError(msg)
+    match payload:
+        case dict() as balance:
+            try:
+                amount = Decimal(str(balance["amount"]))
+            except InvalidOperation as error:
+                msg = "Splitwise balance amount must be decimal"
+                raise ValueError(msg) from error
 
-    try:
-        amount = Decimal(str(payload["amount"]))
-    except InvalidOperation as error:
-        msg = "Splitwise balance amount must be decimal"
-        raise ValueError(msg) from error
-
-    return SplitwiseBalance(
-        currency_code=str(payload["currency_code"]),
-        amount=amount,
-    )
+            return SplitwiseBalance(
+                currency_code=str(balance["currency_code"]),
+                amount=amount,
+            )
+        case _:
+            msg = "Splitwise balance must be an object"
+            raise ValueError(msg)
 
 
 def _optional_str[Value](value: Value | None) -> str | None:

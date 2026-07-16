@@ -106,14 +106,14 @@ class FlowStepValidator[DraftT: FlowDraft, InputT, ErrorT](Protocol):
     ) -> Result[None, ErrorT]: ...
 
 
-class FlowStep[StepIdT: FlowStepId](ABC):
+class FlowStep[StepIdT: FlowStepId, DraftT: FlowDraft](ABC):
     step_id: StepIdT
 
     @abstractmethod
     async def handle(
         self,
         context: FlowContext,
-        draft: FlowDraft,
+        draft: DraftT,
     ) -> FlowTransition: ...
 
 
@@ -122,14 +122,12 @@ class ParsedFlowStep[
     DraftT: FlowDraft,
     InputT,
     ErrorT,
-](FlowStep[StepIdT], ABC):
+](FlowStep[StepIdT, DraftT], ABC):
     def __init__(
         self,
-        draft_type: type[DraftT],
         parser: FlowStepParser[InputT],
         validators: tuple[FlowStepValidator[DraftT, InputT, ErrorT], ...],
     ) -> None:
-        self._draft_type = draft_type
         self._parser = parser
         self._validators = validators
 
@@ -137,13 +135,8 @@ class ParsedFlowStep[
     async def handle(
         self,
         context: FlowContext,
-        draft: FlowDraft,
+        draft: DraftT,
     ) -> FlowTransition:
-        if not isinstance(draft, self._draft_type):
-            raise RuntimeError(
-                f"Step {self.step_id} received unsupported draft {type(draft).__name__}"
-            )
-
         value = self._parser.parse(context.message)
         validation = _validate_flow_input(
             context,

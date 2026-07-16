@@ -50,11 +50,17 @@ class RegisterOtherAdminValidator:
         context: CommandContext,
         request: RegisterRequest,
     ) -> Result[None, CommonErrorCode]:
-        if not isinstance(request, RegisterOtherRequest):
-            return success(None)
-        profile = context.profile
-        if profile is None:
-            return failure(CommonErrorCode.MISSING_TELEGRAM_IDENTITY)
-        if not self._registration.can_approve(profile.telegram_user_id):
-            return failure(CommonErrorCode.ADMIN_REQUIRED)
-        return success(None)
+        match request:
+            case RegisterSelfRequest():
+                return success(None)
+            case RegisterOtherRequest():
+                profile = context.profile
+                if profile is None:
+                    return failure(CommonErrorCode.MISSING_TELEGRAM_IDENTITY)
+                if not self._registration.can_approve(profile.telegram_user_id):
+                    return failure(CommonErrorCode.ADMIN_REQUIRED)
+                return success(None)
+            case _:
+                raise RuntimeError(
+                    f"Unsupported registration request: {type(request).__name__}"
+                )

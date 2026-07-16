@@ -86,11 +86,13 @@ class FlowRunner:
             raise RuntimeError(f"Unknown active flow: {session.flow_id.value}")
         context = self._from_command_context(command_context)
         transition = await flow.cancel(context, session)
-        if not isinstance(transition, CompleteFlow):
-            raise RuntimeError(
-                f"Flow {flow.flow_id.value} did not complete during cancellation"
-            )
-        await self._apply(context, flow.flow_id, transition)
+        match transition:
+            case CompleteFlow():
+                await self._apply(context, flow.flow_id, transition)
+            case _:
+                raise RuntimeError(
+                    f"Flow {flow.flow_id.value} did not complete during cancellation"
+                )
 
     async def abort(
         self,
@@ -111,52 +113,52 @@ class FlowRunner:
         flow_id: FlowId,
         transition: FlowTransition,
     ) -> None:
-        if isinstance(transition, StayOnStep):
-            await self._publish(context, transition.view)
-            return
-        if isinstance(transition, MoveToStep):
-            await context.state.set_state(ActiveFlowState.active)
-            await context.state.set_data(
-                {
-                    FLOW_SESSION_KEY: FlowSession(
-                        flow_id=flow_id,
-                        step_id=transition.step_id,
-                        draft=transition.draft,
-                    )
-                }
-            )
-            await self._publish(context, transition.view)
-            return
-        if isinstance(transition, CompleteFlow):
-            await context.state.clear()
-            if transition.view is not None:
+        match transition:
+            case StayOnStep():
                 await self._publish(context, transition.view)
-            if transition.post_action is not None:
-                await transition.post_action.execute(context)
-            return
-        raise RuntimeError(f"Unsupported flow transition: {type(transition).__name__}")
+            case MoveToStep():
+                await context.state.set_state(ActiveFlowState.active)
+                await context.state.set_data(
+                    {
+                        FLOW_SESSION_KEY: FlowSession(
+                            flow_id=flow_id,
+                            step_id=transition.step_id,
+                            draft=transition.draft,
+                        )
+                    }
+                )
+                await self._publish(context, transition.view)
+            case CompleteFlow():
+                await context.state.clear()
+                if transition.view is not None:
+                    await self._publish(context, transition.view)
+                if transition.post_action is not None:
+                    await transition.post_action.execute(context)
+            case _:
+                raise RuntimeError(
+                    f"Unsupported flow transition: {type(transition).__name__}"
+                )
 
     async def _publish(self, context: FlowContext, view: FlowView) -> None:
-        if isinstance(view, TextFlowView):
-            await self._messenger.reply(context.message, view.text)
-            return
-        if isinstance(view, ChoiceFlowView):
-            await self._messenger.reply_with_choices(
-                context.message,
-                view.text,
-                view.choices,
-                columns=view.columns,
-                one_time_keyboard=view.one_time_keyboard,
-            )
-            return
-        if isinstance(view, ClosingFlowView):
-            await self._messenger.reply(
-                context.message,
-                view.text,
-                reply_markup=self._messenger.remove_keyboard(),
-            )
-            return
-        raise RuntimeError(f"Unsupported flow view: {type(view).__name__}")
+        match view:
+            case TextFlowView():
+                await self._messenger.reply(context.message, view.text)
+            case ChoiceFlowView():
+                await self._messenger.reply_with_choices(
+                    context.message,
+                    view.text,
+                    view.choices,
+                    columns=view.columns,
+                    one_time_keyboard=view.one_time_keyboard,
+                )
+            case ClosingFlowView():
+                await self._messenger.reply(
+                    context.message,
+                    view.text,
+                    reply_markup=self._messenger.remove_keyboard(),
+                )
+            case _:
+                raise RuntimeError(f"Unsupported flow view: {type(view).__name__}")
 
     async def _require_session(self, state: FSMContext) -> FlowSession:
         session = await self._session(state)
@@ -168,9 +170,11 @@ class FlowRunner:
     async def _session(self, state: FSMContext) -> FlowSession | None:
         data = await state.get_data()
         session = data.get(FLOW_SESSION_KEY)
-        if isinstance(session, FlowSession):
-            return session
-        return None
+        match session:
+            case FlowSession():
+                return session
+            case _:
+                return None
 
     def _from_command_context(self, context: CommandContext) -> FlowContext:
         return FlowContext(

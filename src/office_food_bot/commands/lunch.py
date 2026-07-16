@@ -91,16 +91,23 @@ class LunchPublishValidator:
         context: CommandContext,
         request: LunchRequest,
     ) -> Result[None, CommonErrorCode]:
-        if isinstance(request, LunchToggleRequest):
-            return success(None)
-        profile = require_telegram_profile(context)
-        can_publish = self._access.can_run_group_command_in_chat(
-            str(context.message.chat.type),
-            profile.telegram_user_id,
-        )
-        if isinstance(request, LunchPublishRequest) and not can_publish:
-            return failure(CommonErrorCode.GROUP_CHAT_REQUIRED)
-        return success(None)
+        match request:
+            case LunchToggleRequest():
+                return success(None)
+            case LunchDefaultRequest():
+                return success(None)
+            case LunchPublishRequest():
+                profile = require_telegram_profile(context)
+                if not self._access.can_run_group_command_in_chat(
+                    str(context.message.chat.type),
+                    profile.telegram_user_id,
+                ):
+                    return failure(CommonErrorCode.GROUP_CHAT_REQUIRED)
+                return success(None)
+            case _:
+                raise RuntimeError(
+                    f"Unsupported lunch request: {type(request).__name__}"
+                )
 
 
 class LunchCommand(EffectCommand[LunchRequest]):
@@ -170,41 +177,41 @@ class LunchCommand(EffectCommand[LunchRequest]):
     ) -> None:
         profile = require_telegram_profile(context)
 
-        if isinstance(request, LunchToggleRequest):
-            await self._messenger.reply(
-                context.message,
-                render_invitation_setting(
-                    self._invitations.set_enabled(
-                        profile.telegram_user_id,
-                        InvitationKind.LUNCH,
-                        request.enabled,
+        match request:
+            case LunchToggleRequest():
+                await self._messenger.reply(
+                    context.message,
+                    render_invitation_setting(
+                        self._invitations.set_enabled(
+                            profile.telegram_user_id,
+                            InvitationKind.LUNCH,
+                            request.enabled,
+                        )
+                    ),
+                )
+                return
+            case LunchDefaultRequest():
+                if not self._access.can_run_group_command_in_chat(
+                    str(context.message.chat.type),
+                    profile.telegram_user_id,
+                ):
+                    await self._messenger.reply(
+                        context.message,
+                        render_invitation_setting(
+                            self._invitations.status(
+                                profile.telegram_user_id,
+                                InvitationKind.LUNCH,
+                            )
+                        ),
                     )
-                ),
-            )
-            return
-
-        if isinstance(request, LunchDefaultRequest) and not (
-            self._access.can_run_group_command_in_chat(
-                str(context.message.chat.type),
-                profile.telegram_user_id,
-            )
-        ):
-            await self._messenger.reply(
-                context.message,
-                render_invitation_setting(
-                    self._invitations.status(
-                        profile.telegram_user_id,
-                        InvitationKind.LUNCH,
-                    )
-                ),
-            )
-            return
-
-        office_selection = LunchOfficeSelection.AUTOMATIC
-        if isinstance(request, LunchPublishRequest):
-            office_selection = request.office_selection
-        elif not isinstance(request, LunchDefaultRequest):
-            raise RuntimeError(f"Unsupported lunch request: {type(request).__name__}")
+                    return
+                office_selection = LunchOfficeSelection.AUTOMATIC
+            case LunchPublishRequest():
+                office_selection = request.office_selection
+            case _:
+                raise RuntimeError(
+                    f"Unsupported lunch request: {type(request).__name__}"
+                )
 
         await self._publisher.publish(
             context.bot,

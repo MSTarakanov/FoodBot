@@ -144,7 +144,6 @@ class FixtureStep(
 
     def __init__(self, events: list[str], *, fails: bool = False) -> None:
         super().__init__(
-            FixtureDraft,
             FixtureStepParser(events),
             (FixtureStepValidator(events, fails=fails),),
         )

@@ -28,7 +28,7 @@ class RegistrationStep[InputT](
             ...,
         ],
     ) -> None:
-        super().__init__(RegistrationDraft, parser, validators)
+        super().__init__(parser, validators)
 
     def render_validation_error(
         self,

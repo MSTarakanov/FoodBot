@@ -113,23 +113,27 @@ class DebugCommand(EffectCommand[DebugRequest]):
             await self._reply_common_error(context, CommonErrorCode.ADMIN_REQUIRED)
             return
 
-        if isinstance(request, DebugStatusRequest):
-            await self._messenger.reply(
-                context.message,
-                _debug_status_text(self._debug.is_enabled(profile.telegram_user_id)),
-            )
-            return
-
-        if not isinstance(request, DebugToggleRequest):
-            raise RuntimeError(f"Unsupported debug request: {type(request).__name__}")
-        self._debug.set_enabled(profile.telegram_user_id, request.enabled)
-        await self._update_menu(context, profile.telegram_user_id)
-        reply = (
-            "Debug включен. В личке доступны все команды."
-            if request.enabled
-            else "Debug выключен."
-        )
-        await self._messenger.reply(context.message, reply)
+        match request:
+            case DebugStatusRequest():
+                await self._messenger.reply(
+                    context.message,
+                    _debug_status_text(
+                        self._debug.is_enabled(profile.telegram_user_id)
+                    ),
+                )
+            case DebugToggleRequest():
+                self._debug.set_enabled(profile.telegram_user_id, request.enabled)
+                await self._update_menu(context, profile.telegram_user_id)
+                reply = (
+                    "Debug включен. В личке доступны все команды."
+                    if request.enabled
+                    else "Debug выключен."
+                )
+                await self._messenger.reply(context.message, reply)
+            case _:
+                raise RuntimeError(
+                    f"Unsupported debug request: {type(request).__name__}"
+                )
 
     async def _update_menu(
         self,
