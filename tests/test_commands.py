@@ -3619,7 +3619,11 @@ async def test_coffee_callback_rejects_unregistered_user_with_alert(
     )
 
     assert session.callback_answers[-1].show_alert is True
-    assert session.callback_answers[-1].text == "Сначала зарегистрируйся: /register"
+    assert session.callback_answers[-1].text == (
+        "Чтобы пользоваться этой функцией, сначала зарегистрируйся.\n"
+        "В личном чате с ботом запусти /register и пройди регистрацию сам "
+        "или отправь /request_register, чтобы тебя зарегистрировал администратор."
+    )
 
 
 async def test_repeated_coffee_join_is_idempotent_and_does_not_edit_card(

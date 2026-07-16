@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from enum import StrEnum
 
 from office_food_bot.commanding.definition import CommandDefinition
 from office_food_bot.commanding.errors.models import (
@@ -21,10 +22,16 @@ from office_food_bot.commanding.errors.models import (
 )
 
 
+class ErrorRenderSurface(StrEnum):
+    COMMAND = "command"
+    CALLBACK = "callback"
+
+
 @dataclass(frozen=True, slots=True)
 class ErrorRenderContext:
     bot_username: str
     definition: CommandDefinition | None
+    surface: ErrorRenderSurface = ErrorRenderSurface.COMMAND
 
 
 type ErrorRenderFunction = Callable[[UserFacingError, ErrorRenderContext], str]
@@ -88,6 +95,13 @@ class CommonErrorRenderer:
         if code == CommonErrorCode.ADMIN_REQUIRED:
             return "Команда доступна только админам."
         if code == CommonErrorCode.REGISTRATION_REQUIRED:
+            if context.surface == ErrorRenderSurface.CALLBACK:
+                return (
+                    "Чтобы пользоваться этой функцией, сначала зарегистрируйся.\n"
+                    "В личном чате с ботом запусти /register и пройди регистрацию сам "
+                    "или отправь /request_register, чтобы тебя зарегистрировал "
+                    "администратор."
+                )
             return "Сначала зарегистрируйся: /register"
         if code == CommonErrorCode.REGISTRATION_PENDING:
             return "Регистрация еще ждет аппрува."

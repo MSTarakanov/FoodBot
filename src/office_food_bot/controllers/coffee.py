@@ -9,7 +9,11 @@ from office_food_bot.commanding.errors.models import (
     CoffeeErrorCode,
     UserFacingError,
 )
-from office_food_bot.commanding.errors.rendering import ErrorRenderContext, UserErrorRenderer
+from office_food_bot.commanding.errors.rendering import (
+    ErrorRenderContext,
+    ErrorRenderSurface,
+    UserErrorRenderer,
+)
 from office_food_bot.presenters.coffee import CoffeeCommandRenderer
 from office_food_bot.services.coffee import CoffeeService
 
@@ -25,7 +29,11 @@ class CoffeeCallbackController:
         self._coffee = coffee
         self._coffee_renderer = coffee_renderer
         self._error_renderer = error_renderer
-        self._error_context = ErrorRenderContext(bot_username, None)
+        self._error_context = ErrorRenderContext(
+            bot_username,
+            None,
+            ErrorRenderSurface.CALLBACK,
+        )
 
     async def handle(
         self,
