@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from office_food_bot.commanding.errors.models import CommonErrorCode
-from office_food_bot.features.users.access import ActiveUserResolver
+from office_food_bot.application.users.errors import ActiveUserErrorCode
+from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.models import RegisteredUser, TelegramProfile
 from office_food_bot.repositories import UserRepository
 from office_food_bot.result import Failure
@@ -16,8 +16,8 @@ def make_profile() -> TelegramProfile:
 def test_active_user_resolver_requires_registration(users: UserRepository) -> None:
     assert ActiveUserResolver(users).resolve(42) == Failure[
         RegisteredUser,
-        CommonErrorCode,
-    ](CommonErrorCode.REGISTRATION_REQUIRED)
+        ActiveUserErrorCode,
+    ](ActiveUserErrorCode.NOT_REGISTERED)
 
 
 def test_active_user_resolver_requires_approved_registration(
@@ -27,8 +27,8 @@ def test_active_user_resolver_requires_approved_registration(
 
     assert ActiveUserResolver(users).resolve(42) == Failure[
         RegisteredUser,
-        CommonErrorCode,
-    ](CommonErrorCode.REGISTRATION_PENDING)
+        ActiveUserErrorCode,
+    ](ActiveUserErrorCode.PENDING_APPROVAL)
 
 
 def test_active_user_resolver_returns_active_user(users: UserRepository) -> None:
@@ -51,5 +51,5 @@ def test_active_user_resolver_rejects_inactive_user(users: UserRepository) -> No
 
     assert ActiveUserResolver(users).resolve(42) == Failure[
         RegisteredUser,
-        CommonErrorCode,
-    ](CommonErrorCode.REGISTRATION_INACTIVE)
+        ActiveUserErrorCode,
+    ](ActiveUserErrorCode.INACTIVE)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 
+from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.bootstrap.dependencies import BotDependencies
 from office_food_bot.commanding.access import CommandAccessService
 from office_food_bot.database import Database
@@ -28,7 +29,6 @@ from office_food_bot.features.lunch.polls import (
 from office_food_bot.features.polls.tracking import PollTrackingService
 from office_food_bot.features.presence.service import PresenceService
 from office_food_bot.features.registration.service import RegistrationService
-from office_food_bot.features.users.access import ActiveUserResolver
 from office_food_bot.features.vacation.service import VacationService
 from office_food_bot.infrastructure.scheduler import JobScheduler
 from office_food_bot.infrastructure.telegram_interactions import TelegramInteractionService

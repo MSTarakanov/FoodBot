@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.commanding.contracts import (
     CommandContext,
     IdentityResolver,
@@ -22,7 +23,6 @@ from office_food_bot.features.balance.errors import BalanceErrorCode
 from office_food_bot.features.balance.models import BalanceReport
 from office_food_bot.features.balance.rendering import render_balance_message
 from office_food_bot.features.balance.use_case import GetBalanceReport
-from office_food_bot.features.users.access import ActiveUserResolver
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.result import Result
 

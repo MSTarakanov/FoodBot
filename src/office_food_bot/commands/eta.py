@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.commanding.contracts import (
     CommandContext,
     RenderedCommand,
@@ -26,7 +27,6 @@ from office_food_bot.commands.presence import (
 from office_food_bot.features.presence.models import EtaRequest, PresenceKind, PresenceReport
 from office_food_bot.features.presence.rendering import render_presence_report
 from office_food_bot.features.presence.service import PresenceService
-from office_food_bot.features.users.access import ActiveUserResolver
 from office_food_bot.messaging import BotMessenger
 
 

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from office_food_bot.application.users.errors import ActiveUserErrorCode
 from office_food_bot.commanding.contracts import CommandContext
+from office_food_bot.commanding.errors.mapping import common_error_for_active_user
 from office_food_bot.commanding.errors.models import CommonErrorCode
 from office_food_bot.models import RegisteredUser, TelegramProfile
 from office_food_bot.result import Result, failure, success
@@ -22,7 +24,7 @@ class ActiveUserAccess(Protocol):
     def resolve(
         self,
         telegram_user_id: int,
-    ) -> Result[RegisteredUser, CommonErrorCode]: ...
+    ) -> Result[RegisteredUser, ActiveUserErrorCode]: ...
 
 
 class ActiveUserValidator:
@@ -34,7 +36,10 @@ class ActiveUserValidator:
         context: CommandContext,
     ) -> Result[None, CommonErrorCode]:
         profile = require_telegram_profile(context)
-        return self._users.resolve(profile.telegram_user_id).map(lambda _: None)
+        return self._users.resolve(profile.telegram_user_id).fold(
+            lambda _: success(None),
+            lambda code: failure(common_error_for_active_user(code)),
+        )
 
 
 def require_telegram_profile(context: CommandContext) -> TelegramProfile:

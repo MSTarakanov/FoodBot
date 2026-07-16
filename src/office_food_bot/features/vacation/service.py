@@ -8,8 +8,8 @@ from enum import StrEnum
 from typing import assert_never
 from zoneinfo import ZoneInfo
 
+from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.boolean_input import parse_toggle
-from office_food_bot.features.users.access import ActiveUserResolver
 from office_food_bot.features.vacation.models import VacationReport, VacationReportKind
 from office_food_bot.repositories import VacationRepository
 
@@ -50,7 +50,7 @@ class VacationService:
         telegram_user_id: int,
         request: VacationRequest,
     ) -> VacationReport:
-        user = self._active_users.require_validated(telegram_user_id)
+        user = self._active_users.require_active(telegram_user_id)
         today = self.local_today()
         match request.kind:
             case VacationRequestKind.STATUS:

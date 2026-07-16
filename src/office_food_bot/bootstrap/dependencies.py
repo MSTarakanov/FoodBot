@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.commanding.access import CommandAccessService
 from office_food_bot.features.balance.use_case import GetBalanceReport
 from office_food_bot.features.coffee.service import CoffeeService, CoffeeTimeResolver
@@ -18,7 +19,6 @@ from office_food_bot.features.lunch.pins import LunchPinService
 from office_food_bot.features.polls.tracking import PollTrackingService
 from office_food_bot.features.presence.service import PresenceService
 from office_food_bot.features.registration.service import RegistrationService
-from office_food_bot.features.users.access import ActiveUserResolver
 from office_food_bot.features.vacation.service import VacationService
 from office_food_bot.infrastructure.scheduler import JobScheduler
 from office_food_bot.infrastructure.telegram_interactions import TelegramInteractionService

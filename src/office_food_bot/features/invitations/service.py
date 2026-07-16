@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import assert_never
 
+from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.features.invitations.models import InvitationKind, InvitationSettingReport
 from office_food_bot.features.invitations.repository import InvitationPreferenceRepository
-from office_food_bot.features.users.access import ActiveUserResolver
 from office_food_bot.models import InvitationPreferences
 
 
@@ -28,7 +28,7 @@ class InvitationPreferenceService:
         telegram_user_id: int,
         kind: InvitationKind,
     ) -> InvitationSettingReport:
-        user = self._active_users.require_validated(telegram_user_id)
+        user = self._active_users.require_active(telegram_user_id)
         preferences = self._preferences.get(user.id)
         match kind:
             case InvitationKind.LUNCH:
@@ -45,7 +45,7 @@ class InvitationPreferenceService:
         kind: InvitationKind,
         enabled: bool,
     ) -> InvitationSettingReport:
-        user = self._active_users.require_validated(telegram_user_id)
+        user = self._active_users.require_active(telegram_user_id)
         match kind:
             case InvitationKind.LUNCH:
                 self._preferences.set_lunch_enabled(user.id, enabled)

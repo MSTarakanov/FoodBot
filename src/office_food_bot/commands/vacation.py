@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import assert_never
 
+from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.commanding.contracts import (
     CommandContext,
     RenderedCommand,
@@ -21,7 +22,6 @@ from office_food_bot.commanding.validators import (
     TelegramIdentityValidator,
     require_telegram_profile,
 )
-from office_food_bot.features.users.access import ActiveUserResolver
 from office_food_bot.features.vacation.models import VacationReport
 from office_food_bot.features.vacation.rendering import render_vacation_report
 from office_food_bot.features.vacation.service import (

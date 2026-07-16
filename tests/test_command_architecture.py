@@ -7,6 +7,7 @@ from pathlib import Path
 from office_food_bot.commanding.contracts import CommandContext
 
 SOURCE_ROOT = Path(__file__).parents[1] / "src" / "office_food_bot"
+APPLICATION_ROOT = SOURCE_ROOT / "application"
 COMMAND_ROOT = SOURCE_ROOT / "commands"
 FEATURE_ROOT = SOURCE_ROOT / "features"
 LEGACY_HORIZONTAL_PACKAGES = ("controllers", "presenters", "services")
@@ -101,6 +102,22 @@ def test_legacy_horizontal_packages_have_no_source_modules() -> None:
 def test_commanding_does_not_depend_on_concrete_features() -> None:
     for path in (SOURCE_ROOT / "commanding").rglob("*.py"):
         assert "office_food_bot.features" not in path.read_text(), path.name
+
+
+def test_application_does_not_depend_on_transport_or_features() -> None:
+    forbidden_imports = (
+        "aiogram",
+        "office_food_bot.bootstrap",
+        "office_food_bot.commanding",
+        "office_food_bot.features",
+    )
+    for path in APPLICATION_ROOT.rglob("*.py"):
+        source = path.read_text()
+        assert all(module not in source for module in forbidden_imports), path
+
+
+def test_shared_user_access_is_not_a_placeholder_feature() -> None:
+    assert not tuple((FEATURE_ROOT / "users").rglob("*.py"))
 
 
 def test_feature_rendering_does_not_load_behavior_or_persistence() -> None:

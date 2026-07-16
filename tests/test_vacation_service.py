@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.commanding.errors.models import (
     InputErrorCode,
 )
@@ -13,7 +14,6 @@ from office_food_bot.commands.vacation import (
     VacationRequestResolver,
 )
 from office_food_bot.database import Database
-from office_food_bot.features.users.access import ActiveUserResolver
 from office_food_bot.features.vacation.rendering import render_vacation_report
 from office_food_bot.features.vacation.service import (
     VacationRequest,

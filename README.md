@@ -286,6 +286,7 @@ Command-related code is split by responsibility:
 - `commanding/` contains the reusable command lifecycle, catalog, access checks, and common errors;
 - `commands/` contains concrete slash commands, one command per file;
 - `flows/` contains only the reusable conversational flow engine;
+- `application/` contains cross-feature application policies that do not belong to one feature;
 - `features/<name>/` owns feature models, errors, use cases, repositories, rendering,
   callbacks, and conversational flows;
 - `bootstrap/` constructs the application dependency graph;

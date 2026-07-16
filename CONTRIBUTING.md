@@ -124,6 +124,8 @@ scripts/check
 The reusable command and flow engines live in `commanding/` and `flows/`.
 Concrete slash commands live in `commands/`, while models, errors, business
 logic, rendering, callbacks, and feature flows live together in `features/<name>/`.
+Cross-feature application policies live in `application/` and must not depend
+on Telegram transport, `commanding/`, or concrete features.
 Application dependency construction lives in `bootstrap/`.
 
 1. Add `<name>Command` in `src/office_food_bot/commands/<name>.py`. Keep exactly

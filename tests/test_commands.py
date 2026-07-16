@@ -545,7 +545,7 @@ async def create_or_reschedule_coffee(
     await services.coffee.create_or_reschedule(
         bot,
         -100,
-        services.active_users.require_validated(telegram_user_id),
+        services.active_users.require_active(telegram_user_id),
         resolution.scheduled_at,
     )
 

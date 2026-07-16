@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.boolean_input import parse_toggle
 from office_food_bot.commanding.access import CommandAccessService
 from office_food_bot.commanding.contracts import (
@@ -34,7 +35,6 @@ from office_food_bot.features.lunch.polls import (
     LunchOfficeSelection,
     parse_lunch_office_selection,
 )
-from office_food_bot.features.users.access import ActiveUserResolver
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.result import Result, failure, success
 

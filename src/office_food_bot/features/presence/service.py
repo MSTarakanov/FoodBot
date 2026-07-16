@@ -4,8 +4,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.features.presence.models import EtaRequest, PresenceKind, PresenceReport
-from office_food_bot.features.users.access import ActiveUserResolver
 
 
 class PresenceService:
@@ -25,7 +25,7 @@ class PresenceService:
         request: EtaRequest,
         kind: PresenceKind,
     ) -> PresenceReport:
-        user = self._active_users.require_validated(telegram_user_id)
+        user = self._active_users.require_active(telegram_user_id)
         now = self._local_now()
         return PresenceReport(
             kind=kind,

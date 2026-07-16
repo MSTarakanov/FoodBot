@@ -3,6 +3,9 @@ from __future__ import annotations
 from aiogram import Bot
 from aiogram.types import CallbackQuery
 
+from office_food_bot.application.users.errors import ActiveUserErrorCode
+from office_food_bot.application.users.resolver import ActiveUserResolver
+from office_food_bot.commanding.errors.mapping import common_error_for_active_user
 from office_food_bot.commanding.errors.models import CommonErrorCode
 from office_food_bot.commanding.errors.rendering import (
     ErrorRenderer,
@@ -12,7 +15,6 @@ from office_food_bot.features.coffee.errors import CoffeeErrorCode
 from office_food_bot.features.coffee.models import CoffeeParticipationReport
 from office_food_bot.features.coffee.rendering import CoffeeCommandRenderer
 from office_food_bot.features.coffee.service import CoffeeService
-from office_food_bot.features.users.access import ActiveUserResolver
 from office_food_bot.models import RegisteredUser
 
 
@@ -50,7 +52,17 @@ class CoffeeCallbackController:
                 user,
                 callback_data,
             ),
-            lambda code: self._answer_common_error(callback_query, code),
+            lambda code: self._answer_active_user_error(callback_query, code),
+        )
+
+    async def _answer_active_user_error(
+        self,
+        callback_query: CallbackQuery,
+        code: ActiveUserErrorCode,
+    ) -> None:
+        await self._answer_common_error(
+            callback_query,
+            common_error_for_active_user(code),
         )
 
     async def _update_participation(

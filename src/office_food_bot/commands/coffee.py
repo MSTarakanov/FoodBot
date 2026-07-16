@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import assert_never
 
+from office_food_bot.application.users.resolver import ActiveUserResolver
 from office_food_bot.boolean_input import parse_toggle
 from office_food_bot.commanding.access import CommandAccessService
 from office_food_bot.commanding.contracts import (
@@ -33,7 +34,6 @@ from office_food_bot.features.coffee.service import CoffeeService, CoffeeTimeRes
 from office_food_bot.features.invitations.models import InvitationKind
 from office_food_bot.features.invitations.rendering import render_invitation_setting
 from office_food_bot.features.invitations.service import InvitationPreferenceService
-from office_food_bot.features.users.access import ActiveUserResolver
 from office_food_bot.messaging import BotMessenger
 from office_food_bot.result import Result, failure, success
 
@@ -225,7 +225,7 @@ class CoffeeCommand(EffectCommand[CoffeeInput, CoffeeRequest]):
         profile = require_telegram_profile(context)
         match request:
             case CoffeeStatusRequest():
-                user = self._active_users.require_validated(profile.telegram_user_id)
+                user = self._active_users.require_active(profile.telegram_user_id)
                 await self._messenger.reply(
                     context.message,
                     self._renderer.status(
@@ -247,7 +247,7 @@ class CoffeeCommand(EffectCommand[CoffeeInput, CoffeeRequest]):
                     ),
                 )
             case CoffeeScheduleRequest():
-                user = self._active_users.require_validated(profile.telegram_user_id)
+                user = self._active_users.require_active(profile.telegram_user_id)
                 await self._coffee.create_or_reschedule(
                     context.bot,
                     context.message.chat.id,
