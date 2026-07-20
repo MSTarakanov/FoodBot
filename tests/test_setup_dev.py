@@ -200,6 +200,8 @@ def test_setup_dev_prints_confirmed_direct_feature_flow(tmp_path: Path) -> None:
     assert "git checkout -b feature/name" in result.stdout
     assert "git push origin feature/name" in result.stdout
     assert "Configure fork-first instead?" not in result.stdout
+    assert "Open https://t.me/foodbot_dev and press Start." in result.stdout
+    assert "./run preview balance-full" in result.stdout
 
 
 def test_setup_dev_prints_collaborator_invite_when_direct_push_denied(

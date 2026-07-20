@@ -46,40 +46,43 @@ from aiogram.types import (
 )
 from aiogram.types import PollOption as TelegramPollOption
 
-from office_food_bot.app import create_dispatcher, create_services
-from office_food_bot.coffee_repositories import CoffeeSessionRepository
-from office_food_bot.commands.definitions import COMMANDS, START_TEXT
-from office_food_bot.commands.errors import UNHANDLED_ERROR_REPLY_TEXT
-from office_food_bot.commands.menu import setup_bot_commands
+from office_food_bot.app import create_dependencies, create_dispatcher
+from office_food_bot.application.splitwise.models import SplitwiseBalance, SplitwiseMember
+from office_food_bot.application.users.models import TelegramProfile, UserStatus
+from office_food_bot.bootstrap import BotDependencies
+from office_food_bot.commanding.catalog import CommandCatalog
+from office_food_bot.commanding.definition import START_TEXT
+from office_food_bot.commanding.errors.rendering import CommonErrorRenderer
+from office_food_bot.commanding.menu import setup_bot_commands
+from office_food_bot.commands.factory import build_command_runtime
 from office_food_bot.config import RuntimeEnvironment, Settings
 from office_food_bot.database import Database
-from office_food_bot.invitation_repositories import InvitationPreferenceRepository
-from office_food_bot.models import (
-    CoffeeSessionStatus,
-    InvitationPreferences,
-    PollKind,
-    SplitwiseBalance,
-    SplitwiseMember,
-    TelegramProfile,
-    UserStatus,
-)
-from office_food_bot.poll_options import PollOption
-from office_food_bot.repositories import (
-    LunchAutoChatRepository,
-    LunchPinRepository,
-    RegistrationRequestRepository,
-    TelegramAccountRepository,
-    UserRepository,
-    VacationRepository,
-)
-from office_food_bot.services import BotServices
-from office_food_bot.services.lunch_polls import (
+from office_food_bot.features.balance.repository import BalanceRepository
+from office_food_bot.features.coffee.models import CoffeeSessionStatus
+from office_food_bot.features.coffee.repository import CoffeeSessionRepository
+from office_food_bot.features.invitations.models import InvitationPreferences
+from office_food_bot.features.invitations.repository import InvitationPreferenceRepository
+from office_food_bot.features.lunch.polls import (
     LUNCH_OTHER_FOOD_POLL,
     ROSE_LUNCH_POLLS,
     SKYLINE_LUNCH_POLLS,
     OfficeLunchPolls,
 )
-from office_food_bot.services.splitwise import SplitwiseUnavailableError
+from office_food_bot.features.lunch.repository import (
+    LunchAutoChatRepository,
+    LunchPinRepository,
+)
+from office_food_bot.features.polls.models import PollKind
+from office_food_bot.features.polls.options import PollOption
+from office_food_bot.features.registration.repository import (
+    RegistrationRequestRepository,
+    TelegramAccountRepository,
+)
+from office_food_bot.features.vacation.repository import VacationRepository
+from office_food_bot.infrastructure.persistence.users import UserRepository
+from office_food_bot.integrations.splitwise import SplitwiseUnavailableError
+from office_food_bot.messaging import TextMessagePayload
+from office_food_bot.previews.registry import MESSAGE_PREVIEWS
 
 DEFAULT_ADMIN_IDS = frozenset({7})
 DEFAULT_SPLITWISE_GROUP_ID = 55
@@ -125,7 +128,8 @@ ADMIN_PRIVATE_HELP_TEXT = (
     "<b>Администрирование:</b>\n"
     "/approve 123456789 - подтвердить регистрацию\n"
     "/register_requests_list - показать заявки на регистрацию\n"
-    "/debug 1 - включить или выключить debug режим\n\n"
+    "/debug 1 - включить или выключить debug режим\n"
+    "/test balance-full - отправить тестовое сообщение\n\n"
     "<b>Служебные:</b>\n"
     "/start - показать приветствие\n"
     "/help - показать список команд\n"
@@ -497,7 +501,7 @@ def make_test_services(
     splitwise_members: tuple[SplitwiseMember, ...] = (),
     splitwise_unavailable: bool = False,
     clock: Callable[[], datetime] | None = None,
-) -> BotServices:
+) -> BotDependencies:
     settings = Settings(
         environment=RuntimeEnvironment.DEVELOPMENT,
         telegram_bot_token="123456:test-token",
@@ -509,7 +513,7 @@ def make_test_services(
         splitwise_group_id=DEFAULT_SPLITWISE_GROUP_ID,
         production_telegram_bot_id=8490386710,
     )
-    services = create_services(
+    services = create_dependencies(
         database,
         settings,
         clock=clock
@@ -520,6 +524,29 @@ def make_test_services(
         ),
     )
     return services
+
+
+def make_command_catalog(services: BotDependencies) -> CommandCatalog:
+    return build_command_runtime(
+        services,
+        CommonErrorRenderer(services.telegram_bot_username),
+    ).catalog
+
+
+async def create_or_reschedule_coffee(
+    services: BotDependencies,
+    bot: Bot,
+    telegram_user_id: int,
+    raw_time: str,
+) -> None:
+    resolution = services.coffee_time.resolve(raw_time)
+    assert resolution.scheduled_at is not None
+    await services.coffee.create_or_reschedule(
+        bot,
+        -100,
+        services.active_users.require_active(telegram_user_id),
+        resolution.scheduled_at,
+    )
 
 
 def make_dispatcher(
@@ -726,6 +753,75 @@ async def test_help_shows_admin_commands_to_admins(tmp_path: Path) -> None:
     assert session.sent_messages[0].parse_mode == ParseMode.HTML
 
 
+async def test_admin_can_send_balance_preview_in_private_chat(tmp_path: Path) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/test balance-full", user_id=7, first_name="Admin"),
+    )
+
+    expected = MESSAGE_PREVIEWS.render("balance-full")
+    assert isinstance(expected, TextMessagePayload)
+    assert len(session.sent_messages) == 1
+    assert session.sent_messages[0].text == expected.text
+    assert session.sent_messages[0].parse_mode == expected.parse_mode
+    assert session.sent_messages[0].link_preview_options == expected.link_preview_options
+
+
+@pytest.mark.parametrize("command", ["/test", "/test unknown"])
+async def test_test_command_lists_available_cases(
+    tmp_path: Path,
+    command: str,
+) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update(command, user_id=7, first_name="Admin"),
+    )
+
+    assert sent_texts(session) == [MESSAGE_PREVIEWS.help_text()]
+
+
+async def test_test_command_is_admin_only(tmp_path: Path) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/test balance-full"))
+
+    assert sent_texts(session) == ["Команда доступна только админам."]
+
+
+async def test_test_command_is_private_only(tmp_path: Path) -> None:
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    database = make_database(tmp_path)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update(
+            "/test balance-full",
+            user_id=7,
+            first_name="Admin",
+            chat_type="group",
+        ),
+    )
+
+    assert sent_texts(session) == [
+        "Команда доступна только в личке: https://t.me/foodbot_dev"
+    ]
+
+
 async def test_help_shows_group_commands_in_group_chat(tmp_path: Path) -> None:
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
@@ -813,7 +909,7 @@ async def test_unhandled_command_error_replies_with_generic_message(tmp_path: Pa
 
     await dispatcher.feed_update(bot, make_update("/boom"))
 
-    assert sent_texts(session) == [UNHANDLED_ERROR_REPLY_TEXT]
+    assert sent_texts(session) == ["Произошла ошибка. Попробуй позже."]
 
 
 async def test_command_addressed_to_another_bot_is_ignored(tmp_path: Path) -> None:
@@ -828,13 +924,52 @@ async def test_command_addressed_to_another_bot_is_ignored(tmp_path: Path) -> No
     assert UserRepository(database).get_by_telegram_id(42) is None
 
 
+def test_command_catalog_contains_each_current_slash_command_once(
+    database: Database,
+) -> None:
+    catalog = make_command_catalog(make_test_services(database))
+    names = tuple(command.definition.name for command in catalog.commands)
+
+    assert names == (
+        "start",
+        "help",
+        "hi",
+        "register",
+        "request_register",
+        "quit",
+        "cancel",
+        "approve",
+        "register_requests_list",
+        "debug",
+        "test",
+        "meta",
+        "eta",
+        "balance",
+        "vacation",
+        "lunch",
+        "coffee",
+        "lunch_auto_on",
+        "lunch_auto_off",
+        "lunch_auto_status",
+    )
+    assert len(names) == len(set(names))
+    assert all("definition" in type(command).__dict__ for command in catalog.commands)
+    assert tuple(
+        type(command).__module__.rsplit(".", maxsplit=1)[-1]
+        for command in catalog.commands
+    ) == names
+    assert catalog.resolve("КОФЕ") is catalog.resolve("coffee")
+
+
 async def test_setup_bot_commands_registers_telegram_menu() -> None:
     database = Database(Path(":memory:"))
     database.init_schema()
     bot = RecordingCommandMenuClient()
     services = make_test_services(database)
 
-    await setup_bot_commands(bot, services.command_access)
+    catalog = make_command_catalog(services)
+
+    await setup_bot_commands(bot, services.command_access, catalog)
 
     assert len(bot.command_menus) == 4
 
@@ -912,13 +1047,15 @@ async def test_setup_bot_commands_uses_debug_menu_for_admin_chat() -> None:
     services = make_test_services(database)
     services.debug.set_enabled(7, True)
 
-    await setup_bot_commands(bot, services.command_access)
+    catalog = make_command_catalog(services)
+
+    await setup_bot_commands(bot, services.command_access, catalog)
 
     admin_menu = bot.command_menus[3]
     assert admin_menu.scope_name == "chat"
     assert admin_menu.chat_id == 7
     assert _command_names(admin_menu.commands) == [
-        definition.name for definition in COMMANDS if definition.show_in_menu
+        definition.name for definition in catalog.definitions if definition.show_in_menu
     ]
 
     database.close()
@@ -930,7 +1067,11 @@ async def test_setup_bot_commands_ignores_missing_admin_chat() -> None:
     bot = AdminChatNotFoundCommandMenuClient()
     services = make_test_services(database)
 
-    await setup_bot_commands(bot, services.command_access)
+    await setup_bot_commands(
+        bot,
+        services.command_access,
+        make_command_catalog(services),
+    )
 
     assert len(bot.command_menus) == 3
     assert [menu.scope_name for menu in bot.command_menus] == [
@@ -985,7 +1126,7 @@ async def test_register_creates_pending_user_and_notifies_admin(tmp_path: Path) 
     assert pending_registrations[0].splitwise.email == "max@example.com"
 
 
-async def test_register_with_argument_starts_step_by_step_flow(tmp_path: Path) -> None:
+async def test_register_checks_other_user_access_before_id_format(tmp_path: Path) -> None:
     database = make_database(tmp_path)
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
@@ -993,13 +1134,25 @@ async def test_register_with_argument_starts_step_by_step_flow(tmp_path: Path) -
 
     await dispatcher.feed_update(bot, make_update("/register Максим"))
 
-    assert sent_texts(session) == [
-        "Регистрация теперь пошаговая: имя нужно прислать отдельным сообщением.\n"
-        "Напиши имя одним сообщением. Например: Максим\n"
-        "Чтобы выйти из регистрации, отправь /cancel или запусти другую команду."
-    ]
-    assert keyboard_texts(session.sent_messages[0]) == [["Misha"]]
+    assert sent_texts(session) == ["Команда доступна только админам."]
     assert UserRepository(database).get_by_telegram_id(42) is None
+
+
+async def test_register_rejects_non_numeric_argument_for_admin(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/register Максим", user_id=7, first_name="Admin"),
+    )
+
+    assert sent_texts(session) == [
+        "Telegram ID должен быть числом: /register 123456789"
+    ]
+    assert UserRepository(database).get_by_telegram_id(7) is None
 
 
 async def test_request_register_notifies_admin_with_register_command(tmp_path: Path) -> None:
@@ -1211,7 +1364,7 @@ async def test_quit_marks_user_abandoned_and_removes_splitwise_link(
     user = users.get_by_telegram_id(42)
     assert user is not None
     assert user.status == UserStatus.ABANDONED
-    assert users.list_active_splitwise_users() == ()
+    assert BalanceRepository(database).list_active_splitwise_users() == ()
     details = users.get_registration_details_by_telegram_id(42)
     assert details is not None
     assert details.splitwise is None
@@ -1552,6 +1705,31 @@ async def test_command_interrupts_registration_flow(tmp_path: Path) -> None:
 
     assert sent_texts(session) == []
     assert UserRepository(database).get_by_telegram_id(42) is None
+
+
+async def test_unknown_slash_command_does_not_become_registration_name(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/register"))
+    session.clear_messages()
+
+    await dispatcher.feed_update(bot, make_update("/unknown"))
+
+    assert sent_texts(session) == []
+    assert UserRepository(database).get_by_telegram_id(42) is None
+
+    await dispatcher.feed_update(bot, make_update("Максим"))
+
+    assert sent_texts(session) == [
+        "Имя записал: Максим\n\n"
+        "Пришли email аккаунта Splitwise, чтобы я проверил тебя в офисной группе.\n"
+        "Можно написать «Пропустить»."
+    ]
 
 
 async def test_cancel_interrupts_registration_flow(tmp_path: Path) -> None:
@@ -1958,6 +2136,7 @@ async def test_eta_requires_minutes_argument(tmp_path: Path) -> None:
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
+    activate_user(database, 42, "Максим", "misha")
     await dispatcher.feed_update(bot, make_update("/eta", chat_type="group"))
 
     assert sent_texts(session) == [
@@ -2022,6 +2201,7 @@ async def test_meta_requires_minutes_argument(tmp_path: Path) -> None:
     bot = Bot(token="123456:test-token", session=session)
     dispatcher = make_dispatcher(database)
 
+    activate_user(database, 42, "Максим", "misha")
     await dispatcher.feed_update(bot, make_update("/meta", chat_type="group"))
 
     assert sent_texts(session) == [
@@ -2804,6 +2984,15 @@ async def test_admin_debug_allows_group_only_command_in_private_chat(
     await dispatcher.feed_update(bot, make_update("/approve 7", user_id=7, first_name="Admin"))
     session.clear_messages()
 
+    await dispatcher.feed_update(bot, make_update("/lunch", user_id=7, first_name="Admin"))
+
+    assert sent_texts(session) == [
+        "Приглашения на ланч: включены.\n\n"
+        "Изменить настройку: /lunch on или /lunch off."
+    ]
+    assert session.sent_polls == []
+
+    session.clear_messages()
     await dispatcher.feed_update(
         bot,
         make_update("/lunch rose", user_id=7, first_name="Admin"),
@@ -2818,13 +3007,15 @@ async def test_admin_debug_allows_group_only_command_in_private_chat(
     assert sent_texts(session) == ["Debug включен. В личке доступны все команды."]
     assert len(session.set_command_requests) == 1
     assert _command_names(tuple(session.set_command_requests[0].commands)) == [
-        definition.name for definition in COMMANDS if definition.show_in_menu
+        definition.name
+        for definition in make_command_catalog(make_test_services(database)).definitions
+        if definition.show_in_menu
     ]
 
     session.clear_messages()
     await dispatcher.feed_update(
         bot,
-        make_update("/lunch rose", user_id=7, first_name="Admin"),
+        make_update("/lunch", user_id=7, first_name="Admin"),
     )
 
     assert sent_texts(session) == ["Время обедать! @admin"]
@@ -2984,6 +3175,54 @@ async def test_coffee_without_arguments_shows_status_usage_and_meeting(
         "Приглашения на кофе: включены.\n\n"
         "Создать или перенести встречу: /coffee 15 или /coffee 16:30.\n\n"
         "Текущей встречи нет."
+    ]
+
+
+async def test_coffee_checks_registration_before_schedule_format(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/coffee not-a-time", chat_type="group"),
+    )
+
+    assert sent_texts(session) == ["Сначала зарегистрируйся: /register"]
+
+
+async def test_coffee_checks_schedule_scope_before_time_format(
+    tmp_path: Path,
+) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(bot, make_update("/coffee not-a-time"))
+
+    assert sent_texts(session) == ["Команда доступна только в групповом чате."]
+
+
+async def test_coffee_validates_time_after_access(tmp_path: Path) -> None:
+    database = make_database(tmp_path)
+    activate_user(database, 42, "Максим", "misha")
+    session = RecordingSession()
+    bot = Bot(token="123456:test-token", session=session)
+    dispatcher = make_dispatcher(database)
+
+    await dispatcher.feed_update(
+        bot,
+        make_update("/coffee not-a-time", chat_type="group"),
+    )
+
+    assert sent_texts(session) == [
+        "Не понял время. Напиши минуты или время сегодня: "
+        "/coffee 15 или /coffee 16:30."
     ]
 
 
@@ -3182,13 +3421,13 @@ async def test_coffee_countdown_edits_existing_card_without_new_message(
     bot = Bot(token="123456:test-token", session=session)
     services = make_test_services(database, clock=lambda: now[0])
 
-    await services.coffee.create_or_reschedule(bot, -100, 42, "15")
+    await create_or_reschedule_coffee(services, bot, 42, "15")
     coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
     assert coffee_session is not None
     session.clear_messages()
     now[0] = datetime(2026, 6, 30, 12, 16, tzinfo=ZoneInfo("Europe/Belgrade"))
 
-    await services.coffee.refresh_countdown(bot, coffee_session.id)
+    await services.coffee_jobs.refresh_countdown(bot, coffee_session.id)
 
     assert session.sent_messages == []
     assert len(session.edited_messages) == 1
@@ -3251,11 +3490,11 @@ async def test_concurrent_coffee_reschedules_are_serialized(tmp_path: Path) -> N
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
     services = make_test_services(database)
-    await services.coffee.create_or_reschedule(bot, -100, 42, "15")
+    await create_or_reschedule_coffee(services, bot, 42, "15")
 
     await asyncio.gather(
-        services.coffee.create_or_reschedule(bot, -100, 42, "20"),
-        services.coffee.create_or_reschedule(bot, -100, 42, "30"),
+        create_or_reschedule_coffee(services, bot, 42, "20"),
+        create_or_reschedule_coffee(services, bot, 42, "30"),
     )
 
     coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
@@ -3275,11 +3514,11 @@ async def test_failed_coffee_card_update_rolls_back_reschedule(
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
     services = make_test_services(database)
-    await services.coffee.create_or_reschedule(bot, -100, 42, "15")
+    await create_or_reschedule_coffee(services, bot, 42, "15")
     session.fail_methods("EditMessageText", "SendMessage")
 
     with pytest.raises(TelegramBadRequest):
-        await services.coffee.create_or_reschedule(bot, -100, 43, "30")
+        await create_or_reschedule_coffee(services, bot, 43, "30")
 
     coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
     assert coffee_session is not None
@@ -3420,7 +3659,7 @@ async def test_coffee_leave_button_makes_empty_session_complete_silently(
     session.clear_messages()
     now[0] = datetime(2026, 6, 30, 12, 30, tzinfo=ZoneInfo("Europe/Belgrade"))
 
-    await services.coffee.complete(bot, coffee_session.id)
+    await services.coffee_jobs.complete(bot, coffee_session.id)
 
     assert sent_texts(session) == []
     assert len(session.unpin_requests) == 1
@@ -3490,7 +3729,7 @@ async def test_coffee_completion_exhausts_retries_and_marks_failed(
     session.fail_methods("SendMessage")
 
     for _ in range(4):
-        await services.coffee.complete(bot, coffee_session.id)
+        await services.coffee_jobs.complete(bot, coffee_session.id)
 
     failed = CoffeeSessionRepository(database).require(coffee_session.id)
     assert failed.status == CoffeeSessionStatus.FAILED
@@ -3505,12 +3744,12 @@ async def test_coffee_completion_unpins_card_and_calls_participants(
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
     services = make_test_services(database)
-    await services.coffee.create_or_reschedule(bot, -100, 42, "15")
+    await create_or_reschedule_coffee(services, bot, 42, "15")
     coffee_session = CoffeeSessionRepository(database).get_open_for_chat(-100)
     assert coffee_session is not None
     session.clear_messages()
 
-    await services.coffee.complete(bot, coffee_session.id)
+    await services.coffee_jobs.complete(bot, coffee_session.id)
 
     assert len(session.unpin_requests) == 1
     assert session.unpin_requests[0].message_id == coffee_session.message_id
@@ -3542,7 +3781,7 @@ async def test_coffee_recovery_expires_session_older_than_grace_period(
     )
     bot = Bot(token="123456:test-token", session=RecordingSession())
 
-    await services.coffee.restore_jobs(bot)
+    await services.coffee_jobs.restore_jobs(bot)
 
     expired = sessions.require(coffee_session.id)
     assert expired.status == CoffeeSessionStatus.EXPIRED
@@ -3568,7 +3807,11 @@ async def test_request_register_works_in_group_but_is_hidden_from_group_menu(
     )
     assert "request_register" not in {
         command.name
-        for command in services.command_access.visible_commands("group", 42)
+        for command in services.command_access.visible_commands(
+            make_command_catalog(services).definitions,
+            "group",
+            42,
+        )
     }
 
 
@@ -3690,7 +3933,7 @@ async def test_coffee_recovery_repins_active_card(tmp_path: Path) -> None:
     session = RecordingSession()
     bot = Bot(token="123456:test-token", session=session)
 
-    await services.coffee.restore_jobs(bot)
+    await services.coffee_jobs.restore_jobs(bot)
 
     assert len(session.pin_requests) == 1
     assert session.pin_requests[0].message_id == 77

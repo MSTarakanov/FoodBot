@@ -103,6 +103,16 @@ Run the bot:
 ./run office-food-bot
 ```
 
+Preview a deterministic message through the configured development bot after
+opening its private chat and pressing Start:
+
+```bash
+./run preview balance-full
+```
+
+The same fixture is available to admins as `/test balance-full` in a private
+chat. Preview cases never read production data, Splitwise, or the local database.
+
 Run checks:
 
 ```bash
@@ -111,15 +121,35 @@ scripts/check
 
 ## Adding a command
 
-1. Add the handler in `src/office_food_bot/commands/`.
-2. Send text, choice buttons, inline buttons, and polls through `BotMessenger`,
+The reusable command and flow engines live in `commanding/` and `flows/`.
+Concrete slash commands live in `commands/`, while models, errors, business
+logic, rendering, callbacks, and feature flows live together in `features/<name>/`.
+Cross-feature application policies live in `application/` and must not depend
+on Telegram transport, `commanding/`, or concrete features.
+Application dependency construction lives in `bootstrap/`.
+
+Read [`docs/command-architecture.md`](docs/command-architecture.md) for the full
+lifecycle and concrete `/hi`, `/approve`, `/coffee`, and `/register` examples.
+
+1. Add `<name>Command` in `src/office_food_bot/commands/<name>.py`. Keep exactly
+   one concrete slash command in the file and make the module name match its
+   canonical command name.
+2. Choose `RenderedCommand`, `EffectCommand`, or `FlowCommand`; keep the
+   immutable `CommandDefinition` on the concrete class and inject its dependencies.
+3. Add the command instance to `src/office_food_bot/commands/factory.py`. Slash
+   commands are resolved by `CommandCatalog`, so they are not registered manually
+   in the router.
+4. Send text, choice buttons, inline buttons, and polls through `BotMessenger`,
    not directly through `message.answer`, `bot.send_message`, or `bot.send_poll`.
-3. Keep database access inside repositories and business rules inside services.
-4. Register the handler in `src/office_food_bot/commands/router.py`.
-5. Add the slash-command metadata in `src/office_food_bot/commands/definitions.py`.
-6. For multi-step flows, add aiogram FSM states and keep validation in the active
-   state handler until the answer is valid or the user runs another command.
-7. For inline button callbacks, add `callback_query` handlers in the router.
+5. Put feature models, errors, repositories, use cases, and rendering in
+   `src/office_food_bot/features/<name>/`. Rendering converts typed feature
+   models into strings or `MessagePayload`; it must not access repositories or
+   application services.
+6. For multi-step conversations, add a feature-owned `StartableFlow` with
+   explicit steps. Each step owns its parser and ordered validators and returns
+   an explicit transition; accumulated values belong in a typed feature draft.
+7. Put callback and poll controllers in the owning feature package and register
+   them in `src/office_food_bot/commands/router.py`.
 8. Add or update command tests in `tests/test_commands.py`; add messenger tests
    in `tests/test_messaging.py` when introducing a new response primitive.
 9. Run `scripts/check`.

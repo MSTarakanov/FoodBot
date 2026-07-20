@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 
 from office_food_bot.database import Database
-from office_food_bot.repositories import PollRepository
-from office_food_bot.services.lunch_polls import (
+from office_food_bot.features.lunch.polls import (
     LUNCH_POLL_DEFINITION_CATALOG,
     ROSE_LUNCH_POLLS,
 )
-from office_food_bot.services.poll_tracking import PollTrackingService
-from office_food_bot.services.polls import PollAction
+from office_food_bot.features.polls.models import PollAction
+from office_food_bot.features.polls.repository import PollRepository
+from office_food_bot.features.polls.tracking import PollTrackingService
 
 
 def make_service(database: Database) -> PollTrackingService:

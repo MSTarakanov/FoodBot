@@ -1,4 +1,4 @@
-from office_food_bot.poll_options import PollOption
+from office_food_bot.features.polls.options import PollOption
 
 
 def test_poll_options_have_unique_stable_values_and_display_values() -> None:

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from office_food_bot.database import Database
-from office_food_bot.repositories import UserRepository
+from office_food_bot.infrastructure.persistence.users import UserRepository
 
 
 @pytest.fixture

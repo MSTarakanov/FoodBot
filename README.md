@@ -68,6 +68,8 @@ Admin private commands:
 - `/register <telegram_user_id>` - starts guided registration for another Telegram user.
 - `/register_requests_list` - shows pending registration requests.
 - `/debug 1` and `/debug 0` - allow an admin to test group-only commands in private chat.
+- `/test balance-full` - sends deterministic mock data through the current balance renderer. It is
+  documented in admin `/help` but hidden from the native slash menu.
 
 Command visibility and execution use the same access layer. Admin command visibility is based on
 `TELEGRAM_ADMIN_IDS`. If a private-only command is typed in a group, the bot replies with a link to
@@ -91,6 +93,18 @@ token verification is enabled, it detects the username with Telegram `getMe`, ot
 it directly. If `.env` already has a token, setup shows the bot username and `https://t.me/...`
 link before asking whether to keep it.
 Setup refuses to save the production Telegram bot token for local development.
+
+To inspect a deterministic message in the real Telegram client, open the development bot, press
+Start, and run:
+
+```bash
+./run preview balance-full
+```
+
+The command uses the only configured `TELEGRAM_ADMIN_IDS` value by default. Pass `--chat-id` when
+multiple admins are configured. Admins can also send `/test balance-full` in a private chat with
+either the development or production bot; `/test` is hidden from the slash menu and documented in
+the admin `/help` output.
 
 If `./setup-dev` is run from a linked `git worktree`, it can reuse ignored local state from the
 main worktree: `.env` values, `.tools`, and the local SQLite database. This keeps feature worktrees
@@ -267,22 +281,40 @@ Maintainer note: to grant direct push access, open
 
 ## Adding a Command
 
-1. Add the handler in `src/office_food_bot/commands/`.
-2. Send text, choice buttons, inline buttons, and polls through `BotMessenger`,
+Command-related code is split by responsibility:
+
+- `commanding/` contains the reusable command lifecycle, catalog, access checks, and common errors;
+- `commands/` contains concrete slash commands, one command per file;
+- `flows/` contains only the reusable conversational flow engine;
+- `application/` contains cross-feature application policies that do not belong to one feature;
+- `features/<name>/` owns feature models, errors, use cases, repositories, rendering,
+  callbacks, and conversational flows;
+- `bootstrap/` constructs the application dependency graph;
+- `integrations/` and `infrastructure/` contain external API and runtime adapters.
+
+See [`docs/command-architecture.md`](docs/command-architecture.md) for the full
+command lifecycle and walkthroughs of `/hi`, `/approve`, `/coffee`, and `/register`.
+
+1. Add `<name>Command` in `src/office_food_bot/commands/<name>.py`. The module name must match the
+   canonical slash-command name.
+2. Choose `RenderedCommand`, `EffectCommand`, or `FlowCommand` and keep the immutable
+   `CommandDefinition` on the concrete class.
+3. Pass parsers, validators, use cases, and renderers explicitly through the constructor.
+4. Add the command instance to `src/office_food_bot/commands/factory.py`. The common dispatcher
+   resolves it through `CommandCatalog`; do not register a separate slash handler in the router.
+5. Send text, choice buttons, inline buttons, and polls through `BotMessenger`,
    not directly through `message.answer`, `bot.send_message`, or `bot.send_poll`.
-3. Keep database access inside repositories and business rules inside services.
-4. Register the handler in `src/office_food_bot/commands/router.py`.
-5. Add the slash-command metadata in `src/office_food_bot/commands/definitions.py`.
-   Choose the command scope there: `private`, `group`, or `any`, and set `admin_only=True` when
-   needed. The command access middleware will enforce the same rules that `/help` and the Telegram
-   command menu show.
-6. Use aiogram FSM states for multi-step flows. Ordinary text remains inside the
-   active state until it validates; slash commands clear the active flow and run
-   their own handler.
-7. For inline button callbacks, add `callback_query` handlers in the router.
-8. Add or update command tests in `tests/test_commands.py`; add messenger tests
+6. Keep feature code in `features/<name>/`: repositories own persistence, use cases and
+   feature-local services own behavior, and rendering converts typed models into Telegram output.
+   Rendering must not access repositories or services.
+7. Implement multi-step conversations as a `StartableFlow` with explicit `FlowStep` objects.
+   Each step owns its parser and ordered validators, then returns `StayOnStep`, `MoveToStep`, or
+   `CompleteFlow`. Keep accumulated values in a typed feature draft.
+8. Put callback and poll controllers in the owning feature package and register them in
+   `src/office_food_bot/commands/router.py`.
+9. Add or update command tests in `tests/test_commands.py`; add messenger tests
    in `tests/test_messaging.py` when introducing a new response primitive.
-9. Run `scripts/check`.
+10. Run `scripts/check`.
 
 ## Testing Approach
 

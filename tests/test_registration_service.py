@@ -2,22 +2,20 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from office_food_bot.application.splitwise.models import SplitwiseMember
+from office_food_bot.application.users.models import TelegramProfile, UserStatus
 from office_food_bot.database import Database
-from office_food_bot.invitation_repositories import InvitationPreferenceRepository
-from office_food_bot.models import (
-    ApprovalKind,
-    InvitationPreferences,
-    RegistrationKind,
-    SplitwiseMember,
-    TelegramProfile,
-    UserStatus,
-)
-from office_food_bot.repositories import (
+from office_food_bot.features.invitations.models import InvitationPreferences
+from office_food_bot.features.invitations.repository import InvitationPreferenceRepository
+from office_food_bot.features.registration.errors import RegistrationErrorCode
+from office_food_bot.features.registration.models import ApprovalKind, RegistrationKind
+from office_food_bot.features.registration.repository import (
     RegistrationRequestRepository,
     TelegramAccountRepository,
-    UserRepository,
 )
-from office_food_bot.services.registration import RegistrationService
+from office_food_bot.features.registration.service import RegistrationService
+from office_food_bot.infrastructure.persistence.users import UserRepository
+from office_food_bot.result import Failure, Success
 
 DEFAULT_ADMIN_IDS = frozenset({7})
 
@@ -263,26 +261,34 @@ def test_approve_forbids_non_admin(database: Database, users: UserRepository) ->
     assert user.status == UserStatus.PENDING
 
 
-def test_request_registration_block_reason_depends_on_status(
+def test_request_registration_eligibility_depends_on_status(
     database: Database,
     users: UserRepository,
 ) -> None:
     service = make_service(database)
 
-    assert service.request_registration_block_reason(42) is None
+    assert service.registration_request_eligibility(42) == Success[
+        None,
+        RegistrationErrorCode,
+    ](None)
 
     service.register(make_profile(), "Максим", None)
-    assert service.request_registration_block_reason(42) == (
-        "Заявка уже ждет аппрува. Если хотите отменить регистрацию, отправьте /quit."
-    )
+    assert service.registration_request_eligibility(42) == Failure[
+        None,
+        RegistrationErrorCode,
+    ](RegistrationErrorCode.REQUEST_ALREADY_PENDING)
 
     service.approve(7, 42)
-    assert service.request_registration_block_reason(42) == (
-        "Вы уже зарегистрированы. Если хотите отрегистрироваться, отправьте /quit."
-    )
+    assert service.registration_request_eligibility(42) == Failure[
+        None,
+        RegistrationErrorCode,
+    ](RegistrationErrorCode.REQUEST_ALREADY_ACTIVE)
 
     assert service.quit_registration(42)
-    assert service.request_registration_block_reason(42) is None
+    assert service.registration_request_eligibility(42) == Success[
+        None,
+        RegistrationErrorCode,
+    ](None)
 
 
 def test_quit_registration_returns_false_for_unknown_or_abandoned_user(

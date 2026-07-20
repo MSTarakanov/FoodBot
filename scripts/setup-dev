@@ -61,6 +61,8 @@ print_agent_guide() {
     "4. Let setup stop if the Telegram token is invalid; the user should get a real" \
     "   development bot token from @BotFather." \
     "5. After setup completes, run scripts/check." \
+    "6. To inspect a real Telegram message, open the development bot, press Start," \
+    "   then run ./run preview balance-full." \
     "" \
     "For automated tests only, use --env-only --skip-token-check with dummy tokens."
 }
@@ -1290,6 +1292,12 @@ if [[ "$ENV_ONLY" -eq 0 ]]; then
   print_contribution_flow_next_steps
   echo "Run the bot with:"
   echo "  ./run office-food-bot"
+  telegram_bot_username="$(read_env_value TELEGRAM_BOT_USERNAME ".env" || true)"
+  if [[ -n "$telegram_bot_username" ]]; then
+    echo "Preview messages through the development bot:"
+    echo "  1. Open https://t.me/$telegram_bot_username and press Start."
+    echo "  2. Run ./run preview balance-full"
+  fi
   echo "Run checks with:"
   echo "  scripts/check"
 fi

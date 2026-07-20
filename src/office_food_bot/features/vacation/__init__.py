@@ -1,0 +1,1 @@
+"""User vacation feature."""

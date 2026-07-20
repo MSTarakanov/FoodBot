@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from office_food_bot.services.business_calendar import BusinessCalendarService
+from office_food_bot.features.lunch.calendar import BusinessCalendarService
 
 
 def test_serbia_calendar_allows_regular_workday() -> None:

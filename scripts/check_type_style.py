@@ -29,11 +29,15 @@ class TypeStyleChecker(ast.NodeVisitor):
         self.optional_names = {"Optional"}
         self.union_names = {"Union"}
         self.typing_module_names = {"typing"}
+        self.isinstance_names = {"isinstance"}
+        self.builtins_module_names = {"builtins"}
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
             if alias.name == "typing":
                 self.typing_module_names.add(alias.asname or alias.name)
+            elif alias.name == "builtins":
+                self.builtins_module_names.add(alias.asname or alias.name)
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
@@ -51,6 +55,10 @@ class TypeStyleChecker(ast.NodeVisitor):
                     self.optional_names.add(imported_name)
                 elif alias.name == "Union":
                     self.union_names.add(imported_name)
+        elif node.module == "builtins":
+            for alias in node.names:
+                if alias.name == "isinstance":
+                    self.isinstance_names.add(alias.asname or alias.name)
         self.generic_visit(node)
 
     def visit_arg(self, node: ast.arg) -> None:
@@ -70,6 +78,21 @@ class TypeStyleChecker(ast.NodeVisitor):
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
         self._check_annotation(node.annotation)
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if self._is_name(node.func, self.isinstance_names) or (
+            self._is_name_attribute(
+                node.func,
+                self.builtins_module_names,
+                "isinstance",
+            )
+        ):
+            self._add_violation(
+                node,
+                "TYP004",
+                "Do not use isinstance in src; use typed dispatch or pattern matching.",
+            )
         self.generic_visit(node)
 
     def visit_TypeAlias(self, node: ast.TypeAlias) -> None:
@@ -161,10 +184,18 @@ class TypeStyleChecker(ast.NodeVisitor):
         return isinstance(node, ast.Name) and node.id in names
 
     def _is_typing_attribute(self, node: ast.AST, name: str) -> bool:
+        return self._is_name_attribute(node, self.typing_module_names, name)
+
+    def _is_name_attribute(
+        self,
+        node: ast.AST,
+        module_names: set[str],
+        name: str,
+    ) -> bool:
         return (
             isinstance(node, ast.Attribute)
             and node.attr == name
-            and self._is_name(node.value, self.typing_module_names)
+            and self._is_name(node.value, module_names)
         )
 
     def _add_violation(self, node: ast.AST, code: str, message: str) -> None:

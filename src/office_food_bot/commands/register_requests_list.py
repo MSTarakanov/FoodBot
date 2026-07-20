@@ -1,48 +1,81 @@
 from __future__ import annotations
 
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
-
-from office_food_bot.commands.common import telegram_profile_from_message
-from office_food_bot.messaging import BotMessenger
-from office_food_bot.models import (
-    KnownTelegramAccount,
+from office_food_bot.application.users.models import KnownTelegramAccount, RegisteredUser
+from office_food_bot.commanding.contracts import (
+    CommandContext,
+    EffectCommand,
+    IdentityResolver,
+    NoArguments,
+    NoArgumentsParser,
+)
+from office_food_bot.commanding.definition import CommandDefinition, CommandScope, HelpSection
+from office_food_bot.commanding.errors.models import CommonErrorCode
+from office_food_bot.commanding.errors.rendering import ErrorRenderer
+from office_food_bot.commanding.validators import (
+    TelegramIdentityValidator,
+    require_telegram_profile,
+)
+from office_food_bot.features.registration.models import (
     PendingRegistration,
-    RegisteredUser,
     SplitwiseConnection,
 )
-from office_food_bot.services import BotServices
+from office_food_bot.features.registration.service import RegistrationService
+from office_food_bot.messaging import BotMessenger
 
 
-async def register_requests_list_command(
-    message: Message,
-    messenger: BotMessenger,
-    services: BotServices,
-    state: FSMContext,
-) -> None:
-    await state.clear()
-    profile = telegram_profile_from_message(message)
-    if profile is None:
-        await messenger.reply(message, "Не вижу твой Telegram user id.")
-        return
-
-    if not services.registration.can_approve(profile.telegram_user_id):
-        await messenger.reply(message, "Не могу: список заявок доступен только админам.")
-        return
-
-    pending_requests = services.registration.list_pending_requests(profile.telegram_user_id)
-    requested_accounts = services.registration.list_requested_telegram_accounts(
-        profile.telegram_user_id,
+class RegisterRequestsListCommand(EffectCommand[NoArguments, NoArguments]):
+    definition = CommandDefinition(
+        "register_requests_list",
+        "показать заявки на регистрацию",
+        "/register_requests_list",
+        CommandScope.PRIVATE,
+        HelpSection.ADMINISTRATION,
+        admin_only=True,
     )
-    seen_accounts = services.registration.list_seen_telegram_accounts(profile.telegram_user_id)
-    if not pending_requests and not requested_accounts and not seen_accounts:
-        await messenger.reply(message, "Заявок на регистрацию нет.")
-        return
 
-    await messenger.reply(
-        message,
-        _registration_requests_text(pending_requests, requested_accounts, seen_accounts),
-    )
+    def __init__(
+        self,
+        messenger: BotMessenger,
+        common_error_renderer: ErrorRenderer[CommonErrorCode],
+        registration: RegistrationService,
+    ) -> None:
+        super().__init__(
+            messenger,
+            common_error_renderer,
+            NoArgumentsParser(),
+            (TelegramIdentityValidator(),),
+            (),
+            IdentityResolver(),
+        )
+        self._registration = registration
+
+    async def execute_effect(
+        self,
+        context: CommandContext,
+        _request: NoArguments,
+    ) -> None:
+        profile = require_telegram_profile(context)
+        if not self._registration.can_approve(profile.telegram_user_id):
+            await self._reply_common_error(context, CommonErrorCode.ADMIN_REQUIRED)
+            return
+
+        pending_requests = self._registration.list_pending_requests(
+            profile.telegram_user_id
+        )
+        requested_accounts = self._registration.list_requested_telegram_accounts(
+            profile.telegram_user_id,
+        )
+        seen_accounts = self._registration.list_seen_telegram_accounts(
+            profile.telegram_user_id
+        )
+        await self._messenger.reply(
+            context.message,
+            _registration_requests_text(
+                pending_requests,
+                requested_accounts,
+                seen_accounts,
+            ),
+        )
 
 
 def _registration_requests_text(

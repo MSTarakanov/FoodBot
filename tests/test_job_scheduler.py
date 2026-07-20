@@ -1,6 +1,6 @@
 import asyncio
 
-from office_food_bot.services.job_scheduler import JobScheduler
+from office_food_bot.infrastructure.scheduler import JobScheduler
 
 
 def test_daily_cron_runs_on_every_day_including_weekends() -> None:

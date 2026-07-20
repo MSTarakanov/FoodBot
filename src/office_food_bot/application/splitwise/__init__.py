@@ -1,0 +1,1 @@
+"""Shared Splitwise data contracts."""

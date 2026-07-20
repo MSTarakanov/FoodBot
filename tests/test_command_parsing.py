@@ -1,7 +1,6 @@
 import pytest
 
-from office_food_bot.commands.definitions import command_definition
-from office_food_bot.commands.parsing import (
+from office_food_bot.commanding.invocation import (
     ParsedCommand,
     is_for_another_bot,
     parse_command,
@@ -29,13 +28,6 @@ def test_parse_command_supports_casefold_arguments_and_bot_target(
 @pytest.mark.parametrize("text", [None, "", "coffee 15", "/"])
 def test_parse_command_ignores_non_commands(text: str | None) -> None:
     assert parse_command(text) is None
-
-
-def test_command_definition_resolves_text_alias_to_canonical_command() -> None:
-    definition = command_definition("КОФЕ")
-
-    assert definition is not None
-    assert definition.name == "coffee"
 
 
 def test_command_targeting_compares_bot_username_case_insensitively() -> None:

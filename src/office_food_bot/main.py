@@ -4,15 +4,15 @@ from pathlib import Path
 
 from aiogram import Bot
 
-from office_food_bot.app import create_dispatcher, create_services
-from office_food_bot.commands.menu import setup_bot_commands
+from office_food_bot.app import create_application, create_dependencies
+from office_food_bot.bootstrap import BotDependencies
+from office_food_bot.commanding.menu import setup_bot_commands
 from office_food_bot.config import load_settings
 from office_food_bot.database import Database
 from office_food_bot.runtime_guard import (
     ProductionTokenInDevelopmentError,
     ensure_safe_telegram_token_for_environment,
 )
-from office_food_bot.services import BotServices
 
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
@@ -23,17 +23,18 @@ async def main() -> None:
     settings = load_settings()
     bot = Bot(token=settings.telegram_bot_token)
     database: Database | None = None
-    services: BotServices | None = None
+    dependencies: BotDependencies | None = None
     try:
         await ensure_safe_telegram_token_for_environment(settings, bot)
         database = Database(Path(settings.database_path))
         database.init_schema()
-        services = create_services(database, settings)
-        dispatcher = create_dispatcher(services)
-        await setup_bot_commands(bot, services.command_access)
-        services.lunch_scheduler.register_job(bot)
-        await services.coffee.restore_jobs(bot)
-        services.job_scheduler.start()
+        dependencies = create_dependencies(database, settings)
+        application = create_application(dependencies)
+        dispatcher = application.dispatcher
+        await setup_bot_commands(bot, dependencies.command_access, application.commands)
+        dependencies.lunch_scheduler.register_job(bot)
+        await dependencies.coffee_jobs.restore_jobs(bot)
+        dependencies.job_scheduler.start()
         logger.info(
             "Bot started: username=@%s, environment=%s, database=%s, "
             "schema_version=%s, timezone=%s",
@@ -45,8 +46,8 @@ async def main() -> None:
         )
         await dispatcher.start_polling(bot)
     finally:
-        if services is not None:
-            services.job_scheduler.shutdown()
+        if dependencies is not None:
+            dependencies.job_scheduler.shutdown()
         if database is not None:
             database.close()
         await bot.session.close()

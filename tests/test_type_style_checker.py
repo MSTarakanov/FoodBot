@@ -81,6 +81,57 @@ def test_type_style_checker_rejects_nested_object_annotations(tmp_path: Path) ->
     assert violation_codes(violations) == ["TYP003"]
 
 
+def test_type_style_checker_rejects_isinstance(tmp_path: Path) -> None:
+    violations = check_source(
+        tmp_path,
+        "def parse(value: str) -> str:\n"
+        "    if isinstance(value, str):\n"
+        "        return value\n"
+        "    return ''\n",
+    )
+
+    assert violation_codes(violations) == ["TYP004"]
+
+
+def test_type_style_checker_rejects_aliased_isinstance(tmp_path: Path) -> None:
+    violations = check_source(
+        tmp_path,
+        "from builtins import isinstance as is_instance\n"
+        "def parse(value: str) -> str:\n"
+        "    if is_instance(value, str):\n"
+        "        return value\n"
+        "    return ''\n",
+    )
+
+    assert violation_codes(violations) == ["TYP004"]
+
+
+def test_type_style_checker_rejects_builtins_isinstance(tmp_path: Path) -> None:
+    violations = check_source(
+        tmp_path,
+        "import builtins as builtin_types\n"
+        "def parse(value: str) -> str:\n"
+        "    if builtin_types.isinstance(value, str):\n"
+        "        return value\n"
+        "    return ''\n",
+    )
+
+    assert violation_codes(violations) == ["TYP004"]
+
+
+def test_type_style_checker_allows_pattern_matching(tmp_path: Path) -> None:
+    violations = check_source(
+        tmp_path,
+        "def parse(value: str) -> str:\n"
+        "    match value:\n"
+        "        case str():\n"
+        "            return value\n"
+        "    return ''\n",
+    )
+
+    assert violations == []
+
+
 def check_source(tmp_path: Path, source: str) -> list[Violation]:
     path = tmp_path / "example.py"
     path.write_text(source)

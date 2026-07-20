@@ -18,8 +18,8 @@ from aiogram.methods import (
 )
 from aiogram.types import Chat, Message, ReplyKeyboardRemove
 
+from office_food_bot.features.polls.options import PollOption
 from office_food_bot.messaging import BotMessenger, InlineChoice
-from office_food_bot.poll_options import PollOption
 
 
 class RecordingSession(BaseSession):

@@ -2,15 +2,15 @@ from datetime import date
 
 import pytest
 
-from office_food_bot.poll_options import PollOption
-from office_food_bot.services.lunch_polls import (
+from office_food_bot.features.lunch.polls import (
     ROSE_LUNCH_POLLS,
     SKYLINE_LUNCH_POLLS,
     LunchOfficeSelection,
     LunchPollCatalog,
     parse_lunch_office_selection,
 )
-from office_food_bot.services.polls import PollAction
+from office_food_bot.features.polls.models import PollAction
+from office_food_bot.features.polls.options import PollOption
 
 
 def test_skyline_place_poll_maps_other_option_to_follow_up_action() -> None:
